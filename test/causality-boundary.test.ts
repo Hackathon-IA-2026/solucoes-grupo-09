@@ -139,6 +139,33 @@ function lineOf(text: string, index: number): number {
   return text.slice(0, index).split("\n").length;
 }
 
+/**
+ * The same text with its comments blanked, and its offsets intact.
+ *
+ * This check is titled "anywhere a user **can read**", and a comment is the
+ * one place in these files a user cannot. Scanning them made the guard fire on
+ * the three files that *document the rule* — `dominant-reason.ts`'s header
+ * explaining that WattSteer predicts no cause, `plan-vs-actual-panel.tsx`
+ * writing "because the grid was run towards that programme" about the
+ * programme rather than about a curtailment, and the block comment above
+ * `overview` in `copy.pt.ts` recording why question 5 is answered the way it
+ * is. A boundary nobody may explain is a boundary the next session removes.
+ *
+ * Blanked rather than deleted: every character becomes a space and newlines
+ * survive, so `hit.index` still points at the same offset and the allowlist's
+ * ranges — computed over the untouched text — keep lining up.
+ *
+ * **Line comments first.** The reverse order is silently wrong: a `//` comment
+ * containing `/*` opens a block the block-stripper runs to the next close,
+ * deleting real code from the scan. This guard had exactly that ordering once,
+ * and `test/i18n-hardcoded-copy.test.ts` records the measurement — a violation
+ * placed after such a line was not caught and the same one before it was.
+ */
+function withoutComments(text: string): string {
+  const blank = (match: string) => match.replace(/[^\n]/g, " ");
+  return text.replace(/\/\/[^\n]*/g, blank).replace(/\/\*[\s\S]*?\*\//g, blank);
+}
+
 function excerpt(text: string, index: number): string {
   const from = text.lastIndexOf("\n", index) + 1;
   const to = text.indexOf("\n", index);
@@ -191,7 +218,10 @@ function checkBoundary(
       file.text,
       allowlist.filter((e) => e.file === file.path),
     );
-    for (const hit of findCausalityHits(file.text)) {
+    // Comments blanked, offsets preserved — see `withoutComments`. The excerpt
+    // below still reads the original text, so a real offence is reported with
+    // the line as it is actually written.
+    for (const hit of findCausalityHits(withoutComments(file.text))) {
       if (isPermitted(hit, ranges)) {
         continue;
       }
@@ -321,9 +351,13 @@ describe("causality boundary", () => {
       [
         file("apps/web/src/i18n/copy.pt.ts", 'note: "Causa raiz: congestionamento."'),
         file("apps/web/src/i18n/copy.en.ts", 'note: "Why it happened, hour by hour."'),
+        // Wrapped across two lines, which is the property this fixture is for.
+        // It used to wrap the lemma in a block comment, and stopped catching
+        // anything the day comments were blanked — a fixture testing the
+        // wrapper rather than the wrapping. A copy string wraps the same way.
         file(
           "packages/ui/src/components/panel.tsx",
-          "/**\n * The curtailment happened\n * because the grid was congested.\n */\n",
+          'const note =\n  "The curtailment happened because the grid " +\n  "was congested.";\n',
         ),
       ],
       [],
@@ -337,6 +371,66 @@ describe("causality boundary", () => {
       "apps/web/src/i18n/copy.en.ts",
       "packages/ui/src/components/panel.tsx",
     ]);
+  });
+
+  it("a comment may explain the boundary; copy may not cross it", () => {
+    /*
+      The rule this check is titled for — "anywhere a user **can read**" — and
+      the one it did not keep. Three files were flagged for *documenting* the
+      prohibition: `dominant-reason.ts`'s header saying WattSteer predicts no
+      cause, `plan-vs-actual-panel.tsx` writing "because the grid was run
+      towards that programme" about the programme rather than about a
+      curtailment, and the note above `overview` in `copy.pt.ts` recording why
+      question 5 is answered the way it is. A boundary nobody may explain is a
+      boundary the next session deletes for being unexplained.
+    */
+    expect(
+      checkBoundary(
+        [
+          file(
+            "apps/web/src/lib/dominant-reason.ts",
+            '/**\n * The brief asks for a "causa provável". There is no such model.\n */\nexport const REASON = "settled";\n',
+          ),
+          file(
+            "apps/web/src/i18n/copy.pt.ts",
+            '// Nunca dizemos que algo causou o corte.\nexport const pt = { note: "Registro do ONS." };\n',
+          ),
+        ],
+        [],
+      ),
+    ).toEqual([]);
+
+    // The half that must not be lost: the same words, one string along.
+    const inCopy = checkBoundary(
+      [
+        file(
+          "apps/web/src/i18n/copy.pt.ts",
+          'note: "O congestionamento causou o corte."',
+        ),
+      ],
+      [],
+    );
+    expect(inCopy).toHaveLength(1);
+  });
+
+  it("a lemma after a line comment that opens a block is still caught", () => {
+    /*
+      The ordering lesson, as a test rather than as a paragraph. Blanking block
+      comments before line comments lets a `//` containing `/*` open a block
+      the stripper runs to the next close, deleting real copy from the scan.
+      `api/grid.ts` has such a line, and the i18n guard measured this exact
+      failure: the violation before it was caught and the one after it was not.
+    */
+    const offenders = checkBoundary(
+      [
+        file(
+          "apps/web/src/i18n/copy.en.ts",
+          '// see /* the note */ above\nexport const en = { note: "It happened because the grid was congested." };\n',
+        ),
+      ],
+      [],
+    );
+    expect(offenders).toHaveLength(1);
   });
 
   it("leaves the domain's own vocabulary alone", () => {

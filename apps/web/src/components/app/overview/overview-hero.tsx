@@ -56,7 +56,7 @@ import { ObservedProfile } from "@/components/charts/observed-profile";
 import { RiskChip } from "@/components/charts/risk-class";
 import { riskColor } from "@/components/charts/risk-color";
 import { SplitTracks } from "@/components/charts/technology-split";
-import { useCopy, useFormat, useI18n } from "@/i18n";
+import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { criticalWindow } from "@/lib/critical-window";
 import type { SubsystemCode } from "@/lib/fixtures";
@@ -69,7 +69,6 @@ import {
   outlookRows,
 } from "@/lib/network";
 import { HeadlinePanel } from "./headline-panel";
-import { HERO_COPY } from "./hero-copy";
 import { heroFigures } from "./hero-figures";
 import { NationalFigureBlock, ObservedNationalPanel } from "./national-panel";
 import { PlanVsActualPanel } from "./plan-vs-actual-panel";
@@ -125,8 +124,7 @@ export function OverviewHero({
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
-  const { locale } = useI18n();
-  const text = HERO_COPY[locale === "en" ? "en" : "pt"];
+  const text = copy.app.grid.hero;
   const [hovered, setHovered] = useState<SubsystemCode | null>(null);
   /*
     Which region the map's pills are pointing at. Local, like the console's, and

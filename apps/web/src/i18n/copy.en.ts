@@ -1241,6 +1241,28 @@ export const en = {
      * facts it was built with all outlived it on `/app`.
      */
     grid: {
+      /* The Overview's hero. See the note in `copy.pt.ts`. */
+      hero: {
+        title: "Grid console",
+        ledeForecast:
+          "The four subsystems, with tomorrow's forecast around the map. Every figure is a P10–P50–P90 interval, never a point.",
+        ledeObserved:
+          "The four subsystems, with what ONS has already settled around the map. Everything here is measured; none of it is forecast.",
+        totalLabel: "Curtailed energy, whole day",
+        totalNoteForecast: "Tomorrow's joint band.",
+        totalNoteObserved: "The settled day, summed over the published hours.",
+        regionsLabel: "The four subsystems",
+        profileLabel: "Hour by hour",
+        splitLabel: "Wind and solar",
+        peakLabel: "Largest hour",
+        refusedTitle: "The grid did not answer",
+        pickHint: "Tap a region on the map to re-point everything around it.",
+        ofNational: "of the national total",
+        noBand: "A settlement is a number, not an interval.",
+        nationalLabel: "Brazil",
+        windowForecast: "Expected tomorrow, per subsystem.",
+        windowObserved: "The last settled 24 h, per subsystem.",
+      },
       eyebrow: "Sistema Interligado Nacional · D−1",
       q1: "Will it curtail?",
       q1Detail: "Probability of {probability} in {subsystem}",

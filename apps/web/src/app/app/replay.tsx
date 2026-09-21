@@ -847,9 +847,12 @@ function FleetControls({
   return (
     <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-        // ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put the //
-        fleet editor 60px past the card, and nothing on the Time Machine caught // it
-        because `/v1/replay` was never stubbed and this branch never rendered.
+        {/*
+          ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put
+          the fleet editor 60px past the card, and nothing on the Time Machine
+          caught it because `/v1/replay` was never stubbed and this branch
+          never rendered.
+        */}
         <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 380 }}>
           <PanelHeader
             icon={<ZapIcon size={18} color={colors.inkMuted} />}
@@ -863,9 +866,12 @@ function FleetControls({
             />
           </View>
         </Panel>
-        // ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put the //
-        fleet editor 60px past the card, and nothing on the Time Machine caught // it
-        because `/v1/replay` was never stubbed and this branch never rendered.
+        {/*
+          ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put
+          the fleet editor 60px past the card, and nothing on the Time Machine
+          caught it because `/v1/replay` was never stubbed and this branch
+          never rendered.
+        */}
         <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 380 }}>
           <PanelHeader
             icon={<SlidersHorizontalIcon size={18} color={colors.inkMuted} />}
