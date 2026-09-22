@@ -200,7 +200,7 @@ export function SelectedRegion({
                 }}
               >
                 {fill(copy.app.observed.selectedFigure, {
-                  mwh: f.compact(observed.last24hMwh),
+                  mwh: f.compact(observed.dayMwh),
                   wind: f.compact(observed.split.windMwh),
                   solar: f.compact(observed.split.solarMwh),
                 })}

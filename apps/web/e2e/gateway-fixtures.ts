@@ -794,9 +794,76 @@ const META_NOTHING_PROMOTED = (() => {
   };
 })();
 
+/**
+ * `GET /v1/grid/day` — the same four figures for a **named** civil day.
+ *
+ * The day-axis twin of `GRID_NOW`, and what the rail, the map's observed paint
+ * and the national total actually read now: `now` finds its own rolling window
+ * and has no date to pass it, so while the screen read it the four rows were a
+ * different window from the profile beside them.
+ *
+ * The figures are `GRID_NOW`'s deliberately. Two fixtures disagreeing about
+ * one settled day would make every assertion that names a number depend on
+ * which read the screen happened to use, and this suite has several. What is
+ * new is `peak_hour_mwh` — the day's *largest* hour, which the rolling read had
+ * no equivalent of, `latest_hour_constrained_off_mwh` being the newest.
+ *
+ * `settled_hours: 24` is a closed day. A day still settling carries fewer, and
+ * a day that settled nothing carries `0` with zeros beside it rather than a
+ * refusal — `null` peaks with their stated reason, never a bare zero.
+ */
+export const GRID_DAY = {
+  date: "2026-09-14",
+  as_of: AS_OF,
+  data_version: "1",
+  vintage_fidelity: "point_in_time",
+  settled_hours: 24,
+  subsystems: [
+    {
+      subsystem: "N",
+      ons_display_name: "NORTE",
+      constrained_off_mwh: 311.4,
+      peak_hour_mwh: 38.2,
+      peak_hour_unavailable_reason: null,
+      split: { wind_mwh: 208.1, solar_mwh: 103.3 },
+    },
+    {
+      subsystem: "NE",
+      ons_display_name: "NORDESTE",
+      constrained_off_mwh: 1842.6,
+      peak_hour_mwh: 204.7,
+      peak_hour_unavailable_reason: null,
+      split: { wind_mwh: 1188.4, solar_mwh: 654.2 },
+    },
+    {
+      subsystem: "SE",
+      ons_display_name: "SUDESTE/CENTRO-OESTE",
+      constrained_off_mwh: 274.9,
+      peak_hour_mwh: 29.5,
+      peak_hour_unavailable_reason: null,
+      split: { wind_mwh: 41.3, solar_mwh: 233.6 },
+    },
+    {
+      subsystem: "S",
+      ons_display_name: "SUL",
+      constrained_off_mwh: 96.2,
+      peak_hour_mwh: 11.1,
+      peak_hour_unavailable_reason: null,
+      split: { wind_mwh: 88.7, solar_mwh: 7.5 },
+    },
+  ],
+  national: {
+    // 311,4 + 1842,6 + 274,9 + 96,2 — the same addition `GRID_NOW` states, so
+    // the two reads cannot put two national figures on one screen.
+    constrained_off_mwh: 2525.1,
+    derived: "sum_of_four",
+  },
+};
+
 /** The three reads that need no model, by the pathname they are served at. */
 const OBSERVED_BY_PATH: Record<string, unknown> = {
   "/v1/grid/now": GRID_NOW,
+  "/v1/grid/day": GRID_DAY,
   "/v1/curtailment/hours": CURTAILMENT_HOURS,
   "/v1/curtailment/episodes": CURTAILMENT_EPISODES,
   "/v1/curtailment/reasons": CURTAILMENT_REASONS,

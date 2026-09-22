@@ -331,7 +331,7 @@ export function ObservedSubsystemRow({
   const copy = useCopy();
   const f = useFormat();
   const meta = subsystemMeta(observed.subsystem);
-  const share = domainMax <= 0 ? 0 : Math.min(1, observed.last24hMwh / domainMax);
+  const share = domainMax <= 0 ? 0 : Math.min(1, observed.dayMwh / domainMax);
 
   return (
     <Pressable
@@ -451,7 +451,7 @@ export function ObservedSubsystemRow({
               color: colors.ink,
             }}
           >
-            {`${f.compact(observed.last24hMwh)} MWh`}
+            {`${f.compact(observed.dayMwh)} MWh`}
           </Text>
         </View>
         <View

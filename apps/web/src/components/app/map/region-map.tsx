@@ -98,6 +98,9 @@ export function RegionMap({
   onSelect,
   run,
   runInert,
+  date,
+  latestDate,
+  onDate,
   onRun,
   defaultLayer = "2d",
   /** The widest the flat layer may draw. The globe always fills the stage. */
@@ -119,6 +122,10 @@ export function RegionMap({
   /** The run chips, where the screen has no selection bar carrying them. */
   run?: RunLabel;
   runInert?: (run: RunLabel) => boolean;
+  /** The civil day the scene is about; see `ScopeBar`. */
+  date?: string;
+  latestDate?: string;
+  onDate?: (date: string) => void;
   onRun?: (run: RunLabel) => void;
   defaultLayer?: MapLayer;
   flatMaxWidth?: number;
@@ -212,6 +219,9 @@ export function RegionMap({
           subsystem={selected}
           run={run}
           runInert={runInert}
+          date={date}
+          latestDate={latestDate}
+          onDate={onDate}
           onScope={onScope}
           onSubsystem={onSelect}
           onRun={onRun}

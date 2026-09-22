@@ -24,7 +24,7 @@
 
 import { radius, space, type, usePalette } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
-import { useCopy } from "@/i18n";
+import { useCopy, useFormat } from "@/i18n";
 import {
   RUN_LABELS,
   type RunLabel,
@@ -99,6 +99,9 @@ export function ScopeBar({
   subsystem,
   run,
   runInert,
+  date,
+  latestDate,
+  onDate,
   onScope,
   onSubsystem,
   onRun,
@@ -115,11 +118,24 @@ export function ScopeBar({
    */
   run?: RunLabel;
   runInert?: (run: RunLabel) => boolean;
+  /**
+   * The civil day the whole screen is about, and the two controls that move it.
+   *
+   * Here for the reason the run chips are: it changes the entire scene, and
+   * every control that does now sits beside the scene rather than in a bar
+   * above it. Optional, so the screens that have no day axis do not have to
+   * decline one.
+   */
+  date?: string;
+  /** The newest day there is anything to show for. `onDate` is inert past it. */
+  latestDate?: string;
+  onDate?: (date: string) => void;
   onScope: (scope: Scope) => void;
   /** Choosing a region also chooses the scope; the parent does both. */
   onSubsystem: (code: SubsystemCode) => void;
   onRun?: (run: RunLabel) => void;
 }) {
+  const f = useFormat();
   const colors = usePalette();
   const copy = useCopy();
   return (
@@ -166,6 +182,55 @@ export function ScopeBar({
           backgroundColor: colors.border,
         }}
       />
+
+      {/*
+        **The day, with two arrows and no calendar.**
+
+        Arrows rather than a picker because the thing a reader wants is almost
+        always the day before or the day after — a grid operator comparing a
+        morning against yesterday's — and a calendar for that is a dependency
+        and a popover for a job two buttons do. `docs/lint-policy.md`'s rule on
+        dependencies is the same rule: prefer the platform.
+
+        Forward is inert at `latestDate`, which is the day being forecast:
+        there is no day after tomorrow to show, and an arrow that leads to four
+        stated absences is an arrow that teaches a reader the control is
+        broken. Backwards has no floor — the panels state what a day does not
+        have, and `GET /v1/grid/day` answers a quiet day with zeros rather than
+        a refusal, so walking into the past degrades into honest emptiness
+        instead of an error.
+      */}
+      {date === undefined || onDate === undefined ? null : (
+        <>
+          <Chip
+            label="‹"
+            active={false}
+            hint={copy.app.grid.dayPreviousHint}
+            onPress={() => onDate(addDays(date, -1))}
+          />
+          <Text
+            testID="scope-bar-date"
+            style={{ ...type.caption, color: colors.ink, fontVariant: ["tabular-nums"] }}
+          >
+            {f.date(date)}
+          </Text>
+          <Chip
+            label="›"
+            active={false}
+            disabled={latestDate !== undefined && date >= latestDate}
+            hint={copy.app.grid.dayNextHint}
+            onPress={() => onDate(addDays(date, 1))}
+          />
+          <View
+            style={{
+              width: 1,
+              height: 18,
+              marginHorizontal: 2,
+              backgroundColor: colors.border,
+            }}
+          />
+        </>
+      )}
 
       {/*
         The region chips stay pressable in either scope, because pressing one is
@@ -233,4 +298,19 @@ export function ScopeBar({
       )}
     </View>
   );
+}
+
+/**
+ * A civil date shifted by whole days, as a `YYYY-MM-DD` string.
+ *
+ * Built at UTC midnight and read back as an ISO date, which is exact for whole
+ * days in any zone: the arithmetic never touches an hour, so a Brasília
+ * transition cannot move the answer. It is the same shape `daysFrom` uses in
+ * `use-network.ts`, and it stays here rather than being shared because two
+ * call sites is not a module.
+ */
+function addDays(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 }

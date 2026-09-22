@@ -103,8 +103,8 @@ function SettledSubsystemsPanel({
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
-  const rows = observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER);
-  const domainMax = Math.max(...rows.map((row) => row.last24hMwh), 0);
+  const rows = observedRows(observed.day.subsystems, SUBSYSTEM_DISPLAY_ORDER);
+  const domainMax = Math.max(...rows.map((row) => row.dayMwh), 0);
 
   return (
     <FadeIn delay={70}>
@@ -138,7 +138,7 @@ function SettledSubsystemsPanel({
           }}
         >
           {fill(copy.app.overview.settledNationalNote, {
-            mwh: f.compact(observed.now.national.last24hConstrainedOffMwh),
+            mwh: f.compact(observed.day.national.constrainedOffMwh),
           })}
         </Text>
       </Panel>

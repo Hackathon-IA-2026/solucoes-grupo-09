@@ -24,6 +24,7 @@
  * says why rather than drawing one.
  */
 
+import { latestTargetDate } from "@wattsteer/core";
 import {
   ArrowRightIcon,
   Panel,
@@ -123,7 +124,7 @@ export function OverviewHero({
   onWhatToDo?: () => void;
   /** The live selection, with its writer — the map and the rail set it. */
   params: AppParams & {
-    setParams: (next: Partial<Omit<AppParams, "date">>) => void;
+    setParams: (next: Partial<AppParams>) => void;
   };
 }) {
   const colors = usePalette();
@@ -404,7 +405,7 @@ export function OverviewHero({
     );
 
   const window24h = fill(copy.app.observed.window24h, {
-    hour: f.dateTime(observed.now.latestSettledHour),
+    date: f.date(observed.day.date),
   });
 
   /*
@@ -430,7 +431,7 @@ export function OverviewHero({
   */
   const nationalPanel =
     forecast === null ? (
-      <ObservedNationalPanel national={observed.now.national} window={window24h} />
+      <ObservedNationalPanel national={observed.day.national} window={window24h} />
     ) : null;
 
   /*
@@ -615,6 +616,20 @@ export function OverviewHero({
               run={params.run}
               runInert={runInert}
               onRun={(run) => params.setParams({ run })}
+              /*
+                The day, and the whole screen follows it: the forecast half
+                already took `targetDate`, and `GET /v1/grid/day` gave the
+                observed half the same axis, so there is no panel left that
+                reads a window the reader did not choose.
+
+                `latestTargetDate` is the ceiling rather than a constant —
+                `params.ts` uses the same function for the default, so the two
+                cannot drift into a control that offers a day the screen would
+                not open on.
+              */
+              date={params.date}
+              latestDate={latestTargetDate(new Date())}
+              onDate={(date) => params.setParams({ date })}
               defaultLayer="2d"
               // The point of the layout: a map with room to be looked at. 380 is
               // what it takes in a column beside four panels; here it is the
@@ -805,7 +820,7 @@ export function OverviewHero({
               row={selectedRow}
               observed={
                 forecast === null
-                  ? (observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER).find(
+                  ? (observedRows(observed.day.subsystems, SUBSYSTEM_DISPLAY_ORDER).find(
                       (row) => row.subsystem === params.subsystem,
                     ) ?? null)
                   : null

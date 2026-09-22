@@ -951,7 +951,13 @@ export const pt: Copy = {
     observed: {
       badge: "Observado",
       stamp: "Observado · liquidado até {when} BRT · {lag} h de atraso",
-      window24h: "Últimas 24 h até {hour} BRT",
+      /*
+        A settled **day**, not a rolling window. The rail, the map's paint and
+        the national total read `GET /v1/grid/day` now — one window for the
+        whole screen, the same day the profile draws — so the label that said
+        "últimas 24 h" was the last thing still describing the old read.
+      */
+      window24h: "Dia liquidado, {date}",
       windowDay: "Dia liquidado, {date}",
       rowEnergy: "Energia cortada, últimas 24 h",
       selectedFigure: "{mwh} MWh liquidados · eólica {wind} · solar {solar}",
@@ -966,7 +972,7 @@ export const pt: Copy = {
         "Uma energia em MWh, não uma potência em MW: o ONS publica energia por hora, e a faixa de pico de potência que uma previsão informa é uma afirmação do modelo sobre o formato dentro daquela hora. Não há modelo nenhum hoje, então nenhum número desses é mostrado.",
       emptyDay:
         "O dia liquidou sem nenhum corte neste subsistema, o que é uma medição e não um número faltando.",
-      nationalTitle: "As últimas 24 horas, nos quatro subsistemas",
+      nationalTitle: "O dia liquidado, nos quatro subsistemas",
       nationalSubtitle: "Uma soma de quatro medições, e ela é exata",
       nationalLabel: "Energia liquidada em constrained-off, os quatro subsistemas",
       /*
@@ -1044,7 +1050,7 @@ export const pt: Copy = {
         noBand: "Uma liquidação é um número, não um intervalo.",
         nationalLabel: "Brasil",
         windowForecast: "Esperado no dia seguinte, por subsistema.",
-        windowObserved: "Últimas 24 h liquidadas, por subsistema.",
+        windowObserved: "Dia liquidado, por subsistema.",
         /**
          * A divisão por frota, na linha de cada região.
          *
@@ -1095,6 +1101,10 @@ export const pt: Copy = {
       lockView: "Travar esta vista como inicial",
       unlockView: "Destravar a vista inicial",
       legendTitle: "Classe de risco",
+      /* Hints, not labels: the arrows are ‹ and › and a screen reader needs
+         the verb. See `Chip` on why the label is never replaced. */
+      dayPreviousHint: "Ver o dia anterior",
+      dayNextHint: "Ver o dia seguinte",
       scopeLabel: "Escopo",
       runLabel: "Rodada",
       layer2d: "2D",

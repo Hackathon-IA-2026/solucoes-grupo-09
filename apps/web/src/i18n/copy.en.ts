@@ -1183,7 +1183,8 @@ export const en = {
     observed: {
       badge: "Observed",
       stamp: "Observed · settled through {when} BRT · {lag} h behind",
-      window24h: "Last 24 h to {hour} BRT",
+      /* A settled day, not a rolling window; see the pt-BR entry. */
+      window24h: "Settled day, {date}",
       windowDay: "Settled day, {date}",
       rowEnergy: "Curtailed energy, last 24 h",
       selectedFigure: "{mwh} MWh settled · wind {wind} · solar {solar}",
@@ -1198,7 +1199,7 @@ export const en = {
         "An energy in MWh, not a power in MW: ONS publishes energy per hour, and the peak-power band a forecast states is a model's claim about the shape inside that hour. There is no such model today, so no such figure is shown.",
       emptyDay:
         "The day settled with no curtailment at all in this subsystem, which is a measurement and not a missing figure.",
-      nationalTitle: "The last 24 hours, across all four subsystems",
+      nationalTitle: "The settled day, across all four subsystems",
       nationalSubtitle: "A sum of four measurements, and it is exact",
       nationalLabel: "Settled constrained-off energy, all four subsystems",
       /* See the note on the Portuguese side. */
@@ -1255,7 +1256,7 @@ export const en = {
         noBand: "A settlement is a number, not an interval.",
         nationalLabel: "Brazil",
         windowForecast: "Expected tomorrow, per subsystem.",
-        windowObserved: "The last settled 24 h, per subsystem.",
+        windowObserved: "The settled day, per subsystem.",
         /** See the pt-BR entry: compact on purpose, and on all four rows. */
         railSplit: "wind {wind} · solar {solar}",
       },
@@ -1293,6 +1294,9 @@ export const en = {
       lockView: "Lock this view as the default",
       unlockView: "Unlock the default view",
       legendTitle: "Risk class",
+      /* Hints, not labels; see the pt-BR entry. */
+      dayPreviousHint: "Show the previous day",
+      dayNextHint: "Show the next day",
       scopeLabel: "Scope",
       runLabel: "Run",
       layer2d: "2D",

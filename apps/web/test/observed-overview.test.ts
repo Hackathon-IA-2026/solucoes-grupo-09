@@ -346,7 +346,7 @@ describe("the map speaks two languages and keeps them apart", () => {
     // The observed side paints from the ramp and prints the figure itself.
     expect(MAP).toContain("observedFill(share, colors)");
     expect(MAP).toContain("copy.app.overview.map.regionObserved,");
-    expect(MAP).toContain("f.compact(row.last24hMwh)");
+    expect(MAP).toContain("f.compact(row.dayMwh)");
     // And the figure's own accessible name differs by mode, so the two maps are
     // distinguishable with the screen turned off.
     expect(MAP).toContain("copy.app.overview.map.figureObserved");
@@ -458,26 +458,38 @@ describe("the observed derivations are measurements, not estimates", () => {
   });
 
   it("the four observed rows come back in the product's display order", () => {
+    /*
+      `SubsystemDay`, not `SubsystemNow`. These rows read `GET /v1/grid/day`
+      now — the settled civil day the screen is about, which is the same day
+      the profile beside them draws — rather than the rolling 24 hours, which
+      was a second window the rail had to explain away in a paragraph.
+    */
     const subsystems = [
       {
         subsystem: "S",
         onsDisplayName: "SUL",
-        last24hConstrainedOffMwh: 96.2,
-        latestHourConstrainedOffMwh: 3.4,
+        constrainedOffMwh: 96.2,
+        peakHourMwh: 3.4,
+        peakHourUnavailableReason: null,
         split: { windMwh: 88.7, solarMwh: 7.5 },
       },
       {
         subsystem: "NE",
         onsDisplayName: "NORDESTE",
-        last24hConstrainedOffMwh: 1842.6,
-        latestHourConstrainedOffMwh: 74.2,
+        constrainedOffMwh: 1842.6,
+        peakHourMwh: 74.2,
+        peakHourUnavailableReason: null,
         split: { windMwh: 1188.4, solarMwh: 654.2 },
       },
     ] as unknown as Parameters<typeof observedRows>[0];
     const rows = observedRows(subsystems, ["N", "NE", "SE", "S"]);
     // Absent subsystems are dropped rather than padded with a zero.
     expect(rows.map((row) => row.subsystem)).toEqual(["NE", "S"]);
-    expect(rows[0].last24hMwh).toBe(1842.6);
+    expect(rows[0].dayMwh).toBe(1842.6);
+    // The day's largest hour travels with it, which the rolling read had no
+    // equivalent of — `latest_hour_constrained_off_mwh` was the newest hour,
+    // not the biggest, and the two answer different questions.
+    expect(rows[0].peakHourMwh).toBe(74.2);
   });
 });
 
@@ -626,9 +638,19 @@ describe("the five questions are answered in both states", () => {
     expect(figures).toMatch(
       /const settled: SettledAnswers \| null =\s*\n?\s*forecast [!=]== null/,
     );
-    // The overall scope reads the national row the gateway publishes rather
-    // than adding four bands, which is the rule the whole product turns on.
-    expect(figures).toContain("observed.now.national.last24hConstrainedOffMwh");
+    /*
+      The overall scope reads the national row the gateway publishes rather
+      than adding four bands, which is the rule the whole product turns on.
+
+      It reads it off the **day** now. `GET /v1/grid/now` has no date axis, so
+      while the rail and this figure came from it they were a different window
+      from the profile beside them; `GET /v1/grid/day` is the same four figures
+      for a named civil day, and it is what let the screen follow a date the
+      reader picks. The rule this line is about — read the published national
+      row, never add four — is unchanged, and `derived: "sum_of_four"` is still
+      on the object saying so.
+    */
+    expect(figures).toContain("observed.day.national.constrainedOffMwh");
   });
 });
 

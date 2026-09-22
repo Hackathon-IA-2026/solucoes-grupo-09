@@ -93,7 +93,7 @@ export function ObservedPanels({
     so it has to say the previous subsystem's name. See `ObservedNetwork`.
   */
   const _meta = subsystemMeta(observed.subsystem as SubsystemCode);
-  const rows = observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER);
+  const rows = observedRows(observed.day.subsystems, SUBSYSTEM_DISPLAY_ORDER);
   const _day = observedDay(observed.hours);
   const [overviewWidth, onOverviewLayout] = useContainerWidth();
   // The same one-hover-two-affordances arrangement the forecast stack has, for
@@ -107,7 +107,7 @@ export function ObservedPanels({
   const side = overviewWidth >= layout.desktop;
   // One scale across all four rows and the map's ramp, so a region's colour and
   // its row's bar are the same statement made twice.
-  const domainMax = Math.max(...rows.map((row) => row.last24hMwh), 0);
+  const domainMax = Math.max(...rows.map((row) => row.dayMwh), 0);
   const window24h = fill(copy.app.observed.window24h, {
     hour: f.dateTime(observed.now.latestSettledHour),
   });
@@ -117,7 +117,7 @@ export function ObservedPanels({
     <>
       {heroElsewhere ? null : (
         <FadeIn style={{ gap: space.md }}>
-          <ObservedNationalPanel national={observed.now.national} window={window24h} />
+          <ObservedNationalPanel national={observed.day.national} window={window24h} />
         </FadeIn>
       )}
 
@@ -216,7 +216,7 @@ export function ObservedPanels({
                 }}
               >
                 {fill(copy.app.overview.settledNationalNote, {
-                  mwh: f.compact(observed.now.national.last24hConstrainedOffMwh),
+                  mwh: f.compact(observed.day.national.constrainedOffMwh),
                 })}
               </Text>
               <View style={{ alignSelf: "flex-start" }}>

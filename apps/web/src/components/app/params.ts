@@ -244,10 +244,16 @@ export function sharedParams(params: AppParams): Record<string, string> {
  *
  * Only the named fields are emitted — `router.setParams` merges, and writing
  * the others back would undo a concurrent change to them.
+ *
+ * **`date` is writable now, and it was not.** It was excluded because nothing
+ * could change it: the screen was always about the day the clock said, and a
+ * settable date with half the panels ignoring it would have been worse than no
+ * control. `GET /v1/grid/day` closed that half — the rail, the map's paint and
+ * the national total follow a named day now — so the parameter is a control
+ * rather than a fact about the clock, and `parseAppParams` already reads it
+ * from the URL and falls back to `latestTargetDate(now)`.
  */
-export function writeParams(
-  next: Partial<Omit<AppParams, "date">>,
-): Record<string, string> {
+export function writeParams(next: Partial<AppParams>): Record<string, string> {
   const query: Record<string, string> = {};
   if (next.subsystem !== undefined) {
     query.subsystem = next.subsystem;
@@ -260,6 +266,9 @@ export function writeParams(
   }
   if (next.episode !== undefined) {
     query.episode = next.episode;
+  }
+  if (next.date !== undefined) {
+    query.date = next.date;
   }
   return query;
 }
