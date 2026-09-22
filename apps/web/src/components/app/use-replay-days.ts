@@ -49,17 +49,18 @@ export function useReplayDays(subsystem: SubsystemCode): ReplayDaysState {
     had refused, and the calendar it asked for was empty on every day of the
     window — see `use-replay-lane.ts` for the measurement.
   */
-  const { lane } = useReplayLane();
+  const { lane, resolved } = useReplayLane();
 
   useEffect(() => {
     if (lane === null) {
       /*
-        No lane to pin yet. `probing` and not an empty calendar: an empty one
-        is the picker's sentence for "no day in this window can be shown",
-        which is a claim about the days, and this is not that. It resolves on
-        the next render either way, because `/v1/meta` is read once at mount.
+        Two absences, and they are not the same sentence. Before `/v1/meta`
+        answers there is no lane *yet*, and `probing` is exactly that. Once it
+        has answered with nothing serving there is no lane *at all*, and the
+        honest answer is the empty calendar the picker already states in words
+        — sitting on `probing` there would be a skeleton that never resolves.
       */
-      setState({ status: "probing" });
+      setState(resolved ? { status: "known", viewable: [] } : { status: "probing" });
       return;
     }
     const controller = new AbortController();
@@ -81,7 +82,7 @@ export function useReplayDays(subsystem: SubsystemCode): ReplayDaysState {
         settle({ status: "known", viewable: [] });
       });
     return () => controller.abort();
-  }, [subsystem, lane]);
+  }, [subsystem, lane, resolved]);
 
   return state;
 }

@@ -29,11 +29,13 @@
  * screen's other numbers come from — except that "the lane serving" is now read
  * where it is known instead of asserted where it is not.
  *
- * **`null` is a state, not a failure.** While `/v1/meta` is in flight, and
- * where it answered with no serving lane at all, there is no lane to pin and
- * the caller must say so rather than send a guess. The two cases are
- * distinguishable through {@link useServing} for a caller that needs to tell
- * "still reading" from "nothing is promoted".
+ * **`null` is a state, not a failure — and there are two of them.** While
+ * `/v1/meta` is in flight there is no lane *yet*; where it answered with no
+ * serving lane, or did not answer at all, there is no lane *at all*. A caller
+ * that cannot tell those apart has only one move left, and it is the wrong one
+ * either way: a skeleton that never resolves, which `honesty.md` rules out in
+ * the same sentence as a bare dash. So {@link ReplayLane} carries `resolved`,
+ * and a caller waits on the first and states an absence on the second.
  */
 
 import type { GateProfile } from "@wattsteer/core/api";
@@ -50,8 +52,14 @@ import { serves } from "@/lib/lanes";
 const GATE_PROFILES: readonly GateProfile[] = ["gate_early", "gate_late"];
 
 export interface ReplayLane {
-  /** The lane to pin, or `null` while unknown. */
+  /** The lane to pin, or `null` when there is none to pin. */
   readonly lane: string | null;
+  /**
+   * Whether `/v1/meta` has answered. `false` means "not yet"; `true` with a
+   * `null` lane means "nothing is serving", which is a sentence a screen owes
+   * its reader rather than a state it may sit in.
+   */
+  readonly resolved: boolean;
   /**
    * That lane's gate profile, for the panels that take a profile instead of a
    * lane. `gate_late` was written at those call sites too, and it is the
@@ -62,9 +70,21 @@ export interface ReplayLane {
 
 export function useReplayLane(): ReplayLane {
   const serving = useServing();
-  if (serving.status !== "known") return { lane: null, gateProfile: null };
+  if (serving.status === "reading") {
+    return { lane: null, gateProfile: null, resolved: false };
+  }
+  /*
+    `unknown` — `/v1/meta` itself did not answer — resolves to "no lane" rather
+    than to "still reading": the deployment's condition is unknowable from
+    here, every other read on the screen has failed too, and a picker spinning
+    forever would be the one surface claiming the question is still open.
+  */
+  if (serving.status !== "known") {
+    return { lane: null, gateProfile: null, resolved: true };
+  }
   const name = serving.lanes.find(serves)?.name ?? null;
   return {
+    resolved: true,
     lane: name,
     gateProfile:
       name === null ? null : (GATE_PROFILES.find((p) => name.includes(p)) ?? null),

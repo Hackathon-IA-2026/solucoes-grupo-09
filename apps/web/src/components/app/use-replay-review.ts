@@ -86,13 +86,27 @@ function useRead<T>(
 /** Four subsystems against their pinned bands, for one day and one lane. */
 export function useReplayCompare(
   date: string,
-  /* `null` while the serving lane is unknown — see `use-replay-lane.ts`. */
+  /* `null` when there is no serving lane to pin — see `use-replay-lane.ts`. */
   lane: string | null,
 ): ReviewState<ReplayCompare> {
   return useRead(lane === null ? null : `${date}|${lane}`, (signal) =>
     api.replayCompare({ date, lane: lane ?? "" }, signal),
   );
 }
+
+/**
+ * The state a lane-pinned read is in when nothing is serving.
+ *
+ * `MODEL_UNAVAILABLE` is the gateway's own code for "no artifact is on duty",
+ * and a panel that cannot name a lane is in exactly that state — so it says so
+ * in the enum every other refusal on the screen speaks, rather than reading
+ * forever. The alternative was a `reading` that never settles, which is the
+ * shape `honesty.md` forbids beside the bare dash.
+ */
+export const NO_SERVING_LANE: ReviewState<never> = {
+  status: "refused",
+  code: "MODEL_UNAVAILABLE",
+};
 
 /** One subsystem's day at both served gates, and when each fact arrived. */
 export function useReplayTimeline(

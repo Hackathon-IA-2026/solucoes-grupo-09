@@ -37,7 +37,10 @@ async function settled(page: Page): Promise<void> {
 test.describe("the briefing is absent until it is asked for", () => {
   for (const path of APP_SCREENS) {
     test(`${path} mounts no stage of its own`, async ({ page }) => {
-      await routeGateway(page, { forecast: true });
+      // The replay screens resolve their lane from `/v1/meta`; without one
+      // they settle on a stated refusal rather than reading, and this spec
+      // waits for reading to stop.
+      await routeGateway(page, { forecast: true, serving: "promoted" });
       await page.goto(path);
       await settled(page);
 
@@ -96,7 +99,10 @@ test.describe("no horizontal overflow with the host mounted", () => {
   for (const width of [320, 360, 400]) {
     test(`/app does not scroll sideways at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
-      await routeGateway(page, { forecast: true });
+      // The replay screens resolve their lane from `/v1/meta`; without one
+      // they settle on a stated refusal rather than reading, and this spec
+      // waits for reading to stop.
+      await routeGateway(page, { forecast: true, serving: "promoted" });
       await page.goto("/app");
       await settled(page);
 

@@ -90,6 +90,7 @@ import { useReplay } from "@/components/app/use-replay";
 import { useReplayDays } from "@/components/app/use-replay-days";
 import { useReplayLane } from "@/components/app/use-replay-lane";
 import {
+  NO_SERVING_LANE,
   useDayReasons,
   useReplayAttribution,
   useReplayCompare,
@@ -147,10 +148,18 @@ export default function TimeMachineDashboard() {
     counterfactual: undefined,
   });
   /* Read from `/v1/meta`, never written down — see `use-replay-lane.ts`. */
-  const { lane: replayLane, gateProfile: replayGate } = useReplayLane();
-  const compare = useReplayCompare(day.date, replayLane);
+  const {
+    lane: replayLane,
+    gateProfile: replayGate,
+    resolved: laneResolved,
+  } = useReplayLane();
+  /* A panel that cannot name a lane refuses rather than reads forever. */
+  const noLane = laneResolved && replayLane === null;
+  const compareRead = useReplayCompare(day.date, replayLane);
+  const compare = noLane ? NO_SERVING_LANE : compareRead;
   const timeline = useReplayTimeline(day.date, day.subsystem);
-  const attribution = useReplayAttribution(day.date, day.subsystem, replayLane);
+  const attributionRead = useReplayAttribution(day.date, day.subsystem, replayLane);
+  const attribution = noLane ? NO_SERVING_LANE : attributionRead;
   const reasons = useDayReasons(day.date, day.subsystem);
   const analogues = useSimilarDays(day.subsystem, day.date, replayGate);
   const coverage = useCoverage(replayGate);

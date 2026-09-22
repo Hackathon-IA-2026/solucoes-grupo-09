@@ -19,7 +19,13 @@ import { routeGateway } from "./gateway-fixtures";
 
 test.describe("the Time Machine says whether the forecast held", () => {
   test.beforeEach(async ({ page }) => {
-    await routeGateway(page, { forecast: true });
+    /*
+      `serving: "promoted"` is a precondition now, not decoration: the screen
+      reads the lane to pin from `/v1/meta` rather than carrying a constant,
+      so a replay is unreachable without one. Left unstubbed, this file was
+      asserting the numbers against a deployment that could not name a lane.
+    */
+    await routeGateway(page, { forecast: true, serving: "promoted" });
     await page.goto("/app/replay");
     await expect
       .poll(() => page.evaluate(() => document.body.textContent?.length ?? 0), {

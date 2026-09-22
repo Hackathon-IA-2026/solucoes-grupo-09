@@ -51,9 +51,9 @@
 import { canonicalScenarioJson, type ErrorCode, encodeScenario } from "@wattsteer/core";
 import type { Replay, ReplayObservedOnly, Scenario } from "@wattsteer/core/api";
 import { useEffect, useState } from "react";
+import { useReplayLane } from "@/components/app/use-replay-lane";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
-import { REPLAY_LANE } from "@/lib/replay";
 import { settleWith } from "@/lib/settle";
 import { useLatest } from "@/lib/use-latest";
 
@@ -84,6 +84,8 @@ export function useReplay(scenario: Scenario | null): ReplayState {
   // Read through a ref for the reason `use-optimization.ts` does: the scenario
   // is an input to the effect, not a trigger for it. The bytes are the trigger.
   const latest = useLatest(scenario);
+  /* Read from `/v1/meta`, never written down — see `use-replay-lane.ts`. */
+  const { lane, resolved } = useReplayLane();
 
   // The `setState` after the await is guarded by `controller.signal.aborted`
   // on every branch below — which is the check this rule is asking for, made
@@ -94,13 +96,25 @@ export function useReplay(scenario: Scenario | null): ReplayState {
     if (key === null || asked === null) {
       return;
     }
+    if (lane === null) {
+      /*
+        No lane to pin. Before `/v1/meta` answers that is "not yet" and the
+        screen goes on replaying; once it has answered with nothing serving it
+        is a refusal, and it is the gateway's own code for it. A `replaying`
+        that never settles is the skeleton `honesty.md` rules out.
+      */
+      if (resolved) {
+        setState({ status: "refused", code: "MODEL_UNAVAILABLE" });
+      }
+      return;
+    }
     const controller = new AbortController();
     const settle = settleWith(controller.signal, setState);
     // The opening statement of a fetch effect — see `use-explain.ts`.
     // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "replaying" });
     api
-      .replay({ d: asked.targetDate, s: key, lane: REPLAY_LANE }, controller.signal)
+      .replay({ d: asked.targetDate, s: key, lane }, controller.signal)
       .then((replay) => {
         settle({ status: "replayed", replay });
       })
@@ -119,7 +133,7 @@ export function useReplay(scenario: Scenario | null): ReplayState {
         try {
           const view = await api.replayObservedOnly(
             canonicalScenarioJson(asked),
-            { lane: REPLAY_LANE },
+            { lane },
             controller.signal,
           );
           settle({ status: "observedOnly", view });
@@ -131,7 +145,7 @@ export function useReplay(scenario: Scenario | null): ReplayState {
     // Same rule as `use-optimization.ts`: the bytes are the trigger, the
     // scenario is an input, and `useLatest` keeps the two apart.
     // react-doctor-disable-next-line react-doctor/exhaustive-deps
-  }, [key]);
+  }, [key, lane, resolved]);
 
   return state;
 }
