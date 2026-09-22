@@ -26,13 +26,10 @@ import {
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { ObservedBadge, VintageBadge } from "@/components/app/honesty";
-import type { Scope } from "@/components/app/map/scope-bar";
 import { ObservedNationalPanel } from "@/components/app/overview/national-panel";
-import { EpisodesPanel } from "@/components/app/overview/settled-panels";
 import { SelectedRegion } from "@/components/app/selected-region";
 import { ObservedSubsystemRow } from "@/components/app/subsystem-row";
 import type { ObservedNetwork } from "@/components/app/use-network";
-import { ObservedCard, ObservedEmptyCard } from "@/components/charts/observed-profile";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
 import { useVoiceHighlight } from "@/components/voice/use-voice-agent";
 import { useCopy, useFormat } from "@/i18n";
@@ -65,15 +62,12 @@ import { observedDay, observedRows } from "@/lib/network";
  */
 export function ObservedPanels({
   observed,
-  scope,
   subsystem,
   onSelect,
   onExplain,
   heroElsewhere = false,
 }: {
   observed: ObservedNetwork;
-  /** The map's filter, which the episode list follows like every other figure. */
-  scope: Scope;
   subsystem: SubsystemCode;
   onSelect: (subsystem: SubsystemCode) => void;
   onExplain: (subsystem: SubsystemCode) => void;
@@ -98,9 +92,9 @@ export function ObservedPanels({
     and during a re-read this panel is showing the previous subsystem's figures,
     so it has to say the previous subsystem's name. See `ObservedNetwork`.
   */
-  const meta = subsystemMeta(observed.subsystem as SubsystemCode);
+  const _meta = subsystemMeta(observed.subsystem as SubsystemCode);
   const rows = observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER);
-  const day = observedDay(observed.hours);
+  const _day = observedDay(observed.hours);
   const [overviewWidth, onOverviewLayout] = useContainerWidth();
   // The same one-hover-two-affordances arrangement the forecast stack has, for
   // the same reason: hovering a region lights its row and hovering a row lights
@@ -116,9 +110,6 @@ export function ObservedPanels({
   const domainMax = Math.max(...rows.map((row) => row.last24hMwh), 0);
   const window24h = fill(copy.app.observed.window24h, {
     hour: f.dateTime(observed.now.latestSettledHour),
-  });
-  const windowDay = fill(copy.app.observed.windowDay, {
-    date: f.date(observed.hoursDate),
   });
   const selectedRow = rows.find((row) => row.subsystem === subsystem) ?? null;
 
@@ -256,73 +247,18 @@ export function ObservedPanels({
         which is a different sentence from a zero and gets a different card.
       */}
       {/*
-        **The two day figures and the episode list, as two columns.**
+        **The day's two figures and the episode list are the hero's now.**
 
-        The same grid `settled-panels.tsx` puts the episode list on beside the
-        settled four. There is no settled-four card in *this* stack — the hero
-        drew it — so the partner here is the pair of day figures, stacked in
-        their own column rather than laid across the whole line with the
-        episode table under them.
+        Both were here, at the bottom of the page. The two figures are about the
+        selected region's settled day — the same day the hero's profile draws
+        hour by hour — so they sit under it, in the column that already holds
+        the day. The episode list went under `Planejado × Realizado`, at the
+        centre column's full width, because both are tables a reader scans
+        across and a half-width column takes that away.
 
-        `minWidth: 280` is the wrap floor, and it is deliberately smaller than
-        the table would like: a flex item whose minimum exceeds its container
-        does not wrap, it overflows, and 420 here put a sideways scroll on
-        `/app` at 320, 360 and 400 in `no-horizontal-overflow.spec.ts`.
+        Nothing is lost by their absence here: this stack renders only with
+        `heroElsewhere`, which is what the prop is for.
       */}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
-        <FadeIn
-          delay={280}
-          style={{
-            flexGrow: 1,
-            flexShrink: 1,
-            flexBasis: 0,
-            minWidth: 280,
-            gap: space.md,
-          }}
-        >
-          {day.peakHour === null ? (
-            <>
-              <ObservedEmptyCard
-                label={fill(copy.app.observed.dayTotal, {
-                  subsystem: meta.onsDisplayName,
-                })}
-              />
-              <ObservedEmptyCard
-                label={fill(copy.app.observed.peakHour, {
-                  subsystem: meta.onsDisplayName,
-                })}
-              />
-            </>
-          ) : (
-            <>
-              <ObservedCard
-                label={fill(copy.app.observed.dayTotal, {
-                  subsystem: meta.onsDisplayName,
-                })}
-                value={day.totalMwh}
-                unit="MWh"
-                window={windowDay}
-                footnote={copy.app.observed.dayTotalNote}
-              />
-              <ObservedCard
-                label={fill(copy.app.observed.peakHour, {
-                  subsystem: meta.onsDisplayName,
-                })}
-                value={day.peakHour.constrainedOffMwh}
-                unit="MWh"
-                window={fill(copy.app.observed.peakHourWindow, {
-                  hour: f.number(day.peakHour.hourLocal),
-                  date: f.date(observed.hoursDate),
-                })}
-                footnote={copy.app.observed.peakHourNote}
-              />
-            </>
-          )}
-        </FadeIn>
-        <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 280 }}>
-          <EpisodesPanel observed={observed} scope={scope} subsystem={subsystem} />
-        </View>
-      </View>
     </>
   );
 }

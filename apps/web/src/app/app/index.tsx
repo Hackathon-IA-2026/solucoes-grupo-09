@@ -570,7 +570,6 @@ export default function GridOverviewScreen() {
       {forecast === null ? (
         <ObservedPanels
           observed={observed}
-          scope={scope}
           subsystem={params.subsystem}
           onSelect={select}
           onExplain={explain}
@@ -586,7 +585,6 @@ export default function GridOverviewScreen() {
           />
           <SettledPanels
             observed={observed}
-            scope={scope}
             subsystem={params.subsystem}
             onSelect={select}
           />

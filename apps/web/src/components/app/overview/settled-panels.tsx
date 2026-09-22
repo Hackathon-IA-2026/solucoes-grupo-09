@@ -23,7 +23,6 @@ import {
   ClockIcon,
   FadeIn,
   LayersIcon,
-  layout,
   Panel,
   PanelHeader,
   Sheet,
@@ -60,13 +59,10 @@ import { observedRows } from "@/lib/network";
  */
 export function SettledPanels({
   observed,
-  scope,
   subsystem,
   onSelect,
 }: {
   observed: ObservedNetwork;
-  /** The map's filter, which the episode list follows like every other figure. */
-  scope: Scope;
   subsystem: SubsystemCode;
   /**
    * The same selector the map and the forecast rows take.
@@ -79,38 +75,18 @@ export function SettledPanels({
 }) {
   return (
     /*
-      **Two columns, on the grid the rest of the screen uses.**
+      **The settled four alone, and the episode list is the hero's now.**
 
-      The episode list was a 50%-wide card alone in a vertical stack, which is
-      not half a layout — it is a half-width card with the other half empty,
-      and it read as one. Beside the settled subsystems it is a column: the two
-      panels answer the same question at two grains, *what has settled across
-      the four* and *which runs those hours formed*, and they are the width
-      they are because there are two of them.
-
-      `flexBasis: 0` with an explicit `flexShrink`, per ADR-0001: on
-      react-native-web a basis without one is a floor rather than a preference,
-      so the pair would size to content and never give anything back.
-
-      `minWidth: 280` is where the row wraps to one column, and it is a **floor
-      the narrowest line can hold** rather than the width the table would like.
-      420 was the first number here and it broke `/app` at 320, 360 and 400 in
-      `no-horizontal-overflow.spec.ts`: a flex item whose minimum exceeds its
-      container does not wrap, it overflows, and the page grew a sideways
-      scroll. The shell's line at a 320px viewport is 288.
+      They were two columns here for one commit. The episode list moved under
+      `Planejado × Realizado` in the centre column, at that column's full
+      width, because it is a five-column table a reader scans across — and
+      keeping half a row here would have left this panel beside a gap.
     */
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
-      <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 280 }}>
-        <SettledSubsystemsPanel
-          observed={observed}
-          subsystem={subsystem}
-          onSelect={onSelect}
-        />
-      </View>
-      <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 280 }}>
-        <EpisodesPanel observed={observed} scope={scope} subsystem={subsystem} />
-      </View>
-    </View>
+    <SettledSubsystemsPanel
+      observed={observed}
+      subsystem={subsystem}
+      onSelect={onSelect}
+    />
   );
 }
 
@@ -315,26 +291,24 @@ export function EpisodesPanel({
         half-width card alone in a vertical stack — half a card, not half a
         layout, with the other half empty beside it.
       */}
-      <>
-        <EpisodeList
-          episodes={episodes}
-          maxGapHours={read.maxGapHours}
-          title={copy.app.overview.episodesTitle}
-          subtitle={subtitle}
-          columns={columns}
-          note={copy.app.overview.episodeNote}
-          empty={empty}
-          limit={onTheCard}
-          onSeeAll={episodes.length > onTheCard ? () => setOpen(true) : undefined}
-          seeAllLabel={
-            episodes.length > onTheCard
-              ? fill(copy.app.overview.episodesSeeAll, {
-                  count: f.number(episodes.length),
-                })
-              : undefined
-          }
-        />
-      </>
+      <EpisodeList
+        episodes={episodes}
+        maxGapHours={read.maxGapHours}
+        title={copy.app.overview.episodesTitle}
+        subtitle={subtitle}
+        columns={columns}
+        note={copy.app.overview.episodeNote}
+        empty={empty}
+        limit={onTheCard}
+        onSeeAll={episodes.length > onTheCard ? () => setOpen(true) : undefined}
+        seeAllLabel={
+          episodes.length > onTheCard
+            ? fill(copy.app.overview.episodesSeeAll, {
+                count: f.number(episodes.length),
+              })
+            : undefined
+        }
+      />
 
       <Sheet
         open={open}

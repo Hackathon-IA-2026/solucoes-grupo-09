@@ -415,17 +415,15 @@ describe("a refused forecast renders no forecast", () => {
     // the two stacks are exclusive, and nothing that states a forecast exists
     // inside the observed one.
     //
-    // `scope` does not weaken it either. Both stacks take it because the
-    // episode list inside them follows the map's filter like every other
-    // figure on the screen, and it says nothing about whether a forecast
-    // exists — the ternary above is still the only thing that does.
+    // Neither stack takes `scope` any more: the episode list it was threaded
+    // for is the hero's now, under `Planejado × Realizado`.
     //
     // `heroElsewhere` does not weaken it. It tells both stacks to skip what
     // `OverviewHero` already drew — the national figure, the map, the rows, the
     // selection, the fan — and the hero is itself behind the same `forecast`
     // ternary, taking it as a prop rather than reading a state of its own.
     expect(OVERVIEW_FLAT).toContain(
-      "{forecast === null ? ( <ObservedPanels observed={observed} scope={scope} subsystem={params.subsystem} onSelect={select} onExplain={explain} heroElsewhere={true} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} heroElsewhere={true} /> <SettledPanels observed={observed} scope={scope} subsystem={params.subsystem} onSelect={select} /> </> )}",
+      "{forecast === null ? ( <ObservedPanels observed={observed} subsystem={params.subsystem} onSelect={select} onExplain={explain} heroElsewhere={true} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} heroElsewhere={true} /> <SettledPanels observed={observed} subsystem={params.subsystem} onSelect={select} /> </> )}",
     );
     // Each forecast panel is inside `ForecastPanels`, which is now a file of
     // its own — so this is a containment check rather than the `indexOf`
@@ -490,14 +488,21 @@ describe("a refused forecast renders no forecast", () => {
     for (const observedOnly of [
       '<SubsystemMap paint={{ kind: "observed", rows }}',
       "<ObservedSubsystemRow",
-      "<ObservedCard",
       "<ObservedBadge />",
-      // Was `<SettledDayPanel`, which drew this stack's hourly bars until the
-      // hero's copy of the same `<ObservedProfile>` absorbed it — the page had
-      // one chart twice. `<EpisodesPanel` is the other panel this stack shares
-      // with the forecast one, so the guard still proves the function renders
-      // the observed vocabulary rather than nothing.
-      "<EpisodesPanel",
+      /*
+        The list keeps shrinking as panels move into the hero, and what it is
+        for does not change: it proves this function renders the observed
+        vocabulary rather than nothing, so the `not.toContain` loop above
+        cannot pass against an empty component.
+
+        `<SettledDayPanel` went when the hero's `<ObservedProfile>` absorbed
+        the same chart. `<ObservedCard` and `<EpisodesPanel` went together:
+        the day's two figures now sit under the profile they are about, and
+        the episode list under `Planejado × Realizado` at the centre column's
+        full width. What is left is the map, the rows, the national panel and
+        the badge — four markers, all of them this stack's own.
+      */
+      "<ObservedNationalPanel",
     ]) {
       expect({ observedOnly, present: observedStack.includes(observedOnly) }).toEqual({
         observedOnly,

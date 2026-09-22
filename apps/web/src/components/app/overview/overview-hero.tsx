@@ -40,6 +40,7 @@ import { useCoverage } from "@/components/app/figures/use-coverage";
 import { useLadder } from "@/components/app/figures/use-ladder";
 import { RegionMap } from "@/components/app/map/region-map";
 import type { Scope } from "@/components/app/map/scope-bar";
+import { EpisodesPanel } from "@/components/app/overview/settled-panels";
 import type { AppParams } from "@/components/app/params";
 import { SelectedRegion } from "@/components/app/selected-region";
 import { gateProfileOf } from "@/components/app/use-app-params";
@@ -47,7 +48,11 @@ import { useGridContext } from "@/components/app/use-grid-context";
 import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-network";
 import { useRunLanes } from "@/components/app/use-run-lanes";
 import { FanChart } from "@/components/charts/fan-chart";
-import { ObservedProfile } from "@/components/charts/observed-profile";
+import {
+  ObservedCard,
+  ObservedEmptyCard,
+  ObservedProfile,
+} from "@/components/charts/observed-profile";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import {
@@ -297,6 +302,62 @@ export function OverviewHero({
     window and two honest numbers with no window on either read as a
     contradiction.
   */
+  /*
+    **The settled day's two figures, in the column the day already occupies.**
+
+    They were at the bottom of the observed stack, a page below the map, beside
+    the episode list. Both are about the *selected region's settled day* — the
+    same day `profile` draws hour by hour directly above them — so the column
+    that already holds the headline and the profile is where they belong, and a
+    reader comparing the total with the shape it came from no longer scrolls
+    between them.
+
+    Only where there is no forecast. With one on the screen the day's energy is
+    a `BandCard` in `ForecastPanels`, and two cards a few hundred pixels apart
+    saying "the day" in the forecast and the observed vocabulary is the
+    adjacency `lib/network.ts` refuses — see `honesty.md` on the two
+    vocabularies.
+
+    `peakHour === null` is the day that settled with no curtailment in it, which
+    is a different sentence from a zero and gets a different card.
+  */
+  const windowDay = fill(copy.app.observed.windowDay, {
+    date: f.date(observed.hoursDate),
+  });
+  const dayFigures =
+    forecast === null ? (
+      day.peakHour === null ? (
+        <>
+          <ObservedEmptyCard
+            label={fill(copy.app.observed.dayTotal, { subsystem: meta.onsDisplayName })}
+          />
+          <ObservedEmptyCard
+            label={fill(copy.app.observed.peakHour, { subsystem: meta.onsDisplayName })}
+          />
+        </>
+      ) : (
+        <>
+          <ObservedCard
+            label={fill(copy.app.observed.dayTotal, { subsystem: meta.onsDisplayName })}
+            value={day.totalMwh}
+            unit="MWh"
+            window={windowDay}
+            footnote={copy.app.observed.dayTotalNote}
+          />
+          <ObservedCard
+            label={fill(copy.app.observed.peakHour, { subsystem: meta.onsDisplayName })}
+            value={day.peakHour.constrainedOffMwh}
+            unit="MWh"
+            window={fill(copy.app.observed.peakHourWindow, {
+              hour: f.number(day.peakHour.hourLocal),
+              date: f.date(observed.hoursDate),
+            })}
+            footnote={copy.app.observed.peakHourNote}
+          />
+        </>
+      )
+    ) : null;
+
   const window24h = fill(copy.app.observed.window24h, {
     hour: f.dateTime(observed.now.latestSettledHour),
   });
@@ -471,6 +532,7 @@ export function OverviewHero({
           >
             {headline}
             {profile}
+            {dayFigures}
           </View>
         ) : null}
 
@@ -719,10 +781,28 @@ export function OverviewHero({
             regions, where it read as a fourth region.
           */}
           {planned}
+          {/*
+            **And the episodes under it, at the same width.**
+
+            The two panels are the same kind of claim at two spans: what ONS
+            planned against what it settled for this day, and the runs of hours
+            the last fortnight actually formed. Both are the centre column's
+            full width because both are tables a reader scans across, which is
+            the thing a half-width column takes away.
+          */}
+          <EpisodesPanel observed={observed} scope={scope} subsystem={params.subsystem} />
           {wide ? null : headline}
           {wide ? null : nationalPanel}
           {wide ? null : rail}
           {wide ? null : profile}
+          {/*
+            The day's two figures follow the profile on a phone exactly as they
+            follow it in the left column, because they are about the day that
+            chart draws. Leaving them out of this branch dropped them off the
+            screen entirely at 390px — `app-observed-overview.spec.ts` caught it
+            on the run, looking for "Energia cortada liquidada, dia inteiro".
+          */}
+          {wide ? null : dayFigures}
         </View>
 
         {wide ? (
