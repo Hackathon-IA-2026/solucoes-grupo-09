@@ -205,7 +205,10 @@ def _claim_failures(claim: str, accepted: list[dict], record: Record) -> list[Ga
     concluded = conclusion_hits(claim)
     if concluded:
         return [GateFailure("claim_draws_conclusion", ", ".join(concluded))]
-    others = agents_not_asked(claim, record.question)
+    # Only the disturbance report lists one outcome per agent; an operating
+    # instruction naming the agent that must act is the evidence itself.
+    from_report = any(citation.get("source") == "RAP" for citation in accepted)
+    others = agents_not_asked(claim, record.question) if from_report else []
     return [GateFailure("claim_about_another_agent", ", ".join(others))] if others else []
 
 
@@ -238,9 +241,9 @@ STEP_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?$")
 # words described a document ("define o fluxo ..., indicando o sentido
 # positivo") or repeated its own words, and none followed a number.
 CONCLUSION = re.compile(
-    r"\d(?:\s*(?:MWh|MWmed|MW|GWh|GW|Mvar|%))?\s*,?\s+"
-    r"((?:indicand|sugerind|implicand|caracterizand|evidenciand|demonstrand)o"
-    r"|o que (?:indica|sugere|implica|caracteriza|mostra|evidencia|demonstra|significa))\b",
+    r"(?<![\w.,])\d+(?:[.,]\d+)*(?:\s*(?:MWh|MWmed|MW|MVA|Mvar|GWh|GW|%))?\s*[,;]?\s+"
+    r"((?:indicand|sugerind|implicand|caracterizand|evidenciand|demonstrand|representand|sinalizand)o"
+    r"|o que (?:indica|sugere|implica|caracteriza|mostra|evidencia|demonstra|significa|representa))\b",
     re.IGNORECASE,
 )
 
@@ -250,7 +253,9 @@ def conclusion_hits(text: str) -> list[str]:
 
 
 # "O agente LIGHT", "o agente CEMIG D": the name that follows, in capitals.
-AGENT = re.compile(r"\bagentes?\s+([A-ZÀ-Ý][\wÀ-ÿ&./-]*(?:\s+[A-ZÀ-Ý][\wÀ-ÿ&./-]*)*)")
+# A dot only inside a name ("S.A."), so a sentence's full stop ends it.
+NAME_WORD = r"[A-ZÀ-Ý][\wÀ-ÿ&/-]*(?:\.[\wÀ-ÿ]+)*"
+AGENT = re.compile(rf"\bagentes?\s+({NAME_WORD}(?:\s+{NAME_WORD})*)")
 ASKS_ABOUT_AGENTS = re.compile(r"\bagentes?\b", re.IGNORECASE)
 
 
@@ -261,12 +266,17 @@ def agents_not_asked(claim: str, question: str) -> list[str]:
     each agent, and asked when the ONS authorised the total restoration the
     answer gave LIGHT's, CEMIG D's or CPFL's, literal and accepted by the second
     reader. A question that speaks of the agents at all may be answered with any
-    of them; one that names none of them is not about any one of them.
+    of them; one that names none of them is not about any one of them. A name
+    counts as asked when any word of it is ("Cemig" asks for CEMIG D).
     """
     if not question or ASKS_ABOUT_AGENTS.search(question) and not AGENT.search(question):
         return []
-    asked = _plain(question)
-    return [name for name in AGENT.findall(claim) if _plain(name) not in asked]
+    asked = set(_plain(question).split())
+    return [
+        name
+        for name in AGENT.findall(claim)
+        if not any(word in asked for word in _plain(name).split() if len(word) >= 3)
+    ]
 
 
 def causal_hits(text: str) -> list[str]:

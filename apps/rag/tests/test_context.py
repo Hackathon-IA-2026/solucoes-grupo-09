@@ -416,3 +416,50 @@ def test_a_claim_about_an_agent_answers_a_question_about_that_agent():
         "Qual o prazo para os agentes implementarem as providências do RAP de 15/08/2023?",
     ):
         assert check_claim(item, by_chunk, Record(question=question))[0] is not None, question
+
+
+def test_the_new_locks_read_numbers_names_and_sources_as_they_are():
+    """Review of the two locks, each case run against their first version: a
+    digit inside a line's name or a time of day is not a figure being read, a
+    sentence's full stop ends an agent's name, part of a name asks for it, and
+    an operating instruction naming the agent that must act is not the report's
+    list of agents."""
+    from wattsteer_rag.gate import Record, agents_not_asked, check_claim, conclusion_hits
+
+    assert (
+        conclusion_hits("A IO define o fluxo na LT Bacabeira – Parnaíba III C2, indicando o sentido.") == []
+    )
+    assert conclusion_hits("A recomposição terminou às 09h44, indicando o fim do evento.") == []
+    assert conclusion_hits("Foram 34,5%, o que representa um terço da carga.") == ["o que representa"]
+
+    assert agents_not_asked("pelo agente LIGHT. O ONS autorizou", "Quando o agente LIGHT concluiu?") == []
+    assert agents_not_asked("O agente CEMIG D concluiu às 09h30.", "Quando a Cemig concluiu?") == []
+
+    order = "Cabe ao agente CHESF reduzir a geração da UFV Marangatu em 100 MW."
+    instruction = Hit(
+        "c1",
+        "d1",
+        order,
+        {"page": 6},
+        None,
+        "INSTRUCAO_OPERACAO",
+        "IO",
+        "u",
+        "IO-ON.NE.2OE",
+        None,
+        None,
+        "x",
+        1.0,
+    )
+    item = {"claim": order, "citations": [{"chunk_id": "c1", "quote": order}]}
+    asks = Record(question="Na IO-ON.NE.2OE, o que deve ser feito com a UFV Marangatu?")
+    assert check_claim(item, {"c1": instruction}, asks)[0] is not None
+
+
+def test_only_a_deadline_line_is_not_a_column():
+    """An operating instruction's pair of labelled limits is a row, and must
+    keep sending its page to the vision model."""
+    from wattsteer_rag.parse import FIELD_PAIR
+
+    assert FIELD_PAIR.match("           Prazo: 30/03/2024                            Gestor: EGE")
+    assert not FIELD_PAIR.match("   Fluxo: 1.200 MW          Limite: 1.500 MW")

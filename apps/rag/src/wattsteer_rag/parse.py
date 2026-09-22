@@ -23,10 +23,11 @@ from .gateway.router import Gateway, QuotaExhausted
 RASTER_DPI = 110  # keeps a base64 page under the 180 kB the API accepts
 TEXT_LAYER_MIN_CHARS = 350  # below this a page is a scan with a header on top
 COLUMN_GAP = re.compile(r"\S {3,}\S")
-# Two labelled fields on one line, "Prazo: 30/03/2024      Gestor: EGE", which is
-# how a disturbance report closes each action. The gap between them is layout,
-# not a column: see `looks_tabular`.
-FIELD_PAIR = re.compile(r"^\s*[A-ZÀ-Ý]\w+:\s+\S.*\S\s{3,}[A-ZÀ-Ý]\w+:\s+\S")
+# "Prazo: 30/03/2024      Gestor: EGE", which is how a disturbance report closes
+# each action. Named, not any two labelled fields: an operating instruction's
+# "Fluxo: ...   Limite: ..." is a row, and must keep going to the vision model.
+# The gap in a deadline line is layout, not a column: see `looks_tabular`.
+FIELD_PAIR = re.compile(r"^\s*Prazo:\s+\S.*\S\s{3,}Gestor:\s+\S")
 TEXT_LAYER_PARSER = "local:pdftotext"
 
 
