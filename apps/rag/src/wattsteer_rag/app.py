@@ -321,10 +321,29 @@ def _parse_instant(value: str | None) -> datetime | None:
 
 
 def main() -> None:
+    """Serve, with the logs on the stream their severity claims.
+
+    Uvicorn's default config sends `uvicorn` and `uvicorn.error` to **stderr**,
+    and every log collector that infers severity from the stream then files
+    "Application startup complete" and "Uvicorn running on…" as errors. On
+    Railway that is four red lines on every healthy boot, which is worse than
+    noise: it trains whoever reads the logs to skip the colour, and the next
+    real error goes past with it.
+
+    So the handler is moved to stdout rather than the messages being silenced.
+    `uvicorn.access` already writes there and keeps its own config; only the
+    default stream changes, and the copy is deep so this cannot mutate
+    uvicorn's module-level dictionary for anything else in the process.
+    """
+    import copy
+
     import uvicorn
+    from uvicorn.config import LOGGING_CONFIG
 
     conf = settings()
-    uvicorn.run(app, host=conf.host, port=conf.port)
+    log_config = copy.deepcopy(LOGGING_CONFIG)
+    log_config["handlers"]["default"]["stream"] = "ext://sys.stdout"
+    uvicorn.run(app, host=conf.host, port=conf.port, log_config=log_config)
 
 
 if __name__ == "__main__":  # `python -m wattsteer_rag.app`

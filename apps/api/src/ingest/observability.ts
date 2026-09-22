@@ -33,7 +33,29 @@ type FreshnessBasis =
    * future by construction, and for the registry, whose valid time is a
    * commissioning date rather than a publication clock.
    */
-  | "ingested_at";
+  | "ingested_at"
+  /**
+   * The last time the source was **read successfully**, from `ingestion_run`.
+   *
+   * For a source with no period whose content is usually identical. ONS
+   * rewrites `capacidade-geracao` and `usina_conjunto` daily and ANEEL rewrites
+   * the SIGA extract daily, but the fleet itself changes rarely — and
+   * `versioned-write.ts` writes nothing for a key whose digest is unchanged,
+   * which is right: a bitemporal record must not store a second vintage of
+   * identical values. So `max(ingested_at)` on those tables is *when the fleet
+   * last changed*, not *when we last looked*, and judging freshness by it makes
+   * a healthy source read as stale forever. Measured on 2026-09-22:
+   * `/ingest/health` answered 503 with `lagHours: 139.8` for `plant_registry`
+   * while the job had run 27 minutes earlier, reported `ok`, and both upstream
+   * objects had been rewritten that afternoon.
+   *
+   * It answers a different question from the other two, and the row keeps all
+   * three: `latestValidTime` and `latestIngestedAt` stay on it, so "has the
+   * content moved" is still there to be asked. What this basis says is only
+   * that the fetch is working — and `republications30d` beside it is what would
+   * show an upstream that went quiet while we went on reading the same bytes.
+   */
+  | "last_read";
 
 interface SourceHealthSpec {
   source: IngestionSource;
@@ -166,7 +188,9 @@ const SOURCES: SourceHealthSpec[] = [
     source: "plant_registry",
     table: "generating_unit",
     validTimeColumn: "commissioned_on",
-    basis: "ingested_at",
+    // See `last_read`: this table's `ingested_at` moves when the *fleet*
+    // changes, and the fleet is stable for weeks at a time.
+    basis: "last_read",
     toleranceHours: 48,
   },
   {
@@ -175,9 +199,13 @@ const SOURCES: SourceHealthSpec[] = [
     // `observed_on` is the snapshot a *belief began* in and deliberately does
     // not move when a later extract restates the same location, so it is the
     // wrong clock to judge freshness by — a fleet whose coordinates are stable
-    // would read as years stale. The ingest time is the honest one.
+    // would read as years stale.
+    //
+    // `ingested_at` was the answer to that and has the same defect one step
+    // along: an unchanged key writes no row, so it is also a clock that stops
+    // when the fleet does. The honest one is when the read last succeeded.
     validTimeColumn: "observed_on",
-    basis: "ingested_at",
+    basis: "last_read",
     toleranceHours: 48,
   },
   {
@@ -303,6 +331,26 @@ export async function readSourceFreshness(
   options: { now?: Date } = {},
 ): Promise<SourceFreshness[]> {
   const now = options.now ?? new Date();
+  /*
+    The last successful read per source, for the `last_read` basis — one query
+    for the whole table rather than one per source, and only when some spec
+    asks for it, so a deployment whose specs are all content-based pays nothing.
+  */
+  const lastRead = new Map<string, Date | null>();
+  if (SOURCES.some((spec) => spec.basis === "last_read")) {
+    const reads = await db.execute<{
+      source: string;
+      last_success_at: string | null;
+    }>(sql`
+      select source, max(started_at) as last_success_at
+      from ingestion_run
+      where status = 'ok'
+      group by source
+    `);
+    for (const row of reads) {
+      lastRead.set(row.source, toDate(row.last_success_at));
+    }
+  }
   const freshness: SourceFreshness[] = [];
   for (const spec of SOURCES) {
     const [facts] = await db.execute<{
@@ -320,7 +368,12 @@ export async function readSourceFreshness(
 
     const latestValidTime = toDate(facts?.latest_valid);
     const latestIngestedAt = toDate(facts?.latest_ingested);
-    const basis = spec.basis === "valid_time" ? latestValidTime : latestIngestedAt;
+    const basis =
+      spec.basis === "valid_time"
+        ? latestValidTime
+        : spec.basis === "last_read"
+          ? (lastRead.get(spec.source) ?? null)
+          : latestIngestedAt;
     const lagHours =
       basis === null
         ? null

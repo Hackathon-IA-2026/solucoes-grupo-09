@@ -6,7 +6,11 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { createIngestHealthRoute } from "../src/api/ingest-health.js";
 import { createDatabase } from "../src/database/connection.js";
-import { onsResourceVersion, payloadCustody } from "../src/database/schema.js";
+import {
+  ingestionRun,
+  onsResourceVersion,
+  payloadCustody,
+} from "../src/database/schema.js";
 import {
   createDirectoryArchive,
   locationsOf,
@@ -123,8 +127,33 @@ suite("source coverage · SIGA and weather are watched (real Postgres)", () => {
     });
   };
 
-  const ingestSiga = async (ingestedAt: Date) =>
-    writePlantLocations(db, {
+  /**
+   * A successful SIGA read, which is a snapshot **and** a run row.
+   *
+   * The run is not decoration. SIGA's freshness is judged by
+   * `basis: "last_read"` — the last `ingestion_run` that succeeded — because
+   * `versioned-write.ts` writes nothing for a key whose digest is unchanged,
+   * so `max(ingested_at)` on the snapshot is when the *fleet* last moved and
+   * not when ANEEL was last read. A fixture that wrote rows without a run was
+   * modelling a state the ingestor cannot produce.
+   */
+  const recordSigaRun = async (startedAt: Date, rowsInserted: number) => {
+    await db.insert(ingestionRun).values({
+      source: "siga",
+      tier: "live",
+      status: "ok",
+      resourcesProbed: 1,
+      resourcesDownloaded: rowsInserted > 0 ? 1 : 0,
+      rowsParsed: 1,
+      rowsInserted,
+      rowsUnchanged: rowsInserted > 0 ? 0 : 1,
+      startedAt,
+      finishedAt: startedAt,
+    });
+  };
+
+  const ingestSiga = async (ingestedAt: Date) => {
+    await writePlantLocations(db, {
       locations: [sigaLocation(PLANT)],
       observedOn: new Date("2026-08-28T00:00:00.000Z"),
       publishedAt: ingestedAt,
@@ -132,10 +161,13 @@ suite("source coverage · SIGA and weather are watched (real Postgres)", () => {
       sourceVersionId,
       ingestedAt,
     });
+    await recordSigaRun(ingestedAt, 1);
+  };
 
   beforeAll(async () => {
     await clearSiga();
     await db.execute(sql`truncate table siga_snapshot cascade`);
+    await db.execute(sql`delete from ingestion_run where source = 'siga'`);
     await db.execute(sql`truncate table plant cascade`);
     await clearWeather();
     const [version] = await db
@@ -210,9 +242,44 @@ suite("source coverage · SIGA and weather are watched (real Postgres)", () => {
     expect(stale).not.toContain("siga");
   });
 
+  it("stays green when the read succeeds and the fleet has not moved", async () => {
+    /*
+      **The defect this basis exists for, as a test.**
+
+      ONS rewrites `capacidade-geracao` and ANEEL rewrites the SIGA extract
+      daily; the fleets in them change rarely. `versioned-write.ts` writes no
+      row for a key whose digest is unchanged — right, because a bitemporal
+      record must not carry a second vintage of identical values — so
+      `max(ingested_at)` on the snapshot stops moving while the ingestion is
+      perfectly healthy.
+
+      Measured in production on 2026-09-22 before this changed:
+      `/ingest/health` answered 503 with `lagHours: 139.8` for
+      `plant_registry`, `lastRunStatus: "ok"`, `failedRuns24h: 0`, and both
+      upstream objects rewritten that same afternoon. Five days of a red
+      monitor for a source that was working.
+
+      So: one snapshot six days old, and a read that succeeded a minute ago
+      finding nothing new. Not stale.
+    */
+    const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
+    await clearSiga();
+    await db.execute(sql`delete from ingestion_run where source = 'siga'`);
+    await ingestSiga(sixDaysAgo);
+    await recordSigaRun(new Date(Date.now() - 60_000), 0);
+    await ingestWeather(new Date());
+
+    const { stale } = await health();
+    expect(stale).not.toContain("siga");
+  });
+
   it("turns red again when the SIGA snapshot stops arriving", async () => {
     await ingestWeather(new Date());
     await clearSiga();
+    // The reads have to stop too, now that they are the clock. Clearing the
+    // rows alone models ANEEL restating nothing, which is the *healthy* case
+    // the test below this one is about.
+    await db.execute(sql`delete from ingestion_run where source = 'siga'`);
     const { status, stale } = await health();
     expect(status).toBe(503);
     expect(stale).toContain("siga");
