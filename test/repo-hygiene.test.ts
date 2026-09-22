@@ -198,3 +198,47 @@ describe("repo hygiene", () => {
     }
   });
 });
+
+describe("a count an operator reads is derived, not typed", () => {
+  /**
+   * **The class of defect, not one instance of it.**
+   *
+   * `worker.ts`'s boot banner said `ONS ingestion (7 sources)` against a
+   * registry of seventeen, and the docstring over that registry said thirteen.
+   * Three places carrying one number, two of them wrong, for months — and
+   * nothing could have caught it: a literal inside a `console.log` is rendered
+   * by no component, returned by no route and asserted by no test. The only
+   * reader is an operator checking what the process came up with, which is
+   * exactly the reader a stale number misleads.
+   *
+   * So the rule is the shape rather than the value: the banner may not *say* a
+   * count. `ONS_SOURCES` and `TRACKED_SOURCES` are `SOURCES.length`, and a
+   * source added to that table moves the line with it.
+   *
+   * Non-vacuity: the file is read and asserted non-empty first, and putting
+   * `(7 sources)` back fails this.
+   */
+  const worker = readFileSync(join(ROOT, "apps/api/src/worker.ts"), "utf8");
+
+  it("the worker's boot banner counts sources from the registry", () => {
+    expect(worker).toContain("👷 WattSteer worker started");
+    // A digit immediately before the word, in the banner's own vocabulary.
+    const typed = worker.match(/\(\s*\d+\s+(sources|handlers|ingestors)\b/g) ?? [];
+    expect(typed).toEqual([]);
+    expect(worker).toContain("${ONS_SOURCES} sources");
+  });
+
+  it("the registry is where the number lives, and it is not in its own prose", () => {
+    const observability = readFileSync(
+      join(ROOT, "apps/api/src/ingest/observability.ts"),
+      "utf8",
+    );
+    expect(observability).toContain("export const TRACKED_SOURCES = SOURCES.length;");
+    // The docstring said "the thirteen sources" over a table of seventeen.
+    const spelled =
+      observability.match(
+        /\b(seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen)\s+sources\b/gi,
+      ) ?? [];
+    expect(spelled).toEqual([]);
+  });
+});

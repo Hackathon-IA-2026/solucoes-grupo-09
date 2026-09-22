@@ -1,7 +1,12 @@
 import { config } from "./config.js";
 import { database } from "./database/connection.js";
 import { loggableError } from "./errors.js";
-import { createPayloadArchive, REFRESH_CADENCE } from "./ingest/index.js";
+import {
+  createPayloadArchive,
+  ONS_SOURCES,
+  REFRESH_CADENCE,
+  TRACKED_SOURCES,
+} from "./ingest/index.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 import { FORECAST_PUBLICATIONS, PUBLICATION_TIME_ZONE } from "./jobs/publication.js";
 import { RAG_EVIDENCE_SCHEDULE } from "./jobs/rag-evidence.js";
@@ -252,9 +257,13 @@ if (config.refreshSchedules) {
 console.log(
   `👷 WattSteer worker started — concurrency ${config.jobConcurrency}, queue on Redis`,
 );
+// Counted from the registry, never written here. This line said "7 sources"
+// against a table of seventeen, and it could: a literal in a `console.log` is
+// rendered by nothing, returned by no route, and therefore checked by no test.
 console.log(
-  "   handlers: ONS ingestion (7 sources), refresh sweeps, retention, centroid " +
-    "drift, forecast publication, diagnosis publication",
+  `   handlers: ONS ingestion (${ONS_SOURCES} sources, ${TRACKED_SOURCES} tracked ` +
+    "with the weather feed), refresh sweeps, retention, centroid drift, " +
+    "forecast publication, diagnosis publication",
 );
 if (archive) {
   console.log(`   custody: raw payloads retained in the ${archive.kind} archive`);

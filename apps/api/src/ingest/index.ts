@@ -207,12 +207,14 @@ export {
 } from "./normalise.js";
 export {
   type IngestionHealth,
+  ONS_SOURCES,
   type RegistryJoinRates,
   type RepublicationHealth,
   readIngestionHealth,
   readSourceFreshness,
   type SourceFreshness,
   type SourceHealth,
+  TRACKED_SOURCES,
 } from "./observability.js";
 export {
   AREA_CODE_FOR_SUBSYSTEM,

@@ -56,7 +56,16 @@ interface SourceHealthSpec {
   toleranceHours: number;
 }
 
-/** The thirteen sources, and what "fresh" means for each. */
+/**
+ * Every ingested source, and what "fresh" means for each.
+ *
+ * The count is not in this sentence on purpose. It used to be — a spelled-out
+ * number four short of the table it sat over — while the worker's boot banner
+ * claimed a third figure. Three places carrying one number, two of them wrong,
+ * and nothing that could notice. `TRACKED_SOURCES` below is the count,
+ * derived; prose that wants to state it reads it from there, and
+ * `test/repo-hygiene.test.ts` holds both halves of that rule.
+ */
 const SOURCES: SourceHealthSpec[] = [
   {
     source: "energy_balance",
@@ -262,10 +271,29 @@ function toDate(value: unknown): Date | null {
 }
 
 /**
+ * How many sources are tracked, and the one place that knows.
+ *
+ * Exported for the worker's boot banner, which an operator reads to confirm
+ * what the process came up with. A literal there drifted by ten without
+ * anything failing: nothing renders it, no route returns it, and a number in a
+ * `console.log` is invisible to every guard in this repository.
+ */
+export const TRACKED_SOURCES = SOURCES.length;
+
+/**
+ * The sources ONS publishes, which is all of them but the weather feed.
+ *
+ * Named separately because the banner says "ONS ingestion" and the weather
+ * source is not ONS's — a count that swept it in would be a small false claim
+ * in the one line an operator reads to check the deployment.
+ */
+export const ONS_SOURCES = SOURCES.filter((spec) => spec.source !== "weather").length;
+
+/**
  * Per-source freshness, and nothing else.
  *
  * The read behind `/v1/meta`'s `data.freshness` block, and the first half of
- * `GET /ingest/health`'s. One function rather than two because the thirteen
+ * `GET /ingest/health`'s. One function rather than two because the
  * sources and what "fresh" means for each are a single table — `SOURCES` above
  * — and a second copy of it in the meta route is exactly how the two surfaces
  * would come to disagree about whether the weather feed is late.
