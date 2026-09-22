@@ -561,18 +561,26 @@ export function OverviewHero({
                 events". `box-none` on the slot means only the pills themselves
                 take a press, and two pills are a fraction of what a card was.
 
-                **Only where a forecast exists.** With nothing promoted the
-                card is not redundant at all: it carries the settled figure,
-                the window it covers, and the sentence saying the *forecast* is
-                what is missing — and none of those is anywhere else in the
-                hero. Swapping it for two pills there dropped "Nenhum número de
-                previsão" off the screen, which `app-overview-selection.spec.ts`
-                caught within the run. The redundancy this replaces is the
-                forecast state's: there the expectation and its P10–P90 are
-                already on two of the five question cards above.
+                **In both states, and the first cut gated this on a forecast
+                existing.** That gate was written after
+                `app-overview-selection.spec.ts` caught the observed state
+                losing "Nenhum número de previsão", and the conclusion drawn
+                from it was wrong: the card's three claims are all on the
+                screen already. The rail beside the map prints each region's
+                settled figure with its `eólica X · solar Y` split and heads
+                the four with "Últimas 24 h liquidadas, por subsistema" — that
+                is the figure, the split and the window. And the absence is
+                `ForecastAbsent`'s, at page level, under "Sem previsão para
+                este dia", where it is one claim about the day rather than one
+                per selected region.
+
+                What the card had that nothing else does is the two controls.
+                In the forecast state the expectation and its P10–P90 are on
+                two of the five question cards above; in the observed state
+                there is no expectation to state at all.
               */
               controls={
-                wide && forecast !== null ? (
+                wide ? (
                   <View
                     testID="selected-region"
                     accessibilityLiveRegion="polite"
@@ -672,24 +680,18 @@ export function OverviewHero({
             />
           </Panel>
           {/*
-            **The strip stays wherever the corner cannot take its place.**
+            **The strip is the narrow layout's, and nothing else's.**
 
-            Two cases, and neither is a fallback. On a phone, two pills laid
-            over a 320px map would cover most of a region and eat the press
-            that selects it — the failure the fan chart's comment above records
-            from this very corner. And with nothing promoted the card is not
-            redundant: it states the settled figure, its window, and the
-            sentence naming the forecast as the thing that is absent, none of
-            which is elsewhere in the hero.
+            Two pills laid over a 320px map would cover most of a region and
+            eat the press that selects it — the failure the fan chart's comment
+            above records from this very corner — so the phone keeps the card,
+            where there is room under the map for it.
 
-            So the corner takes the controls only on a wide screen with a
-            forecast on it, which is the one state where everything else the
-            card said is already above it. `e2e/app-overview-selection.spec.ts`
-            asserts exactly one `selected-region` in the DOM in either state,
-            which is what stops these two becoming both — and it is what caught
-            the first cut dropping the absence sentence.
+            It is the only case. `e2e/app-overview-selection.spec.ts` asserts
+            exactly one `selected-region` in the DOM in either state, which is
+            what stops these two becoming both.
           */}
-          {wide && forecast !== null ? null : (
+          {wide ? null : (
             <SelectedRegion
               subsystem={params.subsystem}
               row={selectedRow}

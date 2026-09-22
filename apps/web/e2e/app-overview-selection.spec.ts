@@ -214,9 +214,22 @@ test.describe("with nothing promoted, a reader can still say which region", () =
     // And the screen still names the pick, and still says which figures are
     // missing rather than quietly substituting one kind of number for another.
     expect(await textOf(page, "selected-region-name")).toContain("NORDESTE");
-    expect(await textOf(page, "selected-region")).toMatch(
-      /Nenhum número de previsão|No forecast figures/,
+    /*
+      **The absence is read off the page, not out of the strip.**
+
+      It was `textOf(page, "selected-region")`, which passed only while the
+      selection strip was a card under the map carrying `selectedAbsent`. On a
+      wide screen the strip is now the two controls in the map's corner, and
+      the sentence lives where the claim belongs: `ForecastAbsent`, at page
+      level, as one statement about the day rather than one per region. Reading
+      it from the body is the property this assertion was always about — that a
+      reader is told the forecast is what is missing — and it survives the
+      sentence moving again.
+    */
+    await expect(page.locator("body")).toContainText(
+      /Sem previsão para este dia|No forecast for this day/,
     );
+    await expect(page.locator("body")).toContainText(/saída de modelo|model output/);
   });
 
   test("the settled rows take a selection, which they used only to display", async ({
