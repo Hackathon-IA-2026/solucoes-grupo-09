@@ -84,8 +84,6 @@ test.describe("with nothing promoted, the screen still shows the grid", () => {
       "Os quatro subsistemas",
       // The 24-hour profile, as the settled day.
       "o último dia liquidado",
-      // Wind and solar.
-      "Eólica e solar",
       // The two day figures.
       "Energia cortada liquidada, dia inteiro",
       "Maior hora liquidada",
@@ -94,6 +92,13 @@ test.describe("with nothing promoted, the screen still shows the grid", () => {
     ]) {
       expect(text, `"${heading}" is on the screen`).toContain(heading);
     }
+    /*
+      Wind and solar used to be the sixth heading in that list, on a card of
+      their own. The card is gone and the division is a line on each of the
+      rail's four rows instead, so the assertion moved with it: what must be on
+      screen is the split itself, not a heading over one region's copy of it.
+    */
+    expect(text).toMatch(/eólica\s+\S+\s+·\s+solar\s+\S+/);
   });
 
   test("no panel claims an interval, and the screen says why", async ({ page }) => {

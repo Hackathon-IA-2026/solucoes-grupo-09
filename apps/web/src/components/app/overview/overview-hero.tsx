@@ -46,7 +46,6 @@ import { QuestionCard } from "@/components/app/figures/question-cards";
 import { BandTriple, PanelTitle, RailFact } from "@/components/app/figures/rail-panels";
 import { useCoverage } from "@/components/app/figures/use-coverage";
 import { useLadder } from "@/components/app/figures/use-ladder";
-import { ObservedBadge } from "@/components/app/honesty";
 import { RegionMap } from "@/components/app/map/region-map";
 import type { Scope } from "@/components/app/map/scope-bar";
 import type { AppParams } from "@/components/app/params";
@@ -59,7 +58,6 @@ import { FanChart } from "@/components/charts/fan-chart";
 import { ObservedProfile } from "@/components/charts/observed-profile";
 import { RiskChip } from "@/components/charts/risk-class";
 import { riskColor } from "@/components/charts/risk-color";
-import { SplitTracks } from "@/components/charts/technology-split";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { criticalWindow } from "@/lib/critical-window";
@@ -223,9 +221,7 @@ export function OverviewHero({
       scope={scope}
       selectedRow={selectedRow}
       outlook={forecast?.outlook ?? null}
-      observed={observed}
       observedTotalMwh={day.totalMwh}
-      technology={params.technology}
       coverage={coverage}
       ladder={ladder}
       text={text}
@@ -264,10 +260,13 @@ export function OverviewHero({
       <PanelHeader
         icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
         title={text.profileLabel}
+        // No badge. The subtitle already says *observado* beside the date, and
+        // a card that names its own claim twice in one header stops reading as
+        // a claim and starts reading as decoration — the same argument that
+        // took the badge out of the settled split's total.
         subtitle={fill(copy.app.overview.settledDaySubtitle, {
           date: f.date(observed.hoursDate),
         })}
-        right={<ObservedBadge />}
       />
       <ObservedProfile hours={observed.hours} emptyLabel={copy.app.observed.emptyDay} />
       <Text style={{ ...type.caption, color: colors.inkFaint }}>
@@ -296,10 +295,10 @@ export function OverviewHero({
   );
 
   /*
-    The split, which is the last thing the product knows about a selected
-    region that the console was not showing. `ObservedSplitPanel` is the
-    Overview's own component — two settlements, never a division of one
-    modelled expectation — and it fills the column the profile left half empty.
+    The window the observed rows cover, named. Every panel that draws
+    `last_24h_*` states it, because the settled day beside it is a different
+    window and two honest numbers with no window on either read as a
+    contradiction.
   */
   const window24h = fill(copy.app.observed.window24h, {
     hour: f.dateTime(observed.now.latestSettledHour),
@@ -343,10 +342,20 @@ export function OverviewHero({
       hovered={hovered}
       onSelect={(code) => params.setParams({ subsystem: code })}
       onHoverChange={setHovered}
+      emphasis={params.technology}
       text={{
         regionsLabel: text.regionsLabel,
         windowLabel: forecast === null ? text.windowObserved : text.windowForecast,
         pickHint: text.pickHint,
+        /*
+          The caveat the split card carried, following the figures into the
+          rail. It is not one sentence in two states: a forecast's two fleets
+          are a division of one modelled expectation and have no distribution
+          of their own, while a settled day's are two separate ONS
+          settlements whose sum is the total. The second claim is the stronger
+          one and the screen would be throwing it away by picking either.
+        */
+        splitNote: forecast === null ? copy.app.observed.splitNote : copy.app.split.note,
       }}
     />
   );

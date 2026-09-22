@@ -92,8 +92,14 @@ test.describe("a click on the map selects, and does not navigate", () => {
       "Pico às 2h", which `indexOf` reaches first. The heading is what this
       assertion is about, so it is named in full.
     */
+    /*
+      `"Eólica e solar"` was the first of these and is no longer a panel: the
+      fleet division is a line on every row of the rail beside the map, which is
+      named by the selection rather than by a heading of its own. The remaining
+      two are still cards about the selected region, which is what this test is
+      about.
+    */
     for (const heading of [
-      "Eólica e solar",
       "Energia cortada, dia inteiro",
       "Pico de potência horária",
     ]) {

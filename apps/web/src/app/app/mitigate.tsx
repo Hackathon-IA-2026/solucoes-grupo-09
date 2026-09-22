@@ -44,11 +44,7 @@ import { Panel, Pill, radius, Sheet, space, usePalette } from "@wattsteer/ui";
 import Head from "expo-router/head";
 import { type ReactNode, useState } from "react";
 import { Text, View } from "react-native";
-import {
-  AppShell,
-  MiniPill,
-  ScreenTitle,
-} from "@/components/app/app-shell";
+import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { Stepper } from "@/components/app/asset-editor";
 import { ConformityBadge, HonestyNote, SolveStamp } from "@/components/app/honesty";
 import {

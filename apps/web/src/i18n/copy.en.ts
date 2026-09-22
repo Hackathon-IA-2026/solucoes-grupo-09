@@ -1195,9 +1195,6 @@ export const en = {
       peakHourWindow: "{hour}h BRT on {date}",
       peakHourNote:
         "An energy in MWh, not a power in MW: ONS publishes energy per hour, and the peak-power band a forecast states is a model's claim about the shape inside that hour. There is no such model today, so no such figure is shown.",
-      splitTitle: "Wind and solar",
-      splitSubtitle: "{subsystem} · settled, two measurements",
-      splitTotal: "Settled curtailed energy, whole day",
       splitNote:
         "ONS settles the two fleets separately — the published grain is subsystem, technology and hour — so these are two measurements and the total is their sum. The forecast version of this panel is the opposite: one modelled expectation, divided in two.",
       emptyDay:
@@ -1253,7 +1250,6 @@ export const en = {
         totalNoteObserved: "The settled day, summed over the published hours.",
         regionsLabel: "The four subsystems",
         profileLabel: "Hour by hour",
-        splitLabel: "Wind and solar",
         peakLabel: "Largest hour",
         refusedTitle: "The grid did not answer",
         pickHint: "Tap a region on the map to re-point everything around it.",
@@ -1262,6 +1258,8 @@ export const en = {
         nationalLabel: "Brazil",
         windowForecast: "Expected tomorrow, per subsystem.",
         windowObserved: "The last settled 24 h, per subsystem.",
+        /** See the pt-BR entry: compact on purpose, and on all four rows. */
+        railSplit: "wind {wind} · solar {solar}",
       },
       eyebrow: "Sistema Interligado Nacional · D−1",
       q1: "Will it curtail?",
@@ -1468,12 +1466,6 @@ export const en = {
 
     split: {
       title: "Wind and solar",
-      /** Named. A panel that does not say whose numbers it holds cannot show
-          a reader that the numbers changed under it. */
-      subtitle: "{subsystem} · two single numbers, no band",
-      expected: "Expected curtailed energy, whole day",
-      expectedNote:
-        "The expected value, published beside the band rather than inside it. It is not the middle of the interval: with mass sitting on “no curtailment at all”, the expectation runs above the median, and on a quiet day the median is flatly zero while the expectation is not.",
       note: "The forecaster has one head per subsystem, so wind and solar are a division of that expectation and nothing more. There is no wind band and no solar band to draw, which is why picking a technology above emphasises one of these two numbers instead of filtering the forecast.",
       // "shown" made the badge read "Wind · shown", which says the other number
       // is not — a filter, which is precisely the misreading `note` above

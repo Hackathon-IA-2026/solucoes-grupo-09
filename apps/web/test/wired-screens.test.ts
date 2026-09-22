@@ -467,7 +467,6 @@ describe("a refused forecast renders no forecast", () => {
       "<BandStrip",
       "<SubsystemRow",
       "<RiskChip",
-      "<TechnologySplitPanel",
       "<ForecastStamp",
       "riskColor",
       "RiskCaveat",
@@ -487,7 +486,6 @@ describe("a refused forecast renders no forecast", () => {
       '<SubsystemMap paint={{ kind: "observed", rows }}',
       "<ObservedSubsystemRow",
       "<ObservedCard",
-      "<ObservedSplitPanel",
       "<ObservedBadge />",
       // Was `<SettledDayPanel`, which drew this stack's hourly bars until the
       // hero's copy of the same `<ObservedProfile>` absorbed it — the page had

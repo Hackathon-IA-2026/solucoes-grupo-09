@@ -695,7 +695,6 @@ describe("the region responds to a pointer, and so does its row", () => {
     // And every panel that the selection re-points names the subsystem, or the
     // change has nothing on screen to attribute it to.
     for (const named of [
-      "copy.app.split.subtitle",
       "copy.app.overview.dailyEnergy",
       "copy.app.overview.peakPower",
     ]) {

@@ -167,9 +167,10 @@ describe("no observed label claims a forecast", () => {
     "observed.dayTotal": dict.app.observed.dayTotal,
     "observed.peakHour": dict.app.observed.peakHour,
     "observed.peakHourWindow": dict.app.observed.peakHourWindow,
-    "observed.splitTitle": dict.app.observed.splitTitle,
-    "observed.splitSubtitle": dict.app.observed.splitSubtitle,
-    "observed.splitTotal": dict.app.observed.splitTotal,
+    // The settled fleet split is a line in the rail now, not a card of its
+    // own, and the rail draws it in both states — so the label has to stay
+    // clear of the forecast vocabulary for the same reason the card's did.
+    "grid.hero.railSplit": dict.app.grid.hero.railSplit,
     "observed.q1": dict.app.observed.q1,
     "observed.q1Yes": dict.app.observed.q1Yes,
     "observed.q1No": dict.app.observed.q1No,
@@ -222,8 +223,6 @@ describe("no observed label claims a forecast", () => {
         dict.app.observed.selectedFigure,
         dict.app.observed.dayTotal,
         dict.app.observed.peakHour,
-        dict.app.observed.splitSubtitle,
-        dict.app.observed.splitTotal,
         dict.app.observed.q1DetailNational,
         dict.app.observed.q1DetailRegion,
         dict.app.observed.q2DetailNational,
@@ -270,7 +269,6 @@ describe("the observed components cannot express a forecast", () => {
     [["components", "app", "subsystem-row.tsx"], "ObservedSubsystemRow"],
     [["components", "charts", "observed-profile.tsx"], "ObservedCard"],
     [["components", "charts", "observed-profile.tsx"], "ObservedEmptyCard"],
-    [["components", "charts", "technology-split.tsx"], "ObservedSplitPanel"],
   ];
 
   const FORECAST_TOKENS = [

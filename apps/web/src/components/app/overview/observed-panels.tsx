@@ -19,7 +19,6 @@ import {
   MapIcon,
   Panel,
   PanelHeader,
-  PieChartIcon,
   space,
   useContainerWidth,
   usePalette,
@@ -31,11 +30,9 @@ import { ObservedNationalPanel } from "@/components/app/overview/national-panel"
 import { EpisodesPanel } from "@/components/app/overview/settled-panels";
 import { SelectedRegion } from "@/components/app/selected-region";
 import { ObservedSubsystemRow } from "@/components/app/subsystem-row";
-import { useAppParams } from "@/components/app/use-app-params";
 import type { ObservedNetwork } from "@/components/app/use-network";
 import { ObservedCard, ObservedEmptyCard } from "@/components/charts/observed-profile";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
-import { ObservedSplitPanel } from "@/components/charts/technology-split";
 import { useVoiceHighlight } from "@/components/voice/use-voice-agent";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
@@ -98,7 +95,6 @@ export function ObservedPanels({
     so it has to say the previous subsystem's name. See `ObservedNetwork`.
   */
   const meta = subsystemMeta(observed.subsystem as SubsystemCode);
-  const params = useAppParams();
   const rows = observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER);
   const day = observedDay(observed.hours);
   const [overviewWidth, onOverviewLayout] = useContainerWidth();
@@ -236,25 +232,14 @@ export function ObservedPanels({
         </FadeIn>
       )}
 
-      <FadeIn delay={210}>
-        <Panel>
-          <PanelHeader
-            icon={<PieChartIcon size={18} color={colors.inkMuted} />}
-            title={copy.app.observed.splitTitle}
-            subtitle={fill(copy.app.observed.splitSubtitle, {
-              subsystem: meta.onsDisplayName,
-            })}
-            right={<ObservedBadge />}
-          />
-          <View style={{ marginTop: space.lg }}>
-            <ObservedSplitPanel
-              split={observed.daySplit}
-              emphasis={params.technology}
-              window={windowDay}
-            />
-          </View>
-        </Panel>
-      </FadeIn>
+      {/*
+        The settled fleet split is in the rail beside the map now, on all four
+        rows rather than on the selected one — see `forecast-panels.tsx` for the
+        argument and `region-rail.tsx` for the drawing. What this card said that
+        the rail must not lose is that these two numbers are *two measurements*
+        and not a division of one: that sentence is `observed.splitNote`, and it
+        is the note the rail prints under its rows in this state.
+      */}
 
       {/*
         The two day figures. Where the forecast stack draws two `BandCard`s,

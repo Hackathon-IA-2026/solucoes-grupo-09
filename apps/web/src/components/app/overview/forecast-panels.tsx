@@ -24,7 +24,6 @@ import {
   MapIcon,
   Panel,
   PanelHeader,
-  PieChartIcon,
   READOUT_WASH,
   space,
   useContainerWidth,
@@ -41,7 +40,6 @@ import { BandCard } from "@/components/charts/band-figure";
 import { FanChart } from "@/components/charts/fan-chart";
 import { RiskCaveat } from "@/components/charts/risk-class";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
-import { TechnologySplitPanel } from "@/components/charts/technology-split";
 import { useVoiceHighlight } from "@/components/voice/use-voice-agent";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
@@ -269,27 +267,20 @@ export function ForecastPanels({
         </FadeIn>
       )}
 
-      <FadeIn delay={210}>
-        <Panel>
-          <PanelHeader
-            icon={<PieChartIcon size={18} color={colors.inkMuted} />}
-            title={copy.app.split.title}
-            // Named. Every one of these four panels is about the selected
-            // subsystem and only the profile panel said so — which is exactly
-            // what let a selection change four panels invisibly.
-            subtitle={fill(copy.app.split.subtitle, {
-              subsystem: meta.onsDisplayName,
-            })}
-          />
-          <View style={{ marginTop: space.lg }}>
-            <TechnologySplitPanel
-              split={selected.split}
-              expectedMwh={selected.dayExpectedMwh}
-              emphasis={params.technology}
-            />
-          </View>
-        </Panel>
-      </FadeIn>
+      {/*
+        **The fleet split moved into the rail beside the map, on all four rows.**
+
+        This card drew one subsystem's two scalars, full width, under a heading
+        that repeated the day expectation already stated above it — while the
+        rail a few hundred pixels away drew the same four regions with no split
+        at all. A reader wanting "how much of NORDESTE is wind?" had to select
+        NORDESTE to find out, one region at a time.
+
+        The rail's bar is cut into the two fleets now and each row prints both
+        figures, so the division is on screen for all four at once; the caveat
+        this card carried travels with them, once, under the rows. See
+        `region-rail.tsx` for why it is one segmented bar and not two.
+      */}
 
       <FadeIn
         delay={210}

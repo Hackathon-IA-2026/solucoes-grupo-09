@@ -19,7 +19,9 @@ import type { Band } from "@wattsteer/core/api";
 import { radius, space, type, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import { BandStrip } from "@/components/charts/band-figure";
-import { useFormat } from "@/i18n";
+import { useCopy, useFormat } from "@/i18n";
+import { fill } from "@/i18n/format";
+import type { Technology, TechnologySplit } from "@/lib/fixtures";
 
 /**
  * One headline figure: a label, a number in the product's largest type, and a
@@ -92,6 +94,8 @@ export function RegionRow({
   onHoverChange,
   trailing,
   note,
+  split,
+  emphasis,
 }: {
   /** The short code — `N`, `NE`, `SE/CO`, `S` — as the map labels it. */
   code: string;
@@ -108,9 +112,15 @@ export function RegionRow({
   trailing?: React.ReactNode;
   /** Printed beside the figure, where the chip is too narrow to carry it. */
   note?: string;
+  /** The two fleets this row's figure divides into. */
+  split: TechnologySplit;
+  /** Which fleet the URL is asking about; the other is dimmed, never hidden. */
+  emphasis: Technology;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
   const f = useFormat();
+  const fleets = Math.max(split.windMwh + split.solarMwh, 1e-9);
   return (
     <View
       style={{
@@ -247,9 +257,30 @@ export function RegionRow({
         {trailing}
       </View>
 
+      {/*
+        **One bar, on one scale, divided into the two fleets.**
+
+        The bar's *length* is the row's share of the largest of the four and
+        stays exactly what it was — that shared scale is the rail's entire
+        argument, and it is why `N` at 2 000 MWh reads as a sliver beside
+        `NORDESTE` at 214 200. What is new is that the length is now cut into
+        wind and solar.
+
+        The alternative, and it was the first drawing: two bars per row, the way
+        the standalone split card drew them. Those two tracks are each 0–100% of
+        *that subsystem's own* total — 3% and 97% on SE/CO — so stacking them
+        under a bar that means share-of-the-largest puts two different scales in
+        one row, four rows down the rail. One of them would have been read as
+        the other. Segmenting keeps a single denominator and costs no height.
+
+        The colours are the ones the split card used, so a reader who saw it is
+        not relearning them, and the legend above the rows names both. The fleet
+        the URL did not ask about is dimmed rather than dropped: a split whose
+        other half you cannot see is a filter again.
+      */}
       <View
         style={{
-          height: 4,
+          height: 6,
           borderRadius: radius.pill,
           backgroundColor: colors.surfaceSunken,
           overflow: "hidden",
@@ -260,10 +291,50 @@ export function RegionRow({
             width: `${Math.max(2, Math.min(100, share * 100))}%`,
             height: "100%",
             borderRadius: radius.pill,
-            backgroundColor: selected ? colors.accent : colors.violet,
+            overflow: "hidden",
+            flexDirection: "row",
           }}
-        />
+        >
+          <View
+            style={{
+              flexGrow: split.windMwh / fleets,
+              flexShrink: 1,
+              flexBasis: 0,
+              backgroundColor: colors.accent,
+              opacity: emphasis === "WIND" ? 0.95 : 0.34,
+            }}
+          />
+          <View
+            style={{
+              flexGrow: split.solarMwh / fleets,
+              flexShrink: 1,
+              flexBasis: 0,
+              backgroundColor: colors.violet,
+              opacity: emphasis === "SOLAR" ? 0.95 : 0.34,
+            }}
+          />
+        </View>
       </View>
+
+      {/*
+        The two figures in words, because the bar cannot carry them where the
+        row is a sliver — which is three of the four regions on most days. A
+        segment two pixels wide states a proportion nobody can read; this line
+        states it on every row, which is what the rail was asked for.
+      */}
+      <Text
+        style={{
+          ...type.caption,
+          color: colors.inkFaint,
+          fontVariant: ["tabular-nums"],
+        }}
+        numberOfLines={1}
+      >
+        {fill(copy.app.grid.hero.railSplit, {
+          wind: f.compact(split.windMwh),
+          solar: f.compact(split.solarMwh),
+        })}
+      </Text>
     </View>
   );
 }

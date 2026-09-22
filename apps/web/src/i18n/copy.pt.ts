@@ -957,9 +957,6 @@ export const pt: Copy = {
       peakHourWindow: "{hour}h BRT de {date}",
       peakHourNote:
         "Uma energia em MWh, não uma potência em MW: o ONS publica energia por hora, e a faixa de pico de potência que uma previsão informa é uma afirmação do modelo sobre o formato dentro daquela hora. Não há modelo nenhum hoje, então nenhum número desses é mostrado.",
-      splitTitle: "Eólica e solar",
-      splitSubtitle: "{subsystem} · liquidado, duas medições",
-      splitTotal: "Energia cortada liquidada, dia inteiro",
       splitNote:
         "O ONS liquida as duas frotas separadamente — o grão publicado é subsistema, tecnologia e hora — então estas são duas medições e o total é a soma delas. A versão de previsão deste painel é o contrário: uma expectativa modelada, dividida em duas.",
       emptyDay:
@@ -1036,7 +1033,6 @@ export const pt: Copy = {
         totalNoteObserved: "Dia liquidado, somando as horas publicadas.",
         regionsLabel: "Os quatro subsistemas",
         profileLabel: "Hora a hora",
-        splitLabel: "Eólica e solar",
         peakLabel: "Maior hora",
         refusedTitle: "A rede não respondeu",
         pickHint: "Toque numa região do mapa para re-apontar tudo em volta.",
@@ -1045,6 +1041,15 @@ export const pt: Copy = {
         nationalLabel: "Brasil",
         windowForecast: "Esperado no dia seguinte, por subsistema.",
         windowObserved: "Últimas 24 h liquidadas, por subsistema.",
+        /**
+         * A divisão por frota, na linha de cada região.
+         *
+         * Compacta de propósito: o trilho tem 300 px e a barra acima já carrega
+         * a proporção. Esta linha existe porque a barra de três das quatro
+         * regiões é fina demais para mostrar uma divisão, e a divisão tem de
+         * estar na tela nas quatro.
+         */
+        railSplit: "eólica {wind} · solar {solar}",
       },
       eyebrow: "Sistema Interligado Nacional · D−1",
       q1: "Vai cortar?",
@@ -1229,12 +1234,6 @@ export const pt: Copy = {
 
     split: {
       title: "Eólica e solar",
-      /** Named. A panel that does not say whose numbers it holds cannot show
-          a reader that the numbers changed under it. */
-      subtitle: "{subsystem} · dois números únicos, sem faixa",
-      expected: "Energia cortada esperada, dia inteiro",
-      expectedNote:
-        "O valor esperado, publicado ao lado da faixa e não dentro dela. Não é o meio do intervalo: com massa parada em “nenhum corte”, a expectativa fica acima da mediana, e num dia calmo a mediana é zero cravado enquanto a expectativa não é.",
       note: "O previsor tem uma cabeça por subsistema, então eólica e solar são uma divisão dessa expectativa e nada além disso. Não existe faixa eólica nem faixa solar para desenhar, e é por isso que escolher uma tecnologia ali em cima destaca um destes dois números em vez de filtrar a previsão.",
       emphasised: "em destaque",
     },

@@ -33,7 +33,12 @@ import type { MapPaint } from "@/components/charts/subsystem-map";
 import type { Formatters } from "@/i18n/format";
 import { type CriticalWindow, criticalWindow } from "@/lib/critical-window";
 import type { DominantReason } from "@/lib/dominant-reason";
-import { roundProbability, type SubsystemCode, subsystemMeta } from "@/lib/fixtures";
+import {
+  roundProbability,
+  type SubsystemCode,
+  subsystemMeta,
+  type TechnologySplit,
+} from "@/lib/fixtures";
 import {
   forecastHours,
   forecastRow,
@@ -51,6 +56,8 @@ export interface HeroRegion {
   readonly value: number;
   readonly chip: ReactNode;
   readonly note: string | undefined;
+  /** The two fleets the row's figure divides into; see `region-rail.tsx`. */
+  readonly split: TechnologySplit;
 }
 
 /**
@@ -152,6 +159,7 @@ export function heroFigures({
         value: row.dayExpectedMwh,
         chip: <RiskChip probability={row.occurrenceProbability} compact={true} />,
         note: `≈${f.percentPoints(roundProbability(row.occurrenceProbability))}`,
+        split: row.split,
       }))
     : observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER).map((row) => ({
         code: subsystemMeta(row.subsystem).short,
@@ -160,6 +168,7 @@ export function heroFigures({
         value: row.last24hMwh,
         chip: undefined,
         note: undefined,
+        split: row.split,
       }));
 
   const largest = Math.max(...regions.map((row) => row.value), 1e-6);

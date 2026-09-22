@@ -19,28 +19,15 @@
  * the duplicate being left where fewer readers scroll.
  */
 
-import {
-  ClockIcon,
-  FadeIn,
-  LayoutDashboardIcon,
-  Panel,
-  PanelHeader,
-  space,
-  usePalette,
-} from "@wattsteer/ui";
+import { ClockIcon, FadeIn, Panel, PanelHeader, space, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import { ObservedBadge, VintageBadge } from "@/components/app/honesty";
+import { VintageBadge } from "@/components/app/honesty";
 import { ObservedSubsystemRow } from "@/components/app/subsystem-row";
 import type { ObservedNetwork } from "@/components/app/use-network";
 import { EpisodeList } from "@/components/charts/episode-list";
-import { ObservedProfile } from "@/components/charts/observed-profile";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import {
-  SUBSYSTEM_DISPLAY_ORDER,
-  type SubsystemCode,
-  subsystemMeta,
-} from "@/lib/fixtures";
+import { SUBSYSTEM_DISPLAY_ORDER, type SubsystemCode } from "@/lib/fixtures";
 import { observedRows } from "@/lib/network";
 
 /**

@@ -15,16 +15,13 @@
 
 import type { GridOutlook } from "@wattsteer/core/api";
 import { Panel, space, type, usePalette } from "@wattsteer/ui";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { BandTriple, PanelTitle, RailFact } from "@/components/app/figures/rail-panels";
 import type { CoverageState } from "@/components/app/figures/use-coverage";
 import type { LadderState } from "@/components/app/figures/use-ladder";
 import type { Scope } from "@/components/app/map/scope-bar";
-import type { ObservedNetwork } from "@/components/app/use-network";
-import { SplitTracks } from "@/components/charts/technology-split";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import type { Technology } from "@/lib/fixtures";
 import { subsystemMeta } from "@/lib/fixtures";
 import type { OutlookRow } from "@/lib/network";
 import { NationalFigureBlock } from "./national-panel";
@@ -34,9 +31,7 @@ export function HeadlinePanel({
   scope,
   selectedRow,
   outlook,
-  observed,
   observedTotalMwh,
-  technology,
   coverage,
   ladder,
   text,
@@ -45,9 +40,7 @@ export function HeadlinePanel({
   /** `null` where no forecast was published: the panel states the settled day. */
   selectedRow: OutlookRow | null;
   outlook: GridOutlook | null;
-  observed: ObservedNetwork;
   observedTotalMwh: number;
-  technology: Technology;
   coverage: CoverageState;
   /** The measured gain over the mandatory baseline, on one fold. */
   ladder: LadderState;
@@ -142,31 +135,16 @@ export function HeadlinePanel({
         />
       ) : null}
       {/*
-        **The division, in the card that already states the total.**
+        **The division is in the rail, and it used to be here.**
 
-        This card and `ObservedSplitPanel` were showing the same figure under
-        the same sentence — 46,3k MWh, "dia liquidado, somando as horas
-        publicadas" — one with a national share under it and one with the two
-        fleet bars. Two cards, one number, and a reader comparing them looking
-        for the difference that is not there.
-
-        So the bars move here, and the standalone panel goes. The note is the
-        one the split panel carried, because it is the sentence that earns the
-        bars: ONS settles the two fleets separately, so these are two
-        measurements and the total is their sum.
+        The bars moved here first, out of a standalone card that was stating the
+        same total under the same sentence. They have moved once more, for the
+        same reason one step further out: this card draws the *selected* region,
+        and so did the bars, while the rail beside the map draws all four with
+        no split on any of them. The division is a property of every region, not
+        of the one that happens to be selected, and it is drawn on all four now.
+        See `region-rail.tsx`.
       */}
-      {selectedRow === null ? (
-        <>
-          <SplitTracks
-            split={observed.daySplit}
-            emphasis={technology}
-            total={Math.max(observed.daySplit.windMwh + observed.daySplit.solarMwh, 1e-9)}
-          />
-          <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
-            {copy.app.observed.splitNote}
-          </Text>
-        </>
-      ) : null}
       {/*
         **The window and the cause are the cards' now, at the top of the screen.**
 
