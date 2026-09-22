@@ -88,6 +88,26 @@ test.describe("the Time Machine dashboard", () => {
     expect(bars).toBe(24);
   });
 
+  test("a tab switch lands on the Overview's day, not on today", async ({ page }) => {
+    // What `sharedParams` sends from the Overview after a reader walked back to
+    // the 13th: a date and a region, and no episode. The newest replayable day
+    // at or before the 13th is the 12th.
+    await routeGateway(page, {
+      forecast: true,
+      reasons: true,
+      serving: "promoted",
+      review: true,
+    });
+    await page.goto("/app/time-machine?subsystem=NE&date=2025-09-13");
+    await expect(page).toHaveURL(/episode=2025-09-12-ne/, { timeout: 20_000 });
+  });
+
+  test("a link that names a day keeps it", async ({ page }) => {
+    await open(page);
+    await page.waitForTimeout(500);
+    expect(page.url()).toContain("episode=2025-09-14-ne");
+  });
+
   test("grades no day with an accuracy and names no cause", async ({ page }) => {
     await open(page);
     const body = (await page.locator("body").textContent()) ?? "";

@@ -8,7 +8,7 @@ import { pt as PT } from "../src/i18n/copy.pt";
 import { formattersFor } from "../src/i18n/format";
 import { eventLabel, signedMwh } from "../src/i18n/time-machine";
 import type { CurtailmentHourForecast } from "../src/lib/fixtures";
-import { signOf } from "../src/lib/time-machine";
+import { openingDay, signOf } from "../src/lib/time-machine";
 
 /**
  * The Time Machine dashboard, `/app/time-machine`.
@@ -208,5 +208,52 @@ describe("the change log names a reconstruction for what it is", () => {
     expect(signOf(0)).toBe("");
     expect(signedMwh(-57_300, f).startsWith("−")).toBe(true);
     expect(signedMwh(64, f)).toMatch(/^\+64/);
+  });
+});
+
+// --- which day the dashboard opens on --------------------------------------------
+
+describe("the dashboard opens on the reader's day", () => {
+  const days = [
+    { id: "2026-09-20-ne", date: "2026-09-20", subsystem: "NE" as const },
+    { id: "2026-09-18-ne", date: "2026-09-18", subsystem: "NE" as const },
+    { id: "2025-09-14-ne", date: "2025-09-14", subsystem: "NE" as const },
+  ];
+  const fallback = { id: "2024-11-05-ne", date: "2024-11-05", subsystem: "NE" as const };
+
+  it("keeps a day a link named, when the deployment can answer it", () => {
+    expect(
+      openingDay(days, days[2], { fromUrl: true, date: "2026-09-23", subsystem: "S" }),
+    ).toBeNull();
+  });
+
+  it("moves a named day it cannot answer to the nearest earlier one", () => {
+    const named = { id: "2026-09-19-ne", date: "2026-09-19", subsystem: "NE" as const };
+    expect(
+      openingDay(days, named, { fromUrl: true, date: "2026-09-23", subsystem: "NE" }),
+    ).toBe("2026-09-18-ne");
+  });
+
+  it("from a tab switch, opens on the newest day at or before the Overview's date", () => {
+    // The Overview's default date is tomorrow: the newest replayable day.
+    expect(
+      openingDay(days, fallback, { fromUrl: false, date: "2026-09-23", subsystem: "NE" }),
+    ).toBe("2026-09-20-ne");
+    // Walked back to the 19th: the 18th, not today.
+    expect(
+      openingDay(days, fallback, { fromUrl: false, date: "2026-09-19", subsystem: "NE" }),
+    ).toBe("2026-09-18-ne");
+  });
+
+  it("follows the Overview's region before it chooses a day", () => {
+    expect(
+      openingDay(days, fallback, { fromUrl: false, date: "2026-09-19", subsystem: "SE" }),
+    ).toBe("2026-09-19-se");
+  });
+
+  it("stands still once it is on an answering day", () => {
+    expect(
+      openingDay(days, days[0], { fromUrl: false, date: "2026-09-23", subsystem: "NE" }),
+    ).toBeNull();
   });
 });

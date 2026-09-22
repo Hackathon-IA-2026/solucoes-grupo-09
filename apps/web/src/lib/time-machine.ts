@@ -12,6 +12,7 @@
 import type { ReplayCompare, ReplayTimeline } from "@wattsteer/core/api";
 import { type CriticalWindow, criticalWindow } from "@/lib/critical-window";
 import type { CurtailmentHourForecast, SubsystemCode } from "@/lib/fixtures";
+import { replayDayId } from "@/lib/fixtures";
 
 /** The subsystem-day of the comparison the screen is focused on, or `undefined`. */
 export function compareRowOf(
@@ -64,4 +65,53 @@ export function gateEntry(
   gateProfile: "gate_early" | "gate_late",
 ): ReplayTimeline["gates"][number] | undefined {
   return timeline.gates.find((gate) => gate.gateProfile === gateProfile);
+}
+
+/** A replay day as the picker offers it: newest first. */
+export interface OfferedDay {
+  readonly id: string;
+  readonly date: string;
+  readonly subsystem: SubsystemCode;
+}
+
+/**
+ * The day the dashboard should be on, or `null` when it already is.
+ *
+ * Two readers arrive here and they are owed different things:
+ *
+ * - **A link that names a replay day** (`episodeFromUrl`) is somebody pointing
+ *   at that day. It is kept whenever the deployment can answer it.
+ * - **A reader arriving from another tab** names none — `sharedParams` carries
+ *   the Overview's `date` and `subsystem`, not an episode — and is owed the
+ *   region and the day they were looking at. The Overview's date is a forecast
+ *   day and usually tomorrow, so the answer is the newest replayable day **at or
+ *   before** it: walked back to the 15th, the Time Machine opens on the 15th.
+ *
+ * A day the deployment cannot answer moves to the nearest earlier one that it
+ * can, and to the newest one only when nothing earlier exists — never towards
+ * a refusal. The subsystem is corrected first, because `viewable` is that
+ * subsystem's list and a date chosen from another region's list is a guess.
+ */
+export function openingDay(
+  viewable: readonly OfferedDay[],
+  current: OfferedDay,
+  wanted: {
+    readonly fromUrl: boolean;
+    readonly date: string;
+    readonly subsystem: SubsystemCode;
+  },
+): string | null {
+  const subsystem = wanted.fromUrl ? current.subsystem : wanted.subsystem;
+  const date = wanted.fromUrl ? current.date : wanted.date;
+  if (subsystem !== current.subsystem) {
+    return replayDayId(date, subsystem);
+  }
+  if (viewable.length === 0) {
+    return null;
+  }
+  if (wanted.fromUrl && viewable.some((day) => day.id === current.id)) {
+    return null;
+  }
+  const pick = viewable.find((day) => day.date <= date) ?? viewable[0];
+  return pick === undefined || pick.id === current.id ? null : pick.id;
 }

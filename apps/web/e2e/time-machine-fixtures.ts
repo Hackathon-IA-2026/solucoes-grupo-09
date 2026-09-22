@@ -366,8 +366,25 @@ export const REPLAY_FULL_DAY = {
   executed: dispatchDay(EXECUTED),
 };
 
+/**
+ * The replayable calendar, cut to three NE days around the example's.
+ *
+ * Only what `offeredDays` reads — a date and a verdict per day — because the
+ * screen asks it one question: which days can be opened.
+ */
+export const REPLAY_DAYS = {
+  subsystem: "NE",
+  lane: LANE,
+  days: [
+    { date: "2025-09-10", replayable: true },
+    { date: "2025-09-12", replayable: true },
+    { date: REVIEW_DATE, replayable: true },
+  ],
+};
+
 /** The reads the dashboard adds, by pathname prefix. */
 export const REVIEW_BY_PREFIX: readonly [string, unknown][] = [
+  ["/v1/replay/days", REPLAY_DAYS],
   ["/v1/replay/compare/", REPLAY_COMPARE],
   ["/v1/replay/timeline/", REPLAY_TIMELINE],
   ["/v1/replay/attribution/", REPLAY_ATTRIBUTION],

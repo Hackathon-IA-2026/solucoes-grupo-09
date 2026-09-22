@@ -110,7 +110,7 @@ import { API_URL } from "@/lib/config";
 import { replayDay, replayDayId, type SubsystemCode } from "@/lib/fixtures";
 import { dispatchSeries, forecastHours, observedHours, REPLAY_LANE } from "@/lib/replay";
 import { forecastError, placementOf } from "@/lib/replay-accuracy";
-import { likelyWindow, replayableSubsystems } from "@/lib/time-machine";
+import { likelyWindow, openingDay, replayableSubsystems } from "@/lib/time-machine";
 
 /** How many recent days the picker shows before it folds. */
 const FOLDED_DAYS = 8;
@@ -156,7 +156,10 @@ export default function TimeMachineDashboard() {
   /*
     **Do not sit on a day that cannot answer** — the rule `/app/replay` applies,
     for its reason: a default or a link can name a day the deployment has no
-    forecast for, and the honest move is towards one it does.
+    forecast for, and the honest move is towards one it does. And **arrive on
+    the reader's day**: a tab switch carries the Overview's date and region
+    but no episode, so the dashboard opens on that region's newest replayable
+    day at or before that date. `openingDay` decides both.
 
     `params.setParams` is a new function on every render of `useAppParams`, and
     listing it would re-run this effect each render; the probe's answer and the
@@ -164,13 +167,18 @@ export default function TimeMachineDashboard() {
   */
   // biome-ignore lint/correctness/useExhaustiveDependencies: see the note above
   useEffect(() => {
-    if (days.status !== "known" || days.viewable.length === 0) {
+    if (days.status !== "known") {
       return;
     }
-    if (!days.viewable.some((candidate) => candidate.id === day.id)) {
-      params.setParams({ episode: days.viewable[0]?.id });
+    const next = openingDay(days.viewable, day, {
+      fromUrl: params.episodeFromUrl === true,
+      date: params.date,
+      subsystem: params.subsystem,
+    });
+    if (next !== null) {
+      params.setParams({ episode: next });
     }
-  }, [days, day.id]);
+  }, [days, day.id, params.episodeFromUrl, params.date, params.subsystem]);
 
   const offered = days.status === "known" ? days.viewable : [day];
   const shown = offered.slice(0, FOLDED_DAYS).some((candidate) => candidate.id === day.id)

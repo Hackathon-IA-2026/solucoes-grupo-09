@@ -102,6 +102,17 @@ export interface AppParams {
   run: RunLabel;
   date: string;
   episode: string;
+  /**
+   * Whether `episode` was named in the URL rather than defaulted — the sibling
+   * of `subsystemFromUrl`, for the same reason and with the same rule: the
+   * parser alone can know it, and it is never written back.
+   *
+   * The Time Machine needs it since the date began travelling between tabs.
+   * A link naming a replay day is somebody pointing at that day; a reader
+   * arriving from the Overview names none, and is owed the day and region
+   * they were looking at rather than whichever day `REPLAY_DAYS[0]` is.
+   */
+  episodeFromUrl?: boolean;
 }
 
 /**
@@ -222,6 +233,7 @@ export function parseAppParams(
       // Shape, not membership: the picker's days come from the gateway now, so
       // a link to any day it can answer has to survive a reload.
       episode !== undefined && isReplayDayId(episode) ? episode : REPLAY_DAYS[0].id,
+    episodeFromUrl: episode !== undefined && isReplayDayId(episode),
   };
 }
 
