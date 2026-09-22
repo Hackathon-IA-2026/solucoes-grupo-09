@@ -489,7 +489,12 @@ describe("a refused forecast renders no forecast", () => {
       "<ObservedCard",
       "<ObservedSplitPanel",
       "<ObservedBadge />",
-      "<SettledDayPanel",
+      // Was `<SettledDayPanel`, which drew this stack's hourly bars until the
+      // hero's copy of the same `<ObservedProfile>` absorbed it — the page had
+      // one chart twice. `<EpisodesPanel` is the other panel this stack shares
+      // with the forecast one, so the guard still proves the function renders
+      // the observed vocabulary rather than nothing.
+      "<EpisodesPanel",
     ]) {
       expect({ observedOnly, present: observedStack.includes(observedOnly) }).toEqual({
         observedOnly,

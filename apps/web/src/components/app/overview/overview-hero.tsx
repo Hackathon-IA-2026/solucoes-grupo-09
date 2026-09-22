@@ -27,8 +27,10 @@
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
 import {
   ClockIcon,
+  LayoutDashboardIcon,
   MapIcon,
   Panel,
+  PanelHeader,
   PieChartIcon,
   radius,
   SearchIcon,
@@ -44,6 +46,7 @@ import { QuestionCard } from "@/components/app/figures/question-cards";
 import { BandTriple, PanelTitle, RailFact } from "@/components/app/figures/rail-panels";
 import { useCoverage } from "@/components/app/figures/use-coverage";
 import { useLadder } from "@/components/app/figures/use-ladder";
+import { ObservedBadge } from "@/components/app/honesty";
 import { RegionMap } from "@/components/app/map/region-map";
 import type { Scope } from "@/components/app/map/scope-bar";
 import type { AppParams } from "@/components/app/params";
@@ -229,9 +232,43 @@ export function OverviewHero({
     />
   );
 
+  /*
+    The settled day's hours, and the **only** copy of them on the page.
+
+    This chart was drawn twice: here, and again at the bottom as
+    `SettledDayPanel` — the same `<ObservedProfile hours={observed.hours} />`
+    under a different heading, in both the forecast and the observed stacks. The
+    bottom one was the honest version and this one was the visible one, so the
+    two were merged rather than one being deleted: this keeps the position, and
+    takes the furniture that made the other one safe to read.
+
+    Which furniture, and why each piece:
+
+    - **The observed badge.** This panel sits in a column headed by tomorrow's
+      forecast. `honesty.md` asks every observed figure to say it is settled,
+      and a chart that does not is one a reader may take for a prediction.
+    - **The date.** "Hora a hora" of *which* day? These bars are a past day's,
+      beside a forecast for the next one, and the answer was on the panel that
+      went.
+    - **The zero note.** A missing bar is an hour ONS has not settled, not an
+      hour that settled at zero. That is `honesty.md`'s "an absence is a claim"
+      at hour grain, and nothing else on this screen says it.
+
+    Labelled from `observed.subsystem` rather than from the selection: during a
+    re-read this panel still shows the previous subsystem's figures, so it has
+    to say the previous subsystem's name. That reasoning is `SettledDayPanel`'s
+    own, kept with the thing it was about.
+  */
   const profile = (
     <Panel style={{ gap: space.md }}>
-      <Text style={{ ...type.caption, color: colors.inkFaint }}>{text.profileLabel}</Text>
+      <PanelHeader
+        icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
+        title={text.profileLabel}
+        subtitle={fill(copy.app.overview.settledDaySubtitle, {
+          date: f.date(observed.hoursDate),
+        })}
+        right={<ObservedBadge />}
+      />
       <ObservedProfile hours={observed.hours} emptyLabel={copy.app.observed.emptyDay} />
       <Text style={{ ...type.caption, color: colors.inkFaint }}>
         {`${text.peakLabel}: ${
@@ -242,6 +279,19 @@ export function OverviewHero({
               )}`
         }`}
       </Text>
+      <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+        {copy.app.overview.settledDayNote}
+      </Text>
+      {settled === null ? null : (
+        // Only where there is no forecast, which is what `bandAbsent` meant on
+        // the panel this replaced. It answers a question the observed state
+        // provokes and the forecast state does not: why these bars carry no
+        // P10–P90. Printing it beside a published band would be answering a
+        // question nobody asked.
+        <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+          {copy.app.observed.noFan}
+        </Text>
+      )}
     </Panel>
   );
 

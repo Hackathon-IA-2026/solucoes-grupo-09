@@ -48,7 +48,6 @@ import {
   AppShell,
   MiniPill,
   ScreenTitle,
-  SectionBlock,
 } from "@/components/app/app-shell";
 import { Stepper } from "@/components/app/asset-editor";
 import { ConformityBadge, HonestyNote, SolveStamp } from "@/components/app/honesty";
@@ -215,20 +214,22 @@ export default function MitigateScreen({
     forget the same line, and adding the embedded form would have made it eight.
   */
   const frame = (body: ReactNode) => {
-    /* Out of the JSX because `noLeakedRender` reads a ternary whose alternate
-       is a variable as a value that might render itself. */
-    const inSection = sheet?.open === true ? null : body;
     return embedded ? (
       <>
         {/*
-          The accordion keeps its body unless the sheet is holding it. Two live
-          copies of these panels would be two sets of steppers writing the same
-          scenario, and `app-shell.tsx` records the same rule from the last time
-          one element was nearly mounted twice.
+          **No accordion here any more, only the sheet.**
+
+          This section was a `SectionBlock` that opened in place, and the sheet
+          was added beside it so the two could be compared. They answer the same
+          question with the same panels, so keeping both meant a reader could
+          open the plan twice — and two live copies are two sets of steppers
+          writing one scenario, which `app-shell.tsx` records as the thing that
+          nearly happened to Explicar.
+
+          The button under the map is the way in now. `ExplainScreen` made the
+          same move first and for the same reason: on `/app` these are answers
+          to a question asked from the map, not sections of a document.
         */}
-        <SectionBlock id="mitigate" title={title} lede={lede} right={right}>
-          {inSection}
-        </SectionBlock>
         {sheet === undefined ? null : (
           <Sheet
             open={sheet.open}

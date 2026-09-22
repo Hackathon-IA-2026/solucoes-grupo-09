@@ -9,9 +9,14 @@
  * beside a forecast one under a shared heading is how an observation gets read
  * as a prediction.
  *
- * `SettledDayPanel` and `EpisodesPanel` are exported because `observed-panels.
- * tsx` draws them too. They are the only two panels that are identical across
- * the two stacks, which is exactly why they live in one place.
+ * `EpisodesPanel` is exported because `observed-panels.tsx` draws it too.
+ *
+ * `SettledDayPanel` used to be exported beside it, for the same reason, and is
+ * gone: the hourly bars it drew were the same `<ObservedProfile>` the hero
+ * already had beside the map, so the page carried one chart twice in both
+ * stacks. The hero's copy kept the position and took this panel's furniture —
+ * the observed badge, the date and the zero-versus-absent note — rather than
+ * the duplicate being left where fewer readers scroll.
  */
 
 import {
@@ -73,7 +78,6 @@ export function SettledPanels({
         subsystem={subsystem}
         onSelect={onSelect}
       />
-      <SettledDayPanel observed={observed} subsystem={subsystem} bandAbsent={false} />
       <EpisodesPanel observed={observed} />
     </>
   );
@@ -130,90 +134,6 @@ function SettledSubsystemsPanel({
             mwh: f.compact(observed.now.national.last24hConstrainedOffMwh),
           })}
         </Text>
-      </Panel>
-    </FadeIn>
-  );
-}
-
-/**
- * The selected subsystem's last settled day, hour by hour.
- *
- * `bandAbsent` is the one difference between its two appearances. Standing in
- * for the forecast's 24-hour fan, it owes the reader the sentence the fan's
- * absence would otherwise leave implicit: there is no P10–P90 ribbon here and
- * there cannot be, because a ribbon is a model's output and these are settled
- * hours. Beside a published fan, that sentence would be answering a question
- * nobody has.
- */
-export function SettledDayPanel({
-  observed,
-  subsystem,
-  bandAbsent,
-  delay = 70,
-}: {
-  observed: ObservedNetwork;
-  subsystem: SubsystemCode;
-  bandAbsent: boolean;
-  /**
-   * Where this panel sits in its stack's cascade. A prop and not a constant
-   * because the two stacks that render it have different lengths: in
-   * `SettledPanels` it is the second panel, in `ObservedPanels` the fourth.
-   */
-  delay?: number;
-}) {
-  const colors = usePalette();
-  const copy = useCopy();
-  const f = useFormat();
-  /*
-    Labelled from the data, not from the selection. `observed.subsystem` is the
-    subsystem this response was requested for; `params.subsystem` is wherever
-    the reader has clicked since. They are the same except during a re-read —
-    and during a re-read this panel is showing the previous subsystem's figures,
-    so it has to say the previous subsystem's name. See `ObservedNetwork`.
-  */
-  const meta = subsystemMeta(observed.subsystem as SubsystemCode);
-
-  return (
-    <FadeIn delay={delay}>
-      <Panel>
-        <PanelHeader
-          icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
-          title={fill(copy.app.overview.settledDayTitle, {
-            subsystem: meta.onsDisplayName,
-          })}
-          subtitle={fill(copy.app.overview.settledDaySubtitle, {
-            date: f.date(observed.hoursDate),
-          })}
-          right={<ObservedBadge />}
-        />
-        <View style={{ marginTop: space.lg }}>
-          <ObservedProfile
-            hours={observed.hours}
-            emptyLabel={copy.app.overview.settledDayEmpty}
-          />
-        </View>
-        <Text
-          style={{
-            marginTop: space.md,
-            fontSize: 11,
-            lineHeight: 18,
-            color: colors.inkFaint,
-          }}
-        >
-          {copy.app.overview.settledDayNote}
-        </Text>
-        {bandAbsent ? (
-          <Text
-            style={{
-              marginTop: space.sm,
-              fontSize: 11,
-              lineHeight: 18,
-              color: colors.inkFaint,
-            }}
-          >
-            {copy.app.observed.noFan}
-          </Text>
-        ) : null}
       </Panel>
     </FadeIn>
   );

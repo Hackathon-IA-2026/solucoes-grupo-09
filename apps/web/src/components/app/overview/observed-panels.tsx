@@ -8,7 +8,7 @@
  * under the observed vocabulary throughout, every one of them naming the window
  * it covers.
  *
- * It shares `SettledDayPanel` and `EpisodesPanel` with `settled-panels.tsx`
+ * It shares `EpisodesPanel` with `settled-panels.tsx`
  * rather than restating them: those two panels are about settled data in both
  * stacks and say the same thing in both.
  */
@@ -28,7 +28,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { ObservedBadge, VintageBadge } from "@/components/app/honesty";
 import { ObservedNationalPanel } from "@/components/app/overview/national-panel";
-import { EpisodesPanel, SettledDayPanel } from "@/components/app/overview/settled-panels";
+import { EpisodesPanel } from "@/components/app/overview/settled-panels";
 import { SelectedRegion } from "@/components/app/selected-region";
 import { ObservedSubsystemRow } from "@/components/app/subsystem-row";
 import { useAppParams } from "@/components/app/use-app-params";
@@ -235,13 +235,6 @@ export function ObservedPanels({
           </View>
         </FadeIn>
       )}
-
-      <SettledDayPanel
-        observed={observed}
-        subsystem={subsystem}
-        bandAbsent={true}
-        delay={140}
-      />
 
       <FadeIn delay={210}>
         <Panel>
