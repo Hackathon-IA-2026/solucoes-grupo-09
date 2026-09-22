@@ -217,42 +217,64 @@ is above 90%, and the number only counts on a fresh set.
       transparency and reproducibility, his 16/09 reply calls it the operation
       procedures manual.
 
-### 5b. ~~The observed curtailment is too high by roughly 2–3×~~ — SETTLED 22/09
+### 5b. The observed curtailment is still too high — **open**
 
-**The adapter read the wrong ONS field.** `val_geracaolimitada` is the
-*ceiling* ONS set, not the energy cut under it. From ONS's own published
-dictionary for `restricao_coff_eolica_usi`:
+A wrong field was found and fixed on 22/09, and **it is not the cause.** Both
+halves are recorded here because the retraction matters more than the finding.
+
+**What was wrong.** The adapter read `val_geracaolimitada` as the curtailed
+energy. ONS's published dictionary for `restricao_coff_eolica_usi` is
+unambiguous that it is not:
 
 | field | ONS's definition |
 |---|---|
 | `val_geracaolimitada` | "Geração limitada. Representa o **limite** para a geração da usina/conjunto estabelecido pelo ONS em Tempo Real, em MWmed." |
-| `val_geracaonaorealizadaapurada` (GNRa) | "Geração Não Realizada Apurada… a estimativa de geração frustrada, obtida pela **diferença entre a geração de referência e a geração verificada** (se menor que zero, GNRa = 0), nos períodos em que houve limitação de geração." |
+| `val_geracaonaorealizadaapurada` (GNRa) | "…a estimativa de geração frustrada, obtida pela **diferença entre a geração de referência e a geração verificada** (se menor que zero, GNRa = 0)." |
 
-One published row settles it — Conj. Paulino Neves, 2026-09-01 10:00, ENE:
+Fixed in `apps/api/src/ingest/ons/constrained-off.ts`. Summed over all of
+September, `reference − verified` equals GNRa to the megawatt-hour
+(2.561.378 both), which is the dictionary's formula confirmed at scale.
 
-| verificada | limitada | referência | GNRa |
+**What the fix does not do.** Measured over the published September files,
+wind and solar, both entity grains:
+
+| | old (ceiling) | new (GNRa) | |
 |---|---|---|---|
-| 319,268 | **322,000** | 428,899 | **109,631** |
+| N | 34.701 | 21.776 | 1,59× |
+| NE | 3.642.836 | 3.045.195 | 1,13× |
+| SE | 811.462 | 555.956 | 1,46× |
+| **S** | 41.452 | **178.187** | **0,23×** |
+| all | 4.530.452 | 3.801.113 | **1,19×** |
 
-428,899 − 319,268 = 109,631 exactly, and 322,000 / 109,631 = **2,9×** — the
-2–3× measured empirically, with a cause. It also explains the impossibility
-that first raised it: a ceiling is naturally close to what the fleet actually
-generated, so summing ceilings produces a number the size of generation itself,
-which is how "21.940 MW curtailed against 30.828 MW installed" appeared.
+**1,19× in aggregate, not 2–3×** — and in Sul the old reading *understated*
+the cut by 4,3×, so this is not a uniform deflation of the product's numbers.
 
-The "37 % gap" between `constrained_off` and `reference − verified` was never a
-gap: GNRa **is** `reference − verified`, and the two were different quantities.
+And the argument this ticket turns on survives it. NE's largest hour at
+conjunto grain:
 
-Fixed in `apps/api/src/ingest/ons/constrained-off.ts`: GNRa where ONS wrote it,
-and where the column predates the file, ONS's own formula — the difference,
-floored at zero, only in half-hours ONS marked as limited.
+| | peak | share of 42.449 MW installed |
+|---|---|---|
+| old reading | 24.053 MW (08/09 15h) | 57 % |
+| **new reading** | **25.928 MW (20/09 10h)** | **61 %** |
 
-- [x] Settle what `val_geracaolimitada` means against `val_geracaoreferencia`
-      and `val_geracao`. **Answered by ONS's data dictionary, not by Bisogno.**
-- [ ] **Re-ingest the history.** Every stored `constrained_off_mwh` is the
-      ceiling and is ~2,9× too high. The code is right and the database is not
-      until a `recent` + `history` sweep has rewritten it.
-- [ ] Until it has, the caveat below still stands.
+A fleet cannot be 61 % curtailed and generating at the same time. The
+impossibility is unchanged and slightly worse.
+
+**Where to look next**, now that the field is excluded:
+
+- [ ] `val_geracaoreferencia` itself. GNRa inherits it, so a generous reference
+      estimate produces a large cut with no arithmetic error anywhere. RO-AO.BR.13
+      in the MPO is where its mechanism is defined, and it is not in the RAG corpus.
+- [ ] Whether summing conjuntos double-counts a member plant that also reports.
+      The disjointness was checked once at *day* grain (conjunto 178.668 + plant
+      2.596 = the readout); it has not been checked hour by hour.
+- [ ] Whether 42.449 MW is the right denominator for the hour in question — an
+      installed figure is not an available one.
+- [ ] **No absolute MWh figure for observed curtailment goes in the deck.** The
+      caveat stands, unchanged by the field fix.
+- [ ] Re-ingest `recent` + `history` so the stored rows use the right field.
+      Worth doing for correctness, and it will move NE by ~13 % and Sul by 4,3×.
+      It does **not** make the figures defensible on its own.
 
 ### 5b-old. The measurement that found it
 
