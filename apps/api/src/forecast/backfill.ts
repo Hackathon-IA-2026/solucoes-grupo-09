@@ -1,4 +1,9 @@
 import type { Database } from "../database/connection.js";
+import {
+  type AttributionPublication,
+  parseAttributionPublication,
+  writeAttributionPublication,
+} from "../diagnosis/publication.js";
 import { UpstreamError } from "../errors.js";
 import { isRecord } from "../json/shape.js";
 import {
@@ -69,6 +74,13 @@ export interface HoldoutBackfill {
   /** Days of the test block that composed no whole publication, named. */
   incompleteDays: string[];
   publications: ForecastPublication[];
+  /**
+   * What moved each reconstructed forecast — the serving path's own Shapley
+   * game over the fold artifact, stamped `backfilled_holdout`. Optional on the
+   * wire, because a run from before the backtest minted them carries none, and
+   * an absent list is no attributions rather than a malformed run.
+   */
+  attributions: AttributionPublication[];
 }
 
 /** What one backfill did, summed over its days — the shape an operator wants. */
@@ -77,6 +89,8 @@ export interface HoldoutBackfillResult extends PublicationWriteResult {
   artifactId: string;
   /** How many held-out days were written. */
   days: number;
+  /** How many of those days had an attribution written beside them. */
+  attributionsWritten: number;
 }
 
 function text(source: Record<string, unknown>, field: string): string {
@@ -140,12 +154,45 @@ export function parseHoldoutBackfill(payload: unknown): HoldoutBackfill {
   const incompleteDays = Array.isArray(payload.incomplete_days)
     ? payload.incomplete_days.map((day) => String(day))
     : [];
+  const attributions = (
+    Array.isArray(payload.attributions) ? payload.attributions : []
+  ).map((one) => parseAttributionPublication(one));
+  for (const attribution of attributions) {
+    // The same two claims the forecasts make, for the same reason: an
+    // explanation of a reconstruction wearing `served` would reach the live
+    // Explain surface, whose read is pinned to that value.
+    if (attribution.originKind !== BACKFILLED_HOLDOUT) {
+      throw new HoldoutBackfillError(
+        `the attribution of ${attribution.targetDate} arrived in a backfill ` +
+          `carrying origin_kind '${attribution.originKind}'; this writer mints no records`,
+      );
+    }
+    if (attribution.artifactId !== artifactId) {
+      throw new HoldoutBackfillError(
+        `the attribution of ${attribution.targetDate} names artifact ` +
+          `${attribution.artifactId} in a run of ${artifactId}; the bars must ` +
+          "decompose the band they are shown beside",
+      );
+    }
+    const explained = publications.find(
+      (one) =>
+        one.targetDate === attribution.targetDate &&
+        one.publishedAt.getTime() === attribution.publishedAt.getTime(),
+    );
+    if (explained === undefined) {
+      throw new HoldoutBackfillError(
+        `the attribution of ${attribution.targetDate} explains no forecast in ` +
+          "this run. An explanation without its band is written nowhere",
+      );
+    }
+  }
   return {
     foldId: text(payload, "fold_id"),
     artifactId,
     lane: text(payload, "lane"),
     incompleteDays,
     publications,
+    attributions,
   };
 }
 
@@ -167,6 +214,7 @@ export async function writeHoldoutBackfill(
     foldId: backfill.foldId,
     artifactId: backfill.artifactId,
     days: 0,
+    attributionsWritten: 0,
     hoursInserted: 0,
     hoursRevised: 0,
     hoursUnchanged: 0,
@@ -194,6 +242,16 @@ export async function writeHoldoutBackfill(
     result.nationalInserted += written.nationalInserted;
     result.nationalRevised += written.nationalRevised;
     result.nationalUnchanged += written.nationalUnchanged;
+  }
+  // After the forecasts, never before: an attribution names the publication it
+  // explains, and a run that failed halfway must not leave bars behind with no
+  // band to stand beside. Idempotent by digest, like the forecasts, so a retry
+  // writes nothing twice.
+  for (const attribution of backfill.attributions) {
+    await writeAttributionPublication(db, attribution, {
+      ...(options.ingestedAt === undefined ? {} : { ingestedAt: options.ingestedAt }),
+    });
+    result.attributionsWritten += 1;
   }
   return result;
 }

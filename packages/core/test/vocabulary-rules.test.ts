@@ -342,6 +342,9 @@ describe("rule 9 — vintage_fidelity is on every object carrying a metric", () 
     "optimization-result.schema.json",
     "replay.schema.json",
     "replay-observed-only.schema.json",
+    "replay-compare.schema.json",
+    "replay-timeline.schema.json",
+    "replay-attribution.schema.json",
   ];
 
   for (const file of REQUIRED_ON) {

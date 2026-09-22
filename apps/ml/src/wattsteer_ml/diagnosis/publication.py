@@ -109,6 +109,15 @@ from wattsteer_ml.training.background import MatchedBackground
 #: is produced by the backtest, never here.
 SERVED_ORIGIN_KIND: Literal["served"] = "served"
 
+#: The one other value :attr:`AttributionPublication.origin_kind` may hold, set
+#: by :func:`wattsteer_ml.holdout_backfill.holdout_attributions` and nothing
+#: else — the attribution of a forecast the backtest reconstructed, which the
+#: Time Machine reads beside that reconstruction and the live Explain surface
+#: never reads at all.
+BACKFILLED_HOLDOUT_ORIGIN_KIND: Literal["backfilled_holdout"] = "backfilled_holdout"
+
+AttributionOriginKind = Literal["served", "backfilled_holdout"]
+
 #: ``ForecastOrigin.producer`` for a WattSteer attribution.
 PRODUCER: Literal["wattsteer"] = "wattsteer"
 
@@ -589,6 +598,11 @@ class AttributionPublication:
     #: The regime that composed the expectation these bars decompose.
     correction_regime: str
     rows: tuple[AttributionRow, ...]
+    #: ``served`` unless the backtest built it. Defaulted so the serving path —
+    #: :func:`build_attribution_publication` — has no argument that could set it
+    #: to anything else, and the backtest reaches the other value only through
+    #: :func:`dataclasses.replace` on a publication it minted itself.
+    origin_kind: AttributionOriginKind = SERVED_ORIGIN_KIND
 
     def __post_init__(self) -> None:
         if not self.rows:
@@ -629,7 +643,7 @@ class AttributionPublication:
                 "producer": PRODUCER,
                 "run_label": self.artifact_id,
                 "published_at": self.published_at.isoformat(),
-                "origin_kind": SERVED_ORIGIN_KIND,
+                "origin_kind": self.origin_kind,
                 "gate_profile": self.gate_profile,
             },
             "subsystems": list(self.subsystems),

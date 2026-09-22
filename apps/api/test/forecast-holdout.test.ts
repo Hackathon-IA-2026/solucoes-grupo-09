@@ -196,3 +196,94 @@ describe("unservability is a property of the code, not of a caller", () => {
     expect(reads).not.toContain("'backfilled_holdout'::forecast_origin_kind");
   });
 });
+
+describe("the backtest's attributions ride with the forecasts they explain", () => {
+  /**
+   * The diagnosis vector, re-dated onto the held-out day and restamped as the
+   * backtest restamps it. Built from the two real cross-language fixtures rather
+   * than a third, so a change to either payload's shape reaches this file.
+   */
+  const ATTRIBUTION = JSON.parse(
+    readFileSync(
+      join(import.meta.dir, "fixtures", "diagnosis", "attribution.json"),
+      "utf8",
+    ),
+  ) as Record<string, unknown>;
+
+  const explained = (
+    payload: Record<string, unknown>,
+    mutate?: (attribution: Record<string, unknown>) => void,
+  ): Record<string, unknown> => {
+    const attribution = structuredClone(ATTRIBUTION);
+    const [publication] = publicationsOf(payload);
+    const origin = publication?.forecast_origin as Record<string, unknown>;
+    const day = String(publication?.target_date);
+    attribution.target_date = day;
+    attribution.forecast_origin = { ...origin };
+    for (const row of attribution.attributions as Record<string, unknown>[]) {
+      row.target_date = day;
+    }
+    mutate?.(attribution);
+    return attribution;
+  };
+
+  it("parses a run that carries none, because older runs minted none", () => {
+    expect(parseHoldoutBackfill(vector()).attributions).toEqual([]);
+  });
+
+  it("accepts an attribution of a forecast in the same run", () => {
+    const parsed = parseHoldoutBackfill(
+      vector((payload) => {
+        payload.attributions = [explained(payload)];
+      }),
+    );
+    expect(parsed.attributions.length).toBe(1);
+    expect(parsed.attributions[0]?.originKind).toBe(BACKFILLED_HOLDOUT);
+    expect(parsed.attributions[0]?.artifactId).toBe(parsed.artifactId);
+  });
+
+  it("refuses an attribution that claims to be a record", () => {
+    expect(() =>
+      parseHoldoutBackfill(
+        vector((payload) => {
+          payload.attributions = [
+            explained(payload, (attribution) => {
+              (attribution.forecast_origin as Record<string, unknown>).origin_kind =
+                "served";
+            }),
+          ];
+        }),
+      ),
+    ).toThrow(HoldoutBackfillError);
+  });
+
+  it("refuses bars that decompose another artifact's band", () => {
+    expect(() =>
+      parseHoldoutBackfill(
+        vector((payload) => {
+          payload.attributions = [
+            explained(payload, (attribution) => {
+              (attribution.forecast_origin as Record<string, unknown>).run_label =
+                "2024-01-01T00:00:00Z";
+            }),
+          ];
+        }),
+      ),
+    ).toThrow(/decompose the band/);
+  });
+
+  it("refuses an explanation of a forecast this run did not mint", () => {
+    expect(() =>
+      parseHoldoutBackfill(
+        vector((payload) => {
+          payload.attributions = [
+            explained(payload, (attribution) => {
+              (attribution.forecast_origin as Record<string, unknown>).published_at =
+                "2025-03-30T22:00:00+00:00";
+            }),
+          ];
+        }),
+      ),
+    ).toThrow(HoldoutBackfillError);
+  });
+});

@@ -159,7 +159,8 @@ select
   peak_power_p10_mw,
   peak_power_p50_mw,
   peak_power_p90_mw,
-  day_occurrence_probability
+  day_occurrence_probability,
+  ingested_at
 from canonical_forecast_day
 where subsystem = $1::subsystem_code
   and target_date = $2::date
@@ -191,7 +192,15 @@ OBSERVED_DAY_SQL = """
 select
   extract(hour from (valid_time at time zone 'America/Sao_Paulo'))::int as local_hour,
   sum(constrained_off_mwh)::double precision as constrained_off_mwh,
-  max(data_version)::bigint as data_version
+  max(data_version)::bigint as data_version,
+  -- The settled day's own history, off the rows already being scanned: when
+  -- the rows in force were written, and how many of them are a restatement.
+  -- `data_version` starts at 1 and moves only when ONS changes a value, so a
+  -- row above 1 is one ONS rewrote after WattSteer first read it.
+  min(ingested_at) as earliest_ingested_at,
+  max(ingested_at) as latest_ingested_at,
+  count(*)::int as entity_rows,
+  count(*) filter (where data_version > 1)::int as restated_rows
 from canonical_curtailment_by_reporting_entity
 where subsystem = $1::subsystem_code
   -- The civil day as a range over valid_time, so the index is used: see
@@ -226,6 +235,26 @@ from canonical_curtailment_episodes(
 
 
 @dataclass(frozen=True)
+class SettledVintage:
+    """When the settled day's rows in force were written, and how many ONS rewrote.
+
+    Read off the same scan as ``a[t]`` rather than a second query. It describes
+    the rows the view resolves *now*, which is the only history a canonical read
+    can see: a restated row's first arrival is superseded, so
+    :attr:`earliest_ingested_at` is the oldest write still in force and not
+    necessarily the instant the day first settled. The Time Machine's timeline
+    says exactly that, and :attr:`restated_rows` is what tells a reader the
+    difference matters for this day.
+    """
+
+    data_version: str
+    earliest_ingested_at: datetime
+    latest_ingested_at: datetime
+    entity_rows: int
+    restated_rows: int
+
+
+@dataclass(frozen=True)
 class ReplayInputs:
     """One day's evidence, at one vintage cut. No judgement, no arithmetic.
 
@@ -252,6 +281,33 @@ class ReplayInputs:
     #: there is not, because an observed-only day has no publication to take it
     #: from and a day's episodes still have to be drawn at *some* stated grain.
     threshold_mw: float
+    #: When the pinned publication's day row was actually written. For a
+    #: ``served`` row that is the publication; for a ``backfilled_holdout`` row
+    #: it is the backtest run, which is why the two instants travel separately.
+    forecast_written_at: datetime | None = None
+    #: ``None`` when no settled row exists for the day.
+    settled_vintage: SettledVintage | None = None
+
+
+def _settled_vintage(rows: list[dict[str, Any]]) -> SettledVintage | None:
+    """The day's settled rows, summarised across hours. ``None`` with no rows."""
+    written = [row for row in rows if row.get("earliest_ingested_at") is not None]
+    if not written:
+        return None
+    versions = [
+        int(row["data_version"]) for row in written if row["data_version"] is not None
+    ]
+    return SettledVintage(
+        data_version=str(max(versions)) if versions else NO_OBSERVED_DATA_VERSION,
+        earliest_ingested_at=min(
+            row["earliest_ingested_at"] for row in written
+        ).astimezone(UTC),
+        latest_ingested_at=max(row["latest_ingested_at"] for row in written).astimezone(
+            UTC
+        ),
+        entity_rows=sum(int(row["entity_rows"]) for row in written),
+        restated_rows=sum(int(row["restated_rows"]) for row in written),
+    )
 
 
 def _pinned_instant(raw: str | None) -> datetime | None:
@@ -498,6 +554,12 @@ async def read_replay_inputs(
         ),
         sources=sources,
         threshold_mw=threshold_mw,
+        forecast_written_at=(
+            None
+            if forecast is None or day_row is None or day_row.get("ingested_at") is None
+            else day_row["ingested_at"].astimezone(UTC)
+        ),
+        settled_vintage=_settled_vintage(observed_rows),
     )
 
 
@@ -556,6 +618,7 @@ __all__ = [
     "PINNED_FORECAST_HOURS_SQL",
     "ReplayInputSource",
     "ReplayInputs",
+    "SettledVintage",
     "read_replay_inputs",
     "replay_input_source",
 ]

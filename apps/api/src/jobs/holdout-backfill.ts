@@ -242,7 +242,7 @@ export function createHoldoutBackfiller(
       console.log(
         `✅ holdout backfill ${run.foldId} ${run.artifactId}: ${run.days} day(s), ` +
           `${run.hoursInserted} hour(s) inserted, ${run.hoursRevised} revised, ` +
-          `${run.hoursUnchanged} unchanged`,
+          `${run.hoursUnchanged} unchanged, ${run.attributionsWritten} attribution(s)`,
       );
     }
     for (const failure of failures) {

@@ -109,6 +109,17 @@ export const SOLVE_PATHS: readonly string[] = ["/v1/optimize", "/v1/replay"];
  */
 export const VOICE_PATHS: readonly string[] = ["/v1/voice/session"];
 
+/**
+ * The Time Machine's day reviews. Reads under the solve's prefix, named out of
+ * the solve tier for the reason `/v1/replay/days` is: metering a read at the
+ * solver's rate would throttle a dashboard that opens with three of them.
+ */
+export const REVIEW_PREFIXES: readonly string[] = [
+  "/v1/replay/compare/",
+  "/v1/replay/timeline/",
+  "/v1/replay/attribution/",
+];
+
 /** Pure: is this path one the solver answers (including sub-paths like `/v1/replay/days`)? */
 export function isSolvePath(pathname: string): boolean {
   return SOLVE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -133,6 +144,10 @@ export function classifyTier(_method: string, pathname: string): Tier | null {
     return null;
   }
   if (pathname === "/v1/replay/days" || pathname.startsWith("/v1/replay/days/")) {
+    return "read";
+  }
+  // The reviewed day: three Postgres reads and a card each, and no solve.
+  if (REVIEW_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return "read";
   }
   if (VOICE_PATHS.includes(pathname)) {

@@ -224,6 +224,18 @@ export const CACHE_POLICIES = {
    */
   featuredDays: { name: "featured-days", directive: shared(maxAge(ONE_HOUR_SEC)) },
 
+  /**
+   * `/v1/replay/compare/<date>`, `/v1/replay/timeline/<date>` and
+   * `/v1/replay/attribution/<date>` — one replayed day, reviewed.
+   *
+   * Key: every provenance the body carries — each pinned origin's instant and
+   * artifact, each settled `data_version`, each write instant — so an ONS
+   * restatement or a newer backtest vintage moves the validator. The replay's
+   * ten minutes, because the two halves age the same way the replay's do: the
+   * forecast half is pinned and the settled half is what can still move.
+   */
+  replayReview: { name: "replay-review", directive: shared(maxAge(TEN_MINUTES_SEC)) },
+
   /** `/v1/plants`. Key: the registry snapshot's `ingested_at`. Daily SIGA/ONS. */
   registry: { name: "registry", directive: shared(maxAge(ONE_DAY_SEC)) },
 

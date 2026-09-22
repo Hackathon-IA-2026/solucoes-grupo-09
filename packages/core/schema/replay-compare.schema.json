@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/replay-compare.schema.json",
+  "title": "ReplayCompare",
+  "description": "`GET /v1/replay/compare/{date}` - one replayed day across the four subsystems: each one's pinned D-1 day band beside what settled, and where the settled total fell against it. Every verdict is the replayable predicate's, judged on the same pinned rows a replay reads, so a band here is one `/v1/replay` would answer from. No percentage is published: one day cannot produce an accuracy.",
+  "type": "object",
+  "properties": {
+    "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+    "lane": {
+      "type": "string",
+      "description": "The lane every subsystem's band was resolved in, echoed."
+    },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "subsystems": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "N, NE, SE, S - the canonical order. A subsystem is never omitted: an absent band is a row with its reason.",
+      "items": { "$ref": "#/$defs/subsystem_row" }
+    },
+    "national": { "$ref": "#/$defs/national_row" }
+  },
+  "required": ["target_date", "lane", "vintage_fidelity", "subsystems", "national"],
+  "additionalProperties": false,
+  "$defs": {
+    "placement": {
+      "title": "BandPlacement",
+      "description": "Where a settled total fell against the band. Both edges count as inside.",
+      "type": "string",
+      "enum": ["inside", "above", "below"]
+    },
+    "settled_unavailable_reason": {
+      "title": "SettledUnavailableReason",
+      "description": "Why a settled total is absent. `day_not_settled`: fewer than 24 settled hours - the ordinary state of yesterday before ONS's evening publication.",
+      "type": "string",
+      "enum": ["day_not_settled"]
+    },
+    "subsystem_row": {
+      "title": "ReplayCompareSubsystem",
+      "type": "object",
+      "properties": {
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "replayable": { "type": "boolean" },
+        "refusal_code": {
+          "type": ["string", "null"],
+          "description": "The replayable predicate's refusal code for this subsystem-day, or null when it is replayable."
+        },
+        "provenance": {
+          "type": ["string", "null"],
+          "enum": ["served", "fold_holdout", null]
+        },
+        "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+        "forecast_origin": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/forecast_origin" },
+            { "type": "null" }
+          ]
+        },
+        "day_total": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/band" }, { "type": "null" }],
+          "description": "The pinned publication's joint day band, read and never summed. Present on a replayable day and on a day refused only for its settled hours, because that clause runs after the held-out assertion."
+        },
+        "day_total_unavailable_reason": {
+          "type": ["string", "null"],
+          "description": "The refusal code standing in for the band, from the closed error enum. Set exactly when `day_total` is null."
+        },
+        "settled_total_mwh": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "The sum of 24 settled hours. A measurement, and measurements add."
+        },
+        "settled_unavailable_reason": {
+          "oneOf": [{ "$ref": "#/$defs/settled_unavailable_reason" }, { "type": "null" }]
+        },
+        "settled_hours": { "type": "integer", "minimum": 0, "maximum": 24 },
+        "settled_data_version": {
+          "type": ["string", "null"],
+          "description": "The greatest data_version among the settled rows. It moves when ONS restates any hour of the day."
+        },
+        "deviation_mwh": {
+          "type": ["number", "null"],
+          "description": "settled_total_mwh - day_total.p50. Signed; null when either is absent."
+        },
+        "placement": {
+          "oneOf": [{ "$ref": "#/$defs/placement" }, { "type": "null" }]
+        }
+      },
+      "required": [
+        "subsystem",
+        "replayable",
+        "refusal_code",
+        "provenance",
+        "vintage_fidelity",
+        "forecast_origin",
+        "day_total",
+        "day_total_unavailable_reason",
+        "settled_total_mwh",
+        "settled_unavailable_reason",
+        "settled_hours",
+        "settled_data_version",
+        "deviation_mwh",
+        "placement"
+      ],
+      "additionalProperties": false
+    },
+    "national_row": {
+      "title": "ReplayCompareNational",
+      "description": "The national figure. The settled total is the sum of four subsystems (`sum_of_four`), never ONS's SIN row. The band is the joint row the path ensemble wrote over the four day totals on one draw, read only when all four resolved the same publication.",
+      "type": "object",
+      "properties": {
+        "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+        "day_total": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/band" }, { "type": "null" }]
+        },
+        "day_total_unavailable_reason": {
+          "type": ["string", "null"],
+          "enum": [
+            "subsystem_forecast_missing",
+            "origins_differ",
+            "no_joint_ensemble",
+            null
+          ]
+        },
+        "settled_total_mwh": { "type": ["number", "null"], "minimum": 0 },
+        "settled_derivation": {
+          "type": ["string", "null"],
+          "enum": ["sum_of_four", null]
+        },
+        "settled_unavailable_reason": {
+          "oneOf": [{ "$ref": "#/$defs/settled_unavailable_reason" }, { "type": "null" }]
+        },
+        "deviation_mwh": { "type": ["number", "null"] },
+        "placement": {
+          "oneOf": [{ "$ref": "#/$defs/placement" }, { "type": "null" }]
+        }
+      },
+      "required": [
+        "vintage_fidelity",
+        "day_total",
+        "day_total_unavailable_reason",
+        "settled_total_mwh",
+        "settled_derivation",
+        "settled_unavailable_reason",
+        "deviation_mwh",
+        "placement"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -2371,6 +2371,141 @@ export interface RegistryPlantRow {
 }
 
 /**
+ * `GET /v1/replay/attribution/{date}` - what moved the replayed forecast at
+ * D-1, for exactly the publication the replay is pinned to. It decomposes the
+ * day's expectation against the artifact's matched background: it explains the
+ * model's number, never the settled outcome, never the forecast error and
+ * never the grid. A served attribution of the same day explains a different
+ * artifact and is never substituted for a missing one.
+ */
+export interface ReplayAttribution {
+  subsystem: Subsystem;
+  targetDate: CivilDate;
+  lane: string;
+  vintageFidelity: VintageFidelity;
+  forecastOrigin: ForecastOrigin | null;
+  attribution: ReplayPinnedAttribution | null;
+  /**
+   * `no_pinned_forecast`: the day has no band the replay would answer from.
+   * `not_published`: it has one, and no attribution was written for that
+   * publication. Set exactly when `attribution` is null.
+   */
+  attributionUnavailableReason: "no_pinned_forecast" | "not_published" | null;
+}
+
+export interface ReplayPinnedAttribution {
+  target: "expected_mwh_day";
+  totalAttributedMwh: number;
+  sumAbsAttributedMwh: number;
+  stderrMwh: number;
+  baselineExpectedMwh: number;
+  dayExpectedMwh: number;
+  driverGroupVersion: string;
+  driverGroupHash: string;
+  governingRuleAction: "annotate" | "demote" | "withhold" | null;
+  ruleCodes: string[];
+  /**
+   * All eight groups at day grain, ranked by |share|.
+   */
+  drivers: Driver[];
+}
+
+/**
+ * `GET /v1/replay/compare/{date}` - one replayed day across the four
+ * subsystems: each one's pinned D-1 day band beside what settled, and where
+ * the settled total fell against it. Every verdict is the replayable
+ * predicate's, judged on the same pinned rows a replay reads, so a band here
+ * is one `/v1/replay` would answer from. No percentage is published: one day
+ * cannot produce an accuracy.
+ */
+export interface ReplayCompare {
+  targetDate: CivilDate;
+  /**
+   * The lane every subsystem's band was resolved in, echoed.
+   */
+  lane: string;
+  vintageFidelity: VintageFidelity;
+  /**
+   * N, NE, SE, S - the canonical order. A subsystem is never omitted: an absent
+   * band is a row with its reason.
+   */
+  subsystems: ReplayCompareSubsystem[];
+  national: ReplayCompareNational;
+}
+
+/**
+ * Where a settled total fell against the band. Both edges count as inside.
+ */
+export type BandPlacement = "inside" | "above" | "below";
+
+/**
+ * Why a settled total is absent. `day_not_settled`: fewer than 24 settled
+ * hours - the ordinary state of yesterday before ONS's evening publication.
+ */
+export type SettledUnavailableReason = "day_not_settled";
+
+export interface ReplayCompareSubsystem {
+  subsystem: Subsystem;
+  replayable: boolean;
+  /**
+   * The replayable predicate's refusal code for this subsystem-day, or null when
+   * it is replayable.
+   */
+  refusalCode: string | null;
+  provenance: "served" | "fold_holdout" | null;
+  vintageFidelity: VintageFidelity;
+  forecastOrigin: ForecastOrigin | null;
+  /**
+   * The pinned publication's joint day band, read and never summed. Present on a
+   * replayable day and on a day refused only for its settled hours, because that
+   * clause runs after the held-out assertion.
+   */
+  dayTotal: Band | null;
+  /**
+   * The refusal code standing in for the band, from the closed error enum. Set
+   * exactly when `day_total` is null.
+   */
+  dayTotalUnavailableReason: string | null;
+  /**
+   * The sum of 24 settled hours. A measurement, and measurements add.
+   */
+  settledTotalMwh: number | null;
+  settledUnavailableReason: SettledUnavailableReason | null;
+  settledHours: number;
+  /**
+   * The greatest data_version among the settled rows. It moves when ONS restates
+   * any hour of the day.
+   */
+  settledDataVersion: string | null;
+  /**
+   * settled_total_mwh - day_total.p50. Signed; null when either is absent.
+   */
+  deviationMwh: number | null;
+  placement: BandPlacement | null;
+}
+
+/**
+ * The national figure. The settled total is the sum of four subsystems
+ * (`sum_of_four`), never ONS's SIN row. The band is the joint row the path
+ * ensemble wrote over the four day totals on one draw, read only when all four
+ * resolved the same publication.
+ */
+export interface ReplayCompareNational {
+  vintageFidelity: VintageFidelity;
+  dayTotal: Band | null;
+  dayTotalUnavailableReason:
+    | "subsystem_forecast_missing"
+    | "origins_differ"
+    | "no_joint_ensemble"
+    | null;
+  settledTotalMwh: number | null;
+  settledDerivation: "sum_of_four" | null;
+  settledUnavailableReason: SettledUnavailableReason | null;
+  deviationMwh: number | null;
+  placement: BandPlacement | null;
+}
+
+/**
  * What a day in the pre-F1 training block gets instead of a replay -
  * `docs/specs/replay.md`, "the observed-only view". Every artifact was fitted
  * on those days, so no honest counterfactual exists and the day is refused
@@ -2434,6 +2569,96 @@ export interface ReplayRefusal {
    */
   message: string;
   details: Record<string, unknown>;
+}
+
+/**
+ * `GET /v1/replay/timeline/{date}` - one subsystem's day at every served gate,
+ * and when each fact arrived. Day-ahead is the only horizon WattSteer
+ * forecasts at, so there is no intraday entry; the settled record is the last
+ * one, and a rewrite of it by ONS is an event of its own.
+ */
+export interface ReplayTimeline {
+  subsystem: Subsystem;
+  targetDate: CivilDate;
+  vintageFidelity: VintageFidelity;
+  /**
+   * One entry per served lane, early gate first.
+   */
+  gates: ReplayTimelineGate[];
+  settled: ReplayTimelineSettled;
+  /**
+   * Every instant the day's record moved, oldest first.
+   */
+  events: ReplayTimelineEvent[];
+}
+
+export interface ReplayTimelineGate {
+  lane: string;
+  gateProfile: GateProfile;
+  vintageFidelity: VintageFidelity;
+  replayable: boolean;
+  refusalCode: string | null;
+  provenance: "served" | "fold_holdout" | null;
+  forecastOrigin: ForecastOrigin | null;
+  /**
+   * True for a reconstruction: its `published_at` is the gate that would have
+   * been, not an instant anything was published at.
+   */
+  publishedAtIsCounterfactual: boolean | null;
+  /**
+   * When the day row was actually written - the publication for a served row,
+   * the backtest run for a reconstruction.
+   */
+  writtenAt: UtcInstant | null;
+  dayTotal: Band | null;
+  dayTotalUnavailableReason: string | null;
+  settledTotalMwh: number | null;
+  settledUnavailableReason: SettledUnavailableReason | null;
+  settledHours: number;
+  settledDataVersion: string | null;
+  /**
+   * settled_total_mwh - day_total.p50 of this gate's band. Computed here so no
+   * client subtracts one band's quantile from another's.
+   */
+  deviationMwh: number | null;
+  placement: BandPlacement | null;
+}
+
+/**
+ * The settled record the day is scored against, and its own history as far as
+ * the rows in force can tell it.
+ */
+export interface ReplayTimelineSettled {
+  settledTotalMwh: number | null;
+  settledUnavailableReason: SettledUnavailableReason | null;
+  settledHours: number;
+  dataVersion: string | null;
+  /**
+   * The oldest write among the rows in force. Not necessarily when the day first
+   * settled: a restated row's first arrival is superseded.
+   */
+  earliestWrittenAt: UtcInstant | null;
+  latestWrittenAt: UtcInstant | null;
+  entityRows: number;
+  /**
+   * Rows whose data_version is above 1 - values ONS changed after WattSteer
+   * first read them.
+   */
+  restatedRows: number;
+}
+
+export interface ReplayTimelineEvent {
+  kind:
+    | "forecast_published"
+    | "forecast_written"
+    | "settled_written"
+    | "settled_restated";
+  at: UtcInstant;
+  lane?: string;
+  gateProfile?: GateProfile;
+  counterfactual?: boolean;
+  rows?: number;
+  dataVersion?: string;
 }
 
 /**
@@ -3668,6 +3893,61 @@ export const WIRE_SHAPES = {
     coordinate: { wire: "coordinate", shape: "RegistryCoordinate" },
     locationSource: { wire: "location_source" },
   },
+  ReplayAttribution: {
+    subsystem: { wire: "subsystem" },
+    targetDate: { wire: "target_date" },
+    lane: { wire: "lane" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    forecastOrigin: { wire: "forecast_origin", shape: "ForecastOrigin" },
+    attribution: { wire: "attribution", shape: "ReplayPinnedAttribution" },
+    attributionUnavailableReason: { wire: "attribution_unavailable_reason" },
+  },
+  ReplayPinnedAttribution: {
+    target: { wire: "target" },
+    totalAttributedMwh: { wire: "total_attributed_mwh" },
+    sumAbsAttributedMwh: { wire: "sum_abs_attributed_mwh" },
+    stderrMwh: { wire: "stderr_mwh" },
+    baselineExpectedMwh: { wire: "baseline_expected_mwh" },
+    dayExpectedMwh: { wire: "day_expected_mwh" },
+    driverGroupVersion: { wire: "driver_group_version" },
+    driverGroupHash: { wire: "driver_group_hash" },
+    governingRuleAction: { wire: "governing_rule_action" },
+    ruleCodes: { wire: "rule_codes" },
+    drivers: { wire: "drivers", shape: "Driver", list: true },
+  },
+  ReplayCompare: {
+    targetDate: { wire: "target_date" },
+    lane: { wire: "lane" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    subsystems: { wire: "subsystems", shape: "ReplayCompareSubsystem", list: true },
+    national: { wire: "national", shape: "ReplayCompareNational" },
+  },
+  ReplayCompareSubsystem: {
+    subsystem: { wire: "subsystem" },
+    replayable: { wire: "replayable" },
+    refusalCode: { wire: "refusal_code" },
+    provenance: { wire: "provenance" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    forecastOrigin: { wire: "forecast_origin", shape: "ForecastOrigin" },
+    dayTotal: { wire: "day_total", shape: "Band" },
+    dayTotalUnavailableReason: { wire: "day_total_unavailable_reason" },
+    settledTotalMwh: { wire: "settled_total_mwh" },
+    settledUnavailableReason: { wire: "settled_unavailable_reason" },
+    settledHours: { wire: "settled_hours" },
+    settledDataVersion: { wire: "settled_data_version" },
+    deviationMwh: { wire: "deviation_mwh" },
+    placement: { wire: "placement" },
+  },
+  ReplayCompareNational: {
+    vintageFidelity: { wire: "vintage_fidelity" },
+    dayTotal: { wire: "day_total", shape: "Band" },
+    dayTotalUnavailableReason: { wire: "day_total_unavailable_reason" },
+    settledTotalMwh: { wire: "settled_total_mwh" },
+    settledDerivation: { wire: "settled_derivation" },
+    settledUnavailableReason: { wire: "settled_unavailable_reason" },
+    deviationMwh: { wire: "deviation_mwh" },
+    placement: { wire: "placement" },
+  },
   ReplayObservedOnly: {
     targetDate: { wire: "target_date" },
     subsystem: { wire: "subsystem" },
@@ -3691,6 +3971,52 @@ export const WIRE_SHAPES = {
     status: { wire: "status" },
     message: { wire: "message" },
     details: { wire: "details" },
+  },
+  ReplayTimeline: {
+    subsystem: { wire: "subsystem" },
+    targetDate: { wire: "target_date" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    gates: { wire: "gates", shape: "ReplayTimelineGate", list: true },
+    settled: { wire: "settled", shape: "ReplayTimelineSettled" },
+    events: { wire: "events", shape: "ReplayTimelineEvent", list: true },
+  },
+  ReplayTimelineGate: {
+    lane: { wire: "lane" },
+    gateProfile: { wire: "gate_profile" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    replayable: { wire: "replayable" },
+    refusalCode: { wire: "refusal_code" },
+    provenance: { wire: "provenance" },
+    forecastOrigin: { wire: "forecast_origin", shape: "ForecastOrigin" },
+    publishedAtIsCounterfactual: { wire: "published_at_is_counterfactual" },
+    writtenAt: { wire: "written_at" },
+    dayTotal: { wire: "day_total", shape: "Band" },
+    dayTotalUnavailableReason: { wire: "day_total_unavailable_reason" },
+    settledTotalMwh: { wire: "settled_total_mwh" },
+    settledUnavailableReason: { wire: "settled_unavailable_reason" },
+    settledHours: { wire: "settled_hours" },
+    settledDataVersion: { wire: "settled_data_version" },
+    deviationMwh: { wire: "deviation_mwh" },
+    placement: { wire: "placement" },
+  },
+  ReplayTimelineSettled: {
+    settledTotalMwh: { wire: "settled_total_mwh" },
+    settledUnavailableReason: { wire: "settled_unavailable_reason" },
+    settledHours: { wire: "settled_hours" },
+    dataVersion: { wire: "data_version" },
+    earliestWrittenAt: { wire: "earliest_written_at" },
+    latestWrittenAt: { wire: "latest_written_at" },
+    entityRows: { wire: "entity_rows" },
+    restatedRows: { wire: "restated_rows" },
+  },
+  ReplayTimelineEvent: {
+    kind: { wire: "kind" },
+    at: { wire: "at" },
+    lane: { wire: "lane", optional: true },
+    gateProfile: { wire: "gate_profile", optional: true },
+    counterfactual: { wire: "counterfactual", optional: true },
+    rows: { wire: "rows", optional: true },
+    dataVersion: { wire: "data_version", optional: true },
   },
   Replay: {
     targetDate: { wire: "target_date" },

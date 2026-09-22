@@ -1,6 +1,6 @@
 # Spec — WattSteer Public API Surface
 
-> One gateway, twenty-four routes, and a boundary drawn so that the ML service
+> One gateway, twenty-seven routes, and a boundary drawn so that the ML service
 > being down is a stale timestamp rather than an outage.
 >
 > **Upstream specs.** [`forecaster.md`](forecaster.md) fixes the content of a
@@ -488,6 +488,9 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 | 21 | `GET /v1/grid/context` | ONS's day-ahead programme against the settled balance, plus corridors and availability | Overview's plan-against-outcome panel |
 | 22 | `GET /v1/similar-days` | the past days whose day-ahead programme most resembled this one | Explain's analogue |
 | 23 | `POST /v1/feedback` | nothing — it **files** a reader's verdict about one answer, for a later retrain | the thumbs on Overview, Explain and Time Machine |
+| 25 | `GET /v1/replay/compare/<date>` | four subsystems' pinned D−1 day bands beside what settled, plus the national joint band and the sum of four | Time Machine dashboard (`/app/time-machine`) |
+| 26 | `GET /v1/replay/timeline/<date>` | one subsystem's day at both served gates, and when each forecast and the settled record were written or rewritten | Time Machine dashboard |
+| 27 | `GET /v1/replay/attribution/<date>` | the stored attribution of exactly the publication a replay is pinned to, backtest reconstructions included | Time Machine dashboard |
 
 > **Corrected in api-surface 27: this list was fourteen rows over seventeen
 > served paths.** The three added above are all in `apps/api/src/api`, mounted,
@@ -1475,6 +1478,7 @@ key built from those has no manual invalidation path to forget to call.
 | `/v1/optimize` (`POST`) | `no-store` | the same Redis key | A POST is not shared-cacheable; Redis does the work |
 | `/v1/replay` | `public, max-age=600` | Redis `replay:v1:<scenario_hash>:<date>:<origin>:<optimizer_build>`; ETag `W/"<scenario_hash>:<date>:<origin>:<optimizer_build>:<obs_data_version>"` | The one row where the key and the validator are **not** the same list — see below |
 | `/v1/replay/days`, `/v1/backtest` | `public, max-age=3600` | `W/"<featured-days computation id>"` | Recomputed nightly |
+| `/v1/replay/compare/<date>`, `/v1/replay/timeline/<date>`, `/v1/replay/attribution/<date>` | `public, max-age=600` | `W/"<date>:<the request's axes>:<every origin instant, artifact, settled data_version and write instant on the body>"` | Reads, under a solve's prefix and metered as reads; the forecast half is pinned and the settled half can still move, as on `/v1/replay` |
 | `/v1/plants` | `public, max-age=86400` | `W/"<registry snapshot ingested_at>"` | Daily SIGA/ONS snapshot |
 | `/v1/canonical/<read>` | `no-store` | — | An as-of answer with no validator; see below |
 | `/v1/canonical` (the manifest) | `public, max-age=3600` | `W/"<manifest digest>"` | A build constant, and the only cacheable thing under that path |
@@ -2238,7 +2242,7 @@ validates against the schema.
   v1 and the whole caching and rate-limiting posture above depends on their
   absence. Adding them later is additive: a `Vary: Authorization` and a per-key
   budget tier.
-- **GraphQL, tRPC, gRPC.** The surface is twenty-four routes — twenty-two of them read-shaped, plus row 19, which mints a credential rather than reading anything, and row 23, which files one — with
+- **GraphQL, tRPC, gRPC.** The surface is twenty-seven routes — twenty-five of them read-shaped, plus row 19, which mints a credential rather than reading anything, and row 23, which files one — with
   four fixed-by-spec POST contracts and a static-exported client. REST plus a
   generated typed client is the shape with the least machinery.
 - **Webhooks, subscriptions, SSE, WebSockets.** Nothing *this gateway serves*

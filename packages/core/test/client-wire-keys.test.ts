@@ -66,6 +66,30 @@ const CALLS: ReadonlyArray<{
       }),
   },
   {
+    name: "replayCompare",
+    path: "/v1/replay/compare/2025-11-12",
+    keys: ["lane"],
+    invoke: (c) =>
+      c.replayCompare({ date: "2025-11-12", lane: "dessem_free_v1__gate_late__thr5" }),
+  },
+  {
+    name: "replayTimeline",
+    path: "/v1/replay/timeline/2025-11-13",
+    keys: ["subsystem"],
+    invoke: (c) => c.replayTimeline({ date: "2025-11-13", subsystem: "SE" }),
+  },
+  {
+    name: "replayAttribution",
+    path: "/v1/replay/attribution/2025-11-14",
+    keys: ["lane", "subsystem"],
+    invoke: (c) =>
+      c.replayAttribution({
+        date: "2025-11-14",
+        subsystem: "S",
+        lane: "dessem_free_v1__gate_early__thr5",
+      }),
+  },
+  {
     name: "gridContext",
     path: "/v1/grid/context",
     keys: ["date", "subsystem"],
