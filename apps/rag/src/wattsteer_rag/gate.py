@@ -217,6 +217,12 @@ def _claim_failures(claim: str, accepted: list[dict], record: Record) -> list[Ga
                 "claim_without_the_figure", "the question asks how much and the claim states no figure"
             )
         ]
+    if ASKS_DURATION.search(record.question) and not DURATION.search(claim):
+        return [
+            GateFailure(
+                "claim_without_the_figure", "the question asks how long and the claim states no duration"
+            )
+        ]
     return []
 
 
@@ -267,6 +273,27 @@ def conclusion_hits(text: str) -> list[str]:
 ASKS_FIGURE = re.compile(
     r"\bquant[oa]s?\b|\bqual (?:foi|era|é|o|a)\s+(?:o |a )?(?:valor|gera[cç][aã]o|carga|produ[cç][aã]o"
     r"|armazenamento|demanda|limite|interc[aâ]mbio|energia|pot[eê]ncia|redu[cç][aã]o|m[aá]xima|m[ií]nima)",
+    re.IGNORECASE,
+)
+
+# A question for how long, or by when, and only that: "o que ... e em que prazo"
+# is two questions, and the claim about the first need not carry the date.
+# Measured on 22/09/2026, on main as well: "em que intervalos são feitos os
+# programas de geração" (30 minutes) was answered with a clause whose only
+# numbers were "Submódulo 4.1" and "4.2". A duration or a date answers it, in
+# figures or in words ("dez minutos"); every stored correct answer had one.
+ASKS_DURATION = re.compile(
+    r"(?<!\be )\b(?:em que intervalos?|em que prazo|com que (?:anteced[eê]ncia|frequ[eê]ncia|periodicidade)"
+    r"|por quanto tempo|a cada quant)",
+    re.IGNORECASE,
+)
+_AMOUNT = (
+    r"(?:\d+(?:[.,]\d+)?|uma?|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|quinze"
+    r"|vinte|trinta|quarenta|cinquenta|sessenta|noventa|cem|cento e \w+)"
+)
+DURATION = re.compile(
+    rf"\b{_AMOUNT}\s*(?:min(?:uto)?s?|h(?:ora)?s?|dias?|semanas?|m[eê]s(?:es)?|anos?)\b"
+    r"|\b\d{1,2}/\d{1,2}/\d{4}\b|\bmeia hora\b",
     re.IGNORECASE,
 )
 

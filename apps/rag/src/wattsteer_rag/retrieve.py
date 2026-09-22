@@ -185,7 +185,14 @@ async def search(
             # and the vector arm returned nothing, silently. Iterative scan
             # keeps reading the index, in exact distance order, until the
             # filtered rows fill the limit (pgvector 0.8).
+            #
+            # And the graph is approximate: with the default ef_search of 40, the
+            # chunk nearest to "quais motivos ... no submercado Nordeste" (cosine
+            # 0.586) was not reached at all, and two of its neighbours at 0.44
+            # were. At 200 the order equals the exact scan's, measured at 13 ms
+            # against 15 over 18,364 chunks.
             await conn.execute("SET LOCAL hnsw.iterative_scan = strict_order")
+            await conn.execute("SET LOCAL hnsw.ef_search = 200")
             vector_rows = await conn.fetch(
                 f"""
                 SELECT c.id, c.document_id, c.text, c.locator, c.section_path,

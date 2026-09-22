@@ -502,7 +502,8 @@ def test_the_vector_search_reads_past_what_the_filters_remove():
 
     source = inspect.getsource(retrieve.search)
     assert "SET LOCAL hnsw.iterative_scan = strict_order" in source
-    assert source.index("hnsw.iterative_scan") < source.index("c.embedding <=>")
+    assert "SET LOCAL hnsw.ef_search = 200" in source
+    assert source.index("hnsw.ef_search") < source.index("c.embedding <=>")
 
 
 def test_an_instant_value_does_not_answer_for_the_day():
@@ -523,3 +524,33 @@ def test_an_instant_value_does_not_answer_for_the_day():
     assert _instant_failure(peak, asks_day).code == "citation_instant_value"
     assert _instant_failure(peak, asks_peak) is None
     assert _instant_failure(_ipdo("| Eólica | 12.197 |", "1 - Balanço de Energia"), asks_day) is None
+
+
+def test_a_question_for_a_duration_is_answered_with_one():
+    """Measured on 22/09/2026, on main and on this branch: asked in what
+    intervals the daily programme is made (30 minutes), the answer was a clause
+    of Submódulo 4.5 whose only numbers were "Submódulo 4.1" and "4.2". A number
+    is not an answer to "em que intervalos": a duration or a date is, written in
+    figures or in words ("dez minutos"). Every stored correct answer to such a
+    question carries one. A question that also asks what ("o que ... e em que
+    prazo") may be answered in two claims, one of them without the date."""
+    from wattsteer_rag.gate import Record, check_claim
+
+    clause = "O ONS analisa os programas de geração conforme Submódulo 4.1 e Submódulo 4.2."
+    by_chunk = {"c1": _hit(clause)}
+    item = {"claim": clause, "citations": [{"chunk_id": "c1", "quote": clause}]}
+    intervals = Record(
+        question="Segundo o Submódulo 4.5, em que intervalos são feitos os programas de geração?"
+    )
+    claim, failures = check_claim(item, by_chunk, intervals)
+    assert claim is None and failures[-1].code == "claim_without_the_figure"
+
+    for answer in (
+        "O PDP contém o programa de geração, em intervalo de 30 minutos, das usinas hidrelétricas.",
+        "Para toda reprogramação, o ONS faz contato com os centros de operação "
+        "com antecedência mínima de dez minutos.",
+    ):
+        ok = {"claim": answer, "citations": [{"chunk_id": "c2", "quote": answer}]}
+        assert check_claim(ok, {"c2": _hit(answer)}, intervals)[0] is not None, answer
+    both = Record(question="No RAP, o que o agente ARGO V deve esclarecer sobre a SE e em que prazo?")
+    assert check_claim(item, by_chunk, both)[0] is not None
