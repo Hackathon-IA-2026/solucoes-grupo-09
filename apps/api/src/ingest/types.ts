@@ -210,6 +210,20 @@ export interface CurtailmentParse {
    * "empty" distinguishable, which a nullable string alone cannot do.
    */
   hasDescriptionColumn: boolean;
+  /**
+   * Whether `val_geracaonaorealizadaapurada` — GNRa — was in this file's header.
+   *
+   * The same distinction as above, for the field that *is* the curtailed
+   * energy. It matters more than the description's does: absent, the adapter
+   * derives the quantity from ONS's own published definition (reference minus
+   * verified, floored at zero, in half-hours ONS marked as limited), and a
+   * reader of a stored row is entitled to know which of the two produced it.
+   *
+   * The column post-dates the captured fixtures and the archived payloads, so
+   * it is not required — requiring it would reject files this adapter used to
+   * read, which is the trap `dsc_restricao` documents one field up.
+   */
+  hasNotGeneratedColumn: boolean;
 }
 
 /**

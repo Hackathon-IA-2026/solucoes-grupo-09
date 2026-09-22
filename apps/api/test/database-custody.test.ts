@@ -147,7 +147,18 @@ suite("raw-payload custody · archive, republication, retention (real Postgres)"
   it("surfaces a re-publication of a closed period instead of absorbing it", async () => {
     // ONS rewrites the month under the same filename, with no version marker —
     // the behaviour the whole refresh regime exists for.
-    body = original.replace("163.261", "170.500");
+    /*
+      The **reference** generation, not `val_geracaolimitada`.
+
+      This mutated `163.261` — the ceiling — while that field was what the
+      adapter stored as curtailed energy. It is not: ONS's dictionary calls it
+      "o limite para a geração estabelecido pelo ONS em Tempo Real", and the
+      curtailed energy is `val_geracaonaorealizadaapurada`, derived here from
+      reference minus verified because this fixture predates that column. So a
+      change to the ceiling now revises nothing, and a test that asserted a
+      revision was asserting the defect.
+    */
+    body = original.replace("355.262", "370.500");
     etag = '"second-vintage"';
 
     const ingest = createConstrainedOffIngestor({ db, fetch: stubFetch, archive });
@@ -230,9 +241,18 @@ suite("raw-payload custody · archive, republication, retention (real Postgres)"
   });
 
   it("keeps what produced a revision and drops what did not", async () => {
-    // A third state whose bytes reproduce the second exactly: a new fingerprint,
-    // no new facts. This is the overwhelming majority of what a sweep finds.
-    body = original.replace("163.261", "170.500");
+    /*
+      A third state whose **facts** reproduce the second: a new fingerprint, no
+      new rows. This is the overwhelming majority of what a sweep finds.
+
+      It is built on top of the second vintage and moves `val_geracaolimitada`,
+      which is a better fixture than the byte-identical one it replaces: that
+      field is ONS's *ceiling* and this adapter stores no quantity from it, so
+      a file differing only there is genuinely a new publication of the same
+      facts. The retention pass is then deciding on the property it exists for
+      rather than on two identical files.
+    */
+    body = original.replace("355.262", "370.500").replace("163.261", "170.500");
     etag = '"third-fingerprint"';
     const ingest = createConstrainedOffIngestor({ db, fetch: stubFetch, archive });
     const unproductive = await ingest(

@@ -34,6 +34,11 @@ import type {
  *    so by leaving `val_geracaolimitada`, the reason and the origin empty. The
  *    balanço adapter rejects an empty measure; here that would reject almost
  *    every row.
+ * 4. **The curtailed energy is `val_geracaonaorealizadaapurada`, not
+ *    `val_geracaolimitada`.** One is a ceiling and the other is the shortfall
+ *    under it; this adapter read the first for months and every observed figure
+ *    in the product was ~2.9× too high. The argument, with ONS's own dictionary
+ *    quoted and a row that separates them, is at the parse site.
  */
 
 /** ONS CKAN package ids for the two entity-grain datasets. */
@@ -158,11 +163,54 @@ function readCause(
   };
 }
 
+/** ONS's own name for the settled shortfall. Absent in files ONS has not rewritten. */
+const NOT_GENERATED_COLUMN = "val_geracaonaorealizadaapurada";
+
+/**
+ * The curtailed energy of one half-hour, in MWmed.
+ *
+ * `val_geracaonaorealizadaapurada` — GNRa — is the published quantity and is
+ * used wherever ONS has written it. It is **not** required, for the reason
+ * `dsc_restricao` is not: the column post-dates the captured fixtures and the
+ * archived payloads, and requiring it would reject a file this adapter used to
+ * read. `hasNotGenerated` is the file-level flag that tells "ONS left it empty
+ * because the half-hour was unrestricted" from "this file has no such column",
+ * which is the same distinction that flag exists for one field over.
+ *
+ * Where the column is absent the value is **derived from ONS's own
+ * definition** rather than guessed: the dictionary says GNRa is "a diferença
+ * entre a geração de referência e a geração verificada (se menor que zero,
+ * GNRa = 0), nos períodos em que houve limitação de geração". So: the
+ * difference, floored at zero, and only in half-hours ONS marked as limited —
+ * a non-null `val_geracaolimitada` is exactly that mark, per the same
+ * dictionary ("se o campo for nulo, não houve limitação estabelecida pelo ONS
+ * naquele patamar").
+ *
+ * Applying a published formula is not inventing a number. Reading the ceiling
+ * as the shortfall was, and that is what this replaces.
+ */
+function curtailedMwmed(
+  notGenerated: number | null,
+  hasNotGenerated: boolean,
+  limited: number | null,
+  reference: number | null,
+  verified: number,
+): number {
+  if (hasNotGenerated) {
+    return notGenerated ?? 0;
+  }
+  if (limited === null || reference === null) {
+    return 0;
+  }
+  return Math.max(0, reference - verified);
+}
+
 /** Turn one source row into a half-hourly record, or the reason it cannot be. */
 function normaliseRow(
   row: Record<string, string>,
   rowNumber: number,
   hasDescription: boolean,
+  hasNotGenerated: boolean,
 ): { half: HalfHour } | { rejected: RejectedRow } {
   const reject = (reason: RejectionReason, detail: string) => ({
     rejected: { reason, rowNumber, detail },
@@ -210,11 +258,51 @@ function normaliseRow(
     const value = parseDecimal(row[column]);
     return value;
   };
+  /*
+    **`val_geracaolimitada` is a ceiling, and this file read it as the cut.**
+
+    ONS's published dictionary for `restricao_coff_eolica_usi`:
+
+      val_geracaolimitada — "Geração limitada. Representa o **limite** para a
+      geração da usina/conjunto estabelecido pelo ONS em Tempo Real, em MWmed.
+      Se o campo for nulo, não houve limitação estabelecida pelo ONS naquele
+      patamar."
+
+      val_geracaonaorealizadaapurada — "Geração Não Realizada Apurada (GNRa).
+      Representa a estimativa de geração frustrada da usina ou conjunto de
+      usinas, obtida pela diferença entre a geração de referência e a geração
+      verificada (se menor que zero, GNRa = 0), nos períodos em que houve
+      limitação de geração."
+
+    The first is how much the plant was *allowed* to generate; the second is how
+    much it did not generate because of that. Conj. Paulino Neves, 2026-09-01
+    10:00, reason ENE: verified 319,268 · **limitada 322,000** · reference
+    428,899 · **GNRa 109,631**, and 428,899 − 319,268 is 109,631 exactly.
+
+    Reading the ceiling as the cut is what made every observed figure in this
+    product roughly **2.9×** too high — `docs/todo.md` 5b measured 2–3× and
+    could not find the cause, because the arithmetic was right and the field was
+    not. It is also why "21.940 MW curtailed against 30.828 MW of installed
+    wind" looked impossible: a ceiling is naturally close to what the fleet
+    actually generated, so summing ceilings produces a number the size of
+    generation itself.
+
+    `val_geracaolimitada` stays parsed and stays required — its presence is
+    still the marker of a half-hour ONS restricted at all — but it is not a
+    quantity this adapter reports.
+  */
   const limited = optional("val_geracaolimitada");
   if (limited !== null && Number.isNaN(limited)) {
     return reject(
       "unparsable_value",
       `val_geracaolimitada=${JSON.stringify(row.val_geracaolimitada)}`,
+    );
+  }
+  const notGenerated = optional("val_geracaonaorealizadaapurada");
+  if (notGenerated !== null && Number.isNaN(notGenerated)) {
+    return reject(
+      "unparsable_value",
+      `val_geracaonaorealizadaapurada=${JSON.stringify(row.val_geracaonaorealizadaapurada)}`,
     );
   }
   const reference = optional("val_geracaoreferencia");
@@ -251,7 +339,12 @@ function normaliseRow(
       },
       validTime: zoned.instant,
       verifiedGenerationMwh: mwmedToMwh(generation, SOURCE_INTERVAL_MINUTES),
-      constrainedOffMwh: mwmedToMwh(limited ?? 0, SOURCE_INTERVAL_MINUTES),
+      // GNRa, never `val_geracaolimitada` — see above. Empty means the
+      // half-hour was not restricted, and zero is the honest reading of it.
+      constrainedOffMwh: mwmedToMwh(
+        curtailedMwmed(notGenerated, hasNotGenerated, limited, reference, generation),
+        SOURCE_INTERVAL_MINUTES,
+      ),
       referenceGenerationMwh:
         reference === null ? null : mwmedToMwh(reference, SOURCE_INTERVAL_MINUTES),
       finalReferenceGenerationMwh:
@@ -368,6 +461,7 @@ export function parseConstrainedOffCsv(
   }
   assertColumns(columns);
   const hasDescriptionColumn = columns.includes(DESCRIPTION_COLUMN);
+  const hasNotGeneratedColumn = columns.includes(NOT_GENERATED_COLUMN);
 
   const halves: HalfHour[] = [];
   const rejected: RejectedRow[] = [];
@@ -378,6 +472,7 @@ export function parseConstrainedOffCsv(
       toRecord(columns, cell),
       index + 1,
       hasDescriptionColumn,
+      hasNotGeneratedColumn,
     );
     if ("rejected" in outcome) {
       rejected.push(outcome.rejected);
@@ -393,5 +488,6 @@ export function parseConstrainedOffCsv(
     rejected,
     columns,
     hasDescriptionColumn,
+    hasNotGeneratedColumn,
   };
 }

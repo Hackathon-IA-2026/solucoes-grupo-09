@@ -217,7 +217,44 @@ is above 90%, and the number only counts on a fresh set.
       transparency and reproducibility, his 16/09 reply calls it the operation
       procedures manual.
 
-### 5b. The observed curtailment is too high by roughly 2–3×
+### 5b. ~~The observed curtailment is too high by roughly 2–3×~~ — SETTLED 22/09
+
+**The adapter read the wrong ONS field.** `val_geracaolimitada` is the
+*ceiling* ONS set, not the energy cut under it. From ONS's own published
+dictionary for `restricao_coff_eolica_usi`:
+
+| field | ONS's definition |
+|---|---|
+| `val_geracaolimitada` | "Geração limitada. Representa o **limite** para a geração da usina/conjunto estabelecido pelo ONS em Tempo Real, em MWmed." |
+| `val_geracaonaorealizadaapurada` (GNRa) | "Geração Não Realizada Apurada… a estimativa de geração frustrada, obtida pela **diferença entre a geração de referência e a geração verificada** (se menor que zero, GNRa = 0), nos períodos em que houve limitação de geração." |
+
+One published row settles it — Conj. Paulino Neves, 2026-09-01 10:00, ENE:
+
+| verificada | limitada | referência | GNRa |
+|---|---|---|---|
+| 319,268 | **322,000** | 428,899 | **109,631** |
+
+428,899 − 319,268 = 109,631 exactly, and 322,000 / 109,631 = **2,9×** — the
+2–3× measured empirically, with a cause. It also explains the impossibility
+that first raised it: a ceiling is naturally close to what the fleet actually
+generated, so summing ceilings produces a number the size of generation itself,
+which is how "21.940 MW curtailed against 30.828 MW installed" appeared.
+
+The "37 % gap" between `constrained_off` and `reference − verified` was never a
+gap: GNRa **is** `reference − verified`, and the two were different quantities.
+
+Fixed in `apps/api/src/ingest/ons/constrained-off.ts`: GNRa where ONS wrote it,
+and where the column predates the file, ONS's own formula — the difference,
+floored at zero, only in half-hours ONS marked as limited.
+
+- [x] Settle what `val_geracaolimitada` means against `val_geracaoreferencia`
+      and `val_geracao`. **Answered by ONS's data dictionary, not by Bisogno.**
+- [ ] **Re-ingest the history.** Every stored `constrained_off_mwh` is the
+      ceiling and is ~2,9× too high. The code is right and the database is not
+      until a `recent` + `history` sweep has rewritten it.
+- [ ] Until it has, the caveat below still stands.
+
+### 5b-old. The measurement that found it
 
 Measured 21/09 against production, and **it is systematic rather than one
 extreme day**. Every day of 01–16/09 reads 150–220 GWh for Nordeste.
