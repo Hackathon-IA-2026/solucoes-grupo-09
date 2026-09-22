@@ -35,6 +35,56 @@ def test_each_ipdo_paragraph_knows_its_submarket_even_on_the_next_page():
     assert norte.section_path == "Submercado Norte" and norte.page_start == 4
 
 
+IPDO_HIGHLIGHTS_P3 = (
+    "4 - Destaques da Operação\n\n"
+    "   * CARGA E PRODUÇÃO DE ENERGIA POR SUBMERCADO\n\n"
+    "   Submercado Sul:\n\n"
+    "     A geração hidráulica foi inferior ao programado devido à carga inferior.\n\n"
+    "   Submercado Norte:\n\n"
+    "     A geração hidráulica foi superior ao programado para atendimento à ponta.\n\n"
+    "   * RESTRIÇÃO DE GERAÇÃO RENOVÁVEL\n\n"
+    "   Submercado Sul:\n\n"
+    "       Valor máximo: 24 MW.\n"
+    "       Período: Das 06h56 às 13h56.\n"
+    "       Motivos: Controle de frequência.\n"
+)
+IPDO_HIGHLIGHTS_P4 = (
+    "   Submercado Nordeste:\n\n"
+    "     Valor máximo: 13.671 MW.\n"
+    "     Período: Da 00h00 às 23h59.\n\n"
+    "   * INTERCÂMBIO INTERNACIONAL\n\n"
+    "       Nada a relatar.\n"
+)
+
+
+def test_an_ipdo_submarket_knows_which_highlight_it_is_under():
+    """Measured on 20/09/2026: asked for the IPDO's main occurrence, the answer
+    quoted the right document and the wrong section. The highlights repeat
+    "Submercado Sul:" under each starred heading, and the heading itself was
+    read as prose, so it was glued to the end of the previous submarket: the
+    Norte production paragraph carried the words "RESTRIÇÃO DE GERAÇÃO
+    RENOVÁVEL" and the chunk that holds the 24 MW did not, and both Sul chunks
+    had the same section. The heading belongs to every submarket under it,
+    including the one continued on the next page, and to none above it."""
+    chunks = chunk_pages(
+        [
+            {"page_no": 3, "markdown": IPDO_HIGHLIGHTS_P3, "blocks": []},
+            {"page_no": 4, "markdown": IPDO_HIGHLIGHTS_P4, "blocks": []},
+        ]
+    )
+    production = next(chunk for chunk in chunks if "ponta" in chunk.text)
+    assert production.section_path == "CARGA E PRODUÇÃO DE ENERGIA POR SUBMERCADO > Submercado Norte"
+    assert "RESTRIÇÃO" not in production.text
+    sul = next(chunk for chunk in chunks if "24 MW" in chunk.text)
+    assert sul.section_path == "RESTRIÇÃO DE GERAÇÃO RENOVÁVEL > Submercado Sul"
+    assert sul.text.startswith("* RESTRIÇÃO DE GERAÇÃO RENOVÁVEL")
+    nordeste = next(chunk for chunk in chunks if "13.671" in chunk.text)
+    assert nordeste.section_path == "RESTRIÇÃO DE GERAÇÃO RENOVÁVEL > Submercado Nordeste"
+    assert nordeste.page_start == 4 and "RESTRIÇÃO DE GERAÇÃO RENOVÁVEL" in nordeste.text
+    exchange = next(chunk for chunk in chunks if "Nada a relatar" in chunk.text)
+    assert exchange.section_path == "INTERCÂMBIO INTERNACIONAL"
+
+
 def _hit(text: str, section: str | None = None) -> Hit:
     return Hit(
         chunk_id="c1",
@@ -183,3 +233,118 @@ def test_a_widened_pointer_still_accepts_the_quote_that_brings_the_row():
     )
     assert not _points_to_table(f"| 1 | {preamble} |\n| 1.1 | Mauriti II | - 75 |")
     assert not _points_to_table(f"Para controlar o carregamento, {preamble} Mauriti II - 75")
+
+
+def _ipdo(text: str, section: str | None) -> Hit:
+    return Hit(
+        "c1",
+        "d1",
+        text,
+        {"page": 3, "section": section},
+        section,
+        "IPDO",
+        "IPDO",
+        "u",
+        "IPDO 2026-09-14",
+        None,
+        None,
+        "x",
+        1.0,
+    )
+
+
+def test_an_ipdo_answer_comes_from_the_highlight_and_submarket_asked():
+    """Reported by the domain specialist on 20/09/2026: asked for the main
+    occurrence in the IPDO of 14/09, the answer quoted the stored-energy section
+    of the same document. The document was right and the section was wrong, and
+    nothing refused it because every quote was literal. The report is one
+    template, so a question that names one of its highlights, or one submarket,
+    names the only part of it that can answer."""
+    from wattsteer_rag.gate import Record, _section_failure, check_claim
+
+    occurrence = Record(question="No IPDO de 14/09/2026, qual foi a principal ocorrência registrada no SIN?")
+    stored = _ipdo(
+        "3 - Variação de Energia Armazenada | Sudeste | -0,4 |", "3 - Variação de Energia Armazenada"
+    )
+    assert _section_failure(stored, occurrence).code == "citation_other_section"
+    assert _section_failure(_ipdo("* OCORRÊNCIAS\n\nNada a relatar.", "OCORRÊNCIAS"), occurrence) is None
+    wrong = {
+        "claim": "A energia armazenada variou -0,4.",
+        "citations": [{"chunk_id": "c1", "quote": stored.text}],
+    }
+    claim, failures = check_claim(wrong, {"c1": stored}, occurrence)
+    assert claim is None and failures[-1].code == "citation_other_section"
+
+    south = Record(
+        question=(
+            "No IPDO de 21/09/2026, qual foi o valor máximo da restrição de geração renovável "
+            "no submercado Sul?"
+        )
+    )
+    production = _ipdo(
+        "Submercado Sul:\n\nA geração hidráulica foi inferior ao programado.",
+        "CARGA E PRODUÇÃO DE ENERGIA POR SUBMERCADO > Submercado Sul",
+    )
+    north = _ipdo(
+        "Submercado Norte:\n\nValor máximo: 303 MW.", "RESTRIÇÃO DE GERAÇÃO RENOVÁVEL > Submercado Norte"
+    )
+    right = _ipdo(
+        "Submercado Sul:\n\nValor máximo: 24 MW.", "RESTRIÇÃO DE GERAÇÃO RENOVÁVEL > Submercado Sul"
+    )
+    assert _section_failure(production, south).code == "citation_other_section"
+    assert _section_failure(north, south).code == "citation_other_section"
+    assert _section_failure(right, south) is None
+
+
+def test_the_section_lock_stays_out_of_what_it_cannot_read():
+    """It only knows the IPDO's highlights. A question that names neither a
+    highlight nor a submarket, and any other document, are left to the other
+    gates, or it would refuse the tables that answer load and generation."""
+    from wattsteer_rag.gate import Record, _section_failure
+
+    table = _ipdo("| Carga | Sul | 14.611 |", "1 - Balanço de Energia")
+    assert (
+        _section_failure(table, Record(question="Qual foi a carga verificada no IPDO de 14/09/2026?")) is None
+    )
+    southeast = Record(
+        question="Qual foi a restrição de geração renovável no submercado Sudeste/Centro-Oeste em 21/09/2026?"
+    )
+    sul = _ipdo("Valor máximo: 24 MW.", "RESTRIÇÃO DE GERAÇÃO RENOVÁVEL > Submercado Sul")
+    assert _section_failure(sul, southeast).code == "citation_other_section"
+    bdo = Hit(
+        "c1",
+        "d1",
+        "| Sul | 14.611 |",
+        {"page": 1},
+        None,
+        "BDO",
+        "BDO",
+        "u",
+        "BDO 2026-09-14 02",
+        None,
+        None,
+        "x",
+        1.0,
+    )
+    assert _section_failure(bdo, southeast) is None
+
+
+def test_the_section_lock_reads_names_and_editions_as_they_are():
+    """Review of this change, each case run against the first version, which
+    refused all four: a state named after a region is not a submarket, "ocorreu"
+    is not an occurrence, the 2025 editions split OCORRÊNCIAS in two, and a
+    highlight that only restates a table does not lock the table out."""
+    from wattsteer_rag.gate import Record, _section_failure
+
+    nordeste = _ipdo("Valor máximo: 13.671 MW.", "RESTRIÇÃO DE GERAÇÃO RENOVÁVEL > Submercado Nordeste")
+    in_a_state = Record(question="Houve restrição de geração renovável no Rio Grande do Norte em 21/09/2026?")
+    assert _section_failure(nordeste, in_a_state) is None
+
+    balance = _ipdo("| Carga | Sul | 14.611 |", "1 - Balanço de Energia")
+    assert _section_failure(balance, Record(question="O que ocorreu com a carga no IPDO de 14/09?")) is None
+    production = Record(question="Qual a carga e produção de energia por submercado no IPDO de 14/09?")
+    assert _section_failure(balance, production) is None
+
+    network = _ipdo("Desligamento da LT 500 kV.", "OCORRÊNCIAS NA REDE DE OPERAÇÃO")
+    occurrence = Record(question="Qual foi a principal ocorrência no IPDO de 27/10/2025?")
+    assert _section_failure(network, occurrence) is None

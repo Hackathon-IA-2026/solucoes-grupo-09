@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+from .chunk import TOPIC_SEPARATOR
 from .retrieve import Hit, codes_in
 
 MAX_QUOTE_CHARS = 600
@@ -310,7 +311,67 @@ def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
 
 
 def _off_topic(hit: Hit, record: Record) -> GateFailure | None:
-    return _relevance_failure(hit, record) or _month_to_date_failure(hit, record)
+    return (
+        _relevance_failure(hit, record)
+        or _month_to_date_failure(hit, record)
+        or _section_failure(hit, record)
+    )
+
+
+# The IPDO highlights whose content exists nowhere else in the report: the
+# restriction's value, period and reasons, and the occurrences. The others
+# ("CARGA E PRODUÇÃO ...", "INTERCÂMBIO INTERNACIONAL") restate figures the
+# report's tables also hold, so naming them must not refuse the table. Read as a
+# prefix, because the 2025 editions split the second one into "OCORRÊNCIAS NA
+# REDE DE OPERAÇÃO" and "... DE DISTRIBUIÇÃO".
+IPDO_HIGHLIGHTS = ("RESTRIÇÃO DE GERAÇÃO RENOVÁVEL", "OCORRÊNCIAS")
+# Only after the word that makes it one: "Rio Grande do Norte" and "Mato Grosso
+# do Sul" are places, and an ONS description that names them is not asking for
+# a submarket.
+ASKED_SUBMARKET = re.compile(r"\b(?:submercado|subsistema)s?\s+(?:d[oa]\s+)?(norte|nordeste|sul|sudeste)\b")
+
+
+def _section_failure(hit: Hit, record: Record) -> GateFailure | None:
+    """The IPDO part the question names, and no other.
+
+    Reported by the domain specialist on 20/09/2026: asked for the main
+    occurrence of 14/09, the answer quoted the stored-energy section of the same
+    IPDO. Every quote was literal and the document was the right one, so no
+    gate refused it. The highlights also repeat the four submarkets under each
+    heading, so "Submercado Sul" alone does not say whether it is the Sul's
+    production or its restriction. A question that names one of these
+    highlights, or one submarket, is answered from that part of the report or
+    not at all.
+    """
+    if hit.source != "IPDO":
+        return None
+    section = hit.section_path or ""
+    topic, _, part = section.rpartition(TOPIC_SEPARATOR)
+    asked = [heading for heading in IPDO_HIGHLIGHTS if _names(record.question, heading)]
+    if asked and not any((topic or part).startswith(heading) for heading in asked):
+        return GateFailure(
+            "citation_other_section", f"{hit.external_id} {section!r}, the question asks {asked[0]}"
+        )
+    named = set(ASKED_SUBMARKET.findall(_plain(record.question)))
+    quoted = re.match(r"submercado (\w+)", _plain(part))
+    if len(named) == 1 and quoted and quoted.group(1) not in named:
+        return GateFailure(
+            "citation_other_section", f"{hit.external_id} {section!r}, the question asks {named.pop()}"
+        )
+    return None
+
+
+def _plain(text: str) -> str:
+    text = "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
+    return re.sub(r"[^\w]+", " ", text.lower()).strip()
+
+
+def _names(question: str, heading: str) -> bool:
+    """Every word of the heading, by its first eight letters: "ocorrência"
+    names OCORRÊNCIAS and "ocorreu" does not."""
+    words = _plain(question).split()
+    stems = [word[:8] for word in _plain(heading).split() if len(word) > 3]
+    return all(any(word.startswith(stem) for word in words) for stem in stems)
 
 
 MONTH_TO_DATE = "Acumulado no Mês"

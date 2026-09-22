@@ -26,6 +26,20 @@ SECTION_MAX_CHARS = 120  # longer only in capitals: "6.2.2 CONTROLE ... PREVENIN
 SUBMARKET = re.compile(r"^[ \t#]*(Submercado [^:\n]{2,40}:)[ \t]*$", re.M)
 SUBMARKET_HEADING = re.compile(r"^(Submercado)\s+([^:\n]{2,40}):$")
 
+# The same highlights are grouped under starred headings in capitals ("* CARGA E
+# PRODUÇÃO DE ENERGIA POR SUBMERCADO", "* RESTRIÇÃO DE GERAÇÃO RENOVÁVEL"), and
+# each group repeats the four submarkets. Read as prose, the heading was glued to
+# the end of the submarket above it, so "Submercado Sul" named two different
+# facts and the paragraph that stated the restriction never said it was one.
+TOPIC = re.compile(r"^[ \t]*(\*[ \t]+[A-ZÀ-Ý][A-ZÀ-Ý0-9 ,/()-]{3,80})[ \t]*$", re.M)
+TOPIC_SEPARATOR = " > "
+
+
+def _topic_of(section: str | None) -> str | None:
+    """The starred heading a section carried over from the previous page."""
+    head = (section or "").split(TOPIC_SEPARATOR, 1)[0]
+    return head if head[:1].isalpha() and head.isupper() else None
+
 
 def heading_of(block: str) -> re.Match | None:
     """A numbered title, however many "#" the parser put in front of it.
@@ -97,9 +111,10 @@ def split_page(markdown: str, section: str | None = None) -> list[tuple[str | No
     a page continues it (the Northeast highlights of an IPDO run onto the next
     page, and so do the tables of an operating instruction's section).
     """
-    markdown = SUBMARKET.sub(r"\n\n\1\n\n", markdown)
+    markdown = SUBMARKET.sub(r"\n\n\1\n\n", TOPIC.sub(r"\n\n\1\n\n", markdown))
     out: list[tuple[str | None, str]] = []
     current_section: str | None = section
+    topic = _topic_of(section)
     buffer: list[str] = []
     # Headings not yet followed by anything. The vision model reads a page of
     # IO-ON.NE.2NO as "6.2.2 ..., 6.2.3 ..., table, table": both titles first.
@@ -117,13 +132,31 @@ def split_page(markdown: str, section: str | None = None) -> list[tuple[str | No
         block = block.strip()
         if not block:
             continue
+        if TOPIC.fullmatch(block):
+            flush()
+            topic = current_section = block.lstrip("* \t")
+            waiting.append((topic, block))
+            continue
         heading = heading_of(block)
         if heading:
             flush()
             if _parent_waiting(waiting, heading.group(1)):
                 out.append(waiting.pop())
             current_section = f"{heading.group(1)} {heading.group(2).strip()}"
-            waiting.append((current_section, re.sub(r"^(?:#+\s*)+", "", block)))
+            title = re.sub(r"^(?:#+\s*)+", "", block)
+            if heading.re is not SUBMARKET_HEADING:
+                topic = None
+            elif topic:
+                # The starred heading travels with each submarket under it, so
+                # the chunk that states the value also says what the value is.
+                # A quote may then join the heading to a submarket printed
+                # further down, which is what the layout says, the same way a
+                # table below keeps the title it belongs to.
+                if waiting and waiting[-1][0] == topic:
+                    waiting.pop()
+                current_section = f"{topic}{TOPIC_SEPARATOR}{current_section}"
+                title = f"* {topic}\n\n{title}"
+            waiting.append((current_section, title))
             continue
         if _is_table(block):
             # A table that follows its own heading keeps it. Flushing here left

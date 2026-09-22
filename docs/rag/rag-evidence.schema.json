@@ -320,6 +320,7 @@
                   "citation_from_another_event",
                   "citation_from_another_day",
                   "citation_month_to_date",
+                  "citation_other_section",
                   "quote_points_to_table",
                   "quote_does_not_state_claim"
                 ]
