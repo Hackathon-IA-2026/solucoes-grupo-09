@@ -321,6 +321,8 @@
                   "citation_from_another_day",
                   "citation_month_to_date",
                   "citation_other_section",
+                  "claim_draws_conclusion",
+                  "claim_about_another_agent",
                   "quote_points_to_table",
                   "quote_does_not_state_claim"
                 ]

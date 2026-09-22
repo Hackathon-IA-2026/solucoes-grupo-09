@@ -348,3 +348,71 @@ def test_the_section_lock_reads_names_and_editions_as_they_are():
     network = _ipdo("Desligamento da LT 500 kV.", "OCORRÊNCIAS NA REDE DE OPERAÇÃO")
     occurrence = Record(question="Qual foi a principal ocorrência no IPDO de 27/10/2025?")
     assert _section_failure(network, occurrence) is None
+
+
+def test_a_claim_may_not_conclude_what_its_quote_does_not_say():
+    """Measured on 22/09/2026, three times in a row: asked whether a restriction
+    for surplus was registered in the Nordeste's balance of 14/09, the answer
+    quoted the BDO's balance row and added "indicando excedente de energia".
+    Every number was in the quote, and the second reader agreed three times out
+    of three, with the same reasoning: verified above scheduled means surplus.
+    The balance has no restriction line. Told in its prompt that deriving a
+    thing from two figures is not reading it, it agreed three more times, so
+    the conclusion is refused where it is written, like causal wording."""
+    from wattsteer_rag.gate import check_claim
+
+    row = "| Balanço de Energia Diário | Total | Nordeste verificado: 25.291 | Nordeste programado: 24.399 |"
+    by_chunk = {"c1": _hit(row)}
+    concluded = {
+        "claim": (
+            "O balanço registrou verificado de 25.291 e programado de 24.399, indicando excedente de energia."
+        ),
+        "citations": [{"chunk_id": "c1", "quote": row}],
+    }
+    claim, failures = check_claim(concluded, by_chunk)
+    assert claim is None and failures[-1].code == "claim_draws_conclusion"
+
+    stated = {
+        "claim": "O balanço registrou verificado de 25.291 e programado de 24.399 no Nordeste.",
+        "citations": [{"chunk_id": "c1", "quote": row}],
+    }
+    assert check_claim(stated, by_chunk)[0] is not None
+
+
+def test_a_document_that_states_something_is_not_a_conclusion():
+    """ "A IO indica que..." reports what the document says; only the
+    connective that attaches a reading to figures is refused."""
+    from wattsteer_rag.gate import conclusion_hits
+
+    assert conclusion_hits("A IO-ON.NE.2NO indica que a inequação deve ser monitorada.") == []
+    assert conclusion_hits("A IO define o fluxo na LT C1(V7), indicando o sentido positivo.") == []
+    assert conclusion_hits("defeito reincidente num período de 12 meses, caracterizando a urgência") == []
+    assert conclusion_hits("O verificado ficou em 25.291 MW, o que mostra um excedente.") == ["o que mostra"]
+
+
+def test_a_claim_about_an_agent_answers_a_question_about_that_agent():
+    """Measured on 22/09/2026: asked when the ONS authorised the total
+    restoration (14h49), the answer gave when LIGHT, CEMIG D or CPFL finished
+    theirs. The report holds a restoration time per agent, each a literal quote,
+    and the second reader accepted them. Of 274 stored question and claim pairs,
+    the 11 that named an agent the question did not were these, plus four for a
+    question about the agents in general, which is allowed to name one."""
+    from wattsteer_rag.gate import Record, check_claim
+
+    action = (
+        "9.82.1 O agente LIGHT deverá informar ao ONS o motivo de ter concluído o restabelecimento às 09h44."
+    )
+    by_chunk = {"c1": _hit(action)}
+    item = {
+        "claim": "O agente LIGHT concluiu o restabelecimento total das cargas às 09h44.",
+        "citations": [{"chunk_id": "c1", "quote": action}],
+    }
+    asks_ons = Record(question="A que horas o ONS autorizou o restabelecimento total das cargas?")
+    claim, failures = check_claim(item, by_chunk, asks_ons)
+    assert claim is None and failures[-1].code == "claim_about_another_agent"
+
+    for question in (
+        "Quando o agente LIGHT concluiu o restabelecimento das cargas?",
+        "Qual o prazo para os agentes implementarem as providências do RAP de 15/08/2023?",
+    ):
+        assert check_claim(item, by_chunk, Record(question=question))[0] is not None, question

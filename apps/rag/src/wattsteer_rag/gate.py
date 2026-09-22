@@ -200,7 +200,13 @@ def _claim_failures(claim: str, accepted: list[dict], record: Record) -> list[Ga
     if missing:
         return missing
     causal = causal_hits(claim)
-    return [GateFailure("causal_vocabulary", ", ".join(causal))] if causal else []
+    if causal:
+        return [GateFailure("causal_vocabulary", ", ".join(causal))]
+    concluded = conclusion_hits(claim)
+    if concluded:
+        return [GateFailure("claim_draws_conclusion", ", ".join(concluded))]
+    others = agents_not_asked(claim, record.question)
+    return [GateFailure("claim_about_another_agent", ", ".join(others))] if others else []
 
 
 def _points_to_table(quote: str) -> bool:
@@ -221,6 +227,46 @@ def _points_to_table(quote: str) -> bool:
 
 QUOTE_PARTS = re.compile(r"[|\n]|(?<=\.)\s")
 STEP_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?$")
+
+
+# The connective that attaches a reading to the figures just quoted. Measured on
+# 22/09/2026: "verificado de 25.291 e programado de 24.399, indicando excedente
+# de energia" passed every gate and the second reader, three times of three,
+# and the balance it quoted has no restriction line. The claim may say what the
+# quote says; what the figures would mean is the rule's and the operator's.
+# Only right after a figure: of 935 stored claims, the 3 other uses of these
+# words described a document ("define o fluxo ..., indicando o sentido
+# positivo") or repeated its own words, and none followed a number.
+CONCLUSION = re.compile(
+    r"\d(?:\s*(?:MWh|MWmed|MW|GWh|GW|Mvar|%))?\s*,?\s+"
+    r"((?:indicand|sugerind|implicand|caracterizand|evidenciand|demonstrand)o"
+    r"|o que (?:indica|sugere|implica|caracteriza|mostra|evidencia|demonstra|significa))\b",
+    re.IGNORECASE,
+)
+
+
+def conclusion_hits(text: str) -> list[str]:
+    return [match.group(1) for match in CONCLUSION.finditer(text or "")]
+
+
+# "O agente LIGHT", "o agente CEMIG D": the name that follows, in capitals.
+AGENT = re.compile(r"\bagentes?\s+([A-ZÀ-Ý][\wÀ-ÿ&./-]*(?:\s+[A-ZÀ-Ý][\wÀ-ÿ&./-]*)*)")
+ASKS_ABOUT_AGENTS = re.compile(r"\bagentes?\b", re.IGNORECASE)
+
+
+def agents_not_asked(claim: str, question: str) -> list[str]:
+    """The agents a claim is about that the question never named.
+
+    Measured on 22/09/2026: a disturbance report states a restoration time for
+    each agent, and asked when the ONS authorised the total restoration the
+    answer gave LIGHT's, CEMIG D's or CPFL's, literal and accepted by the second
+    reader. A question that speaks of the agents at all may be answered with any
+    of them; one that names none of them is not about any one of them.
+    """
+    if not question or ASKS_ABOUT_AGENTS.search(question) and not AGENT.search(question):
+        return []
+    asked = _plain(question)
+    return [name for name in AGENT.findall(claim) if _plain(name) not in asked]
 
 
 def causal_hits(text: str) -> list[str]:

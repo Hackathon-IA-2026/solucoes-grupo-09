@@ -239,10 +239,13 @@ const CHECKS = [
   { codes: ["quote_not_in_chunk"], text: "The quote appears word for word in the document" },
   { codes: ["number_not_in_quote"], text: "Every number in the answer is in the quote, or was already in the question" },
   { codes: ["quote_without_substance"], text: "The quote states something (it is not just a heading)" },
-  { codes: ["citation_not_the_named_document", "citation_from_another_day", "citation_from_another_event"],
+  { codes: ["citation_not_the_named_document", "citation_from_another_day", "citation_from_another_event",
+      "citation_other_section"],
     text: "The document is about this case (the instruction the record names; a bulletin or report of that day)" },
   { codes: ["locator_missing"], text: "The quote has a location: page, section or table" },
   { codes: ["causal_vocabulary"], text: "No cause-and-effect wording: WattSteer shows the rule, it does not claim a cause" },
+  { codes: ["claim_draws_conclusion"], text: "The answer says what the quote says, not what it would mean" },
+  { codes: ["claim_about_another_agent"], text: "The answer is about the agent the question asks, not another one" },
   { codes: ["schema_invalid"], text: "The model answered in the required structure" },
 ];
 
