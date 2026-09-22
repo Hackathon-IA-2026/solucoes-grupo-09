@@ -463,3 +463,63 @@ def test_only_a_deadline_line_is_not_a_column():
 
     assert FIELD_PAIR.match("           Prazo: 30/03/2024                            Gestor: EGE")
     assert not FIELD_PAIR.match("   Fluxo: 1.200 MW          Limite: 1.500 MW")
+
+
+def test_a_question_for_a_figure_is_not_answered_without_one():
+    """Measured on 22/09/2026: asked for the Nordeste's verified wind generation
+    in the IPDO of 12/09/2023 (12.197 MWmed), the answer quoted the sentence
+    saying it was below forecast, with no figure, and both readers accepted it.
+    Of 388 stored question and claim pairs, it is the only claim without a
+    number under a question that asks how much."""
+    from wattsteer_rag.gate import Record, check_claim
+
+    sentence = "A geração eólica foi inferior ao valor previsto devido à restrição de geração para controle."
+    by_chunk = {"c1": _hit(sentence)}
+    item = {"claim": sentence, "citations": [{"chunk_id": "c1", "quote": sentence}]}
+    asks_figure = Record(
+        question="Segundo o IPDO de 12/09/2023, qual foi a geração eólica verificada no Nordeste?"
+    )
+    claim, failures = check_claim(item, by_chunk, asks_figure)
+    assert claim is None and failures[-1].code == "claim_without_the_figure"
+
+    asks_why = Record(
+        question="Segundo o IPDO de 12/09/2023, por que a geração eólica ficou abaixo do previsto?"
+    )
+    assert check_claim(item, by_chunk, asks_why)[0] is not None
+
+
+def test_the_vector_search_reads_past_what_the_filters_remove():
+    """Measured on 22/09/2026: after the IPDOs and the RAP were re-chunked, the
+    vector arm returned zero rows for a question about 21/09, because the index
+    handed back its 40 nearest chunks and the date filter removed all of them;
+    with iterative scan the same query returned 40, six of them the right IPDO.
+    Nothing failed, the text arm answered alone, and the answer was a refusal.
+    The setting lives in how the query is issued, not in a value, so it is read
+    from the source (see .claude/rules/testing.md)."""
+    import inspect
+
+    from wattsteer_rag import retrieve
+
+    source = inspect.getsource(retrieve.search)
+    assert "SET LOCAL hnsw.iterative_scan = strict_order" in source
+    assert source.index("hnsw.iterative_scan") < source.index("c.embedding <=>")
+
+
+def test_an_instant_value_does_not_answer_for_the_day():
+    """Measured on 22/09/2026, three times of three: asked for the Nordeste's
+    verified wind generation in the IPDO of 12/09/2023 (12.197 MWmed, the day's
+    average), the answer gave 12.542 MW from "7.2 - Demandas Máximas
+    Instantâneas do dia": the generation at the instant of peak demand. Same
+    document, same row label, another quantity. Every stored citation of such a
+    table answered a question that asked for the instantaneous value but these."""
+    from wattsteer_rag.gate import Record, _instant_failure
+
+    section = "7.2 - Demandas Máximas Instantâneas do dia por Submercados - MW"
+    peak = _ipdo("| NORDESTE MW | Geração eólica | 12.542 |", section)
+    asks_day = Record(
+        question="Segundo o IPDO de 12/09/2023, qual foi a geração eólica verificada no Nordeste?"
+    )
+    asks_peak = Record(question="Qual foi a demanda máxima instantânea do subsistema Nordeste em 08/09/2026?")
+    assert _instant_failure(peak, asks_day).code == "citation_instant_value"
+    assert _instant_failure(peak, asks_peak) is None
+    assert _instant_failure(_ipdo("| Eólica | 12.197 |", "1 - Balanço de Energia"), asks_day) is None

@@ -209,7 +209,15 @@ def _claim_failures(claim: str, accepted: list[dict], record: Record) -> list[Ga
     # instruction naming the agent that must act is the evidence itself.
     from_report = any(citation.get("source") == "RAP" for citation in accepted)
     others = agents_not_asked(claim, record.question) if from_report else []
-    return [GateFailure("claim_about_another_agent", ", ".join(others))] if others else []
+    if others:
+        return [GateFailure("claim_about_another_agent", ", ".join(others))]
+    if ASKS_FIGURE.search(record.question) and not re.search(r"\d", claim):
+        return [
+            GateFailure(
+                "claim_without_the_figure", "the question asks how much and the claim states no figure"
+            )
+        ]
+    return []
 
 
 def _points_to_table(quote: str) -> bool:
@@ -251,6 +259,16 @@ CONCLUSION = re.compile(
 def conclusion_hits(text: str) -> list[str]:
     return [match.group(1) for match in CONCLUSION.finditer(text or "")]
 
+
+# A question for a quantity. Measured on 22/09/2026: "qual foi a geração eólica
+# verificada" was answered with the bulletin's sentence that it fell below
+# forecast, no figure, accepted by both readers; of 388 stored question and
+# claim pairs it was the only claim without a number under such a question.
+ASKS_FIGURE = re.compile(
+    r"\bquant[oa]s?\b|\bqual (?:foi|era|é|o|a)\s+(?:o |a )?(?:valor|gera[cç][aã]o|carga|produ[cç][aã]o"
+    r"|armazenamento|demanda|limite|interc[aâ]mbio|energia|pot[eê]ncia|redu[cç][aã]o|m[aá]xima|m[ií]nima)",
+    re.IGNORECASE,
+)
 
 # "O agente LIGHT", "o agente CEMIG D": the name that follows, in capitals.
 # A dot only inside a name ("S.A."), so a sentence's full stop ends it.
@@ -370,6 +388,7 @@ def _off_topic(hit: Hit, record: Record) -> GateFailure | None:
     return (
         _relevance_failure(hit, record)
         or _month_to_date_failure(hit, record)
+        or _instant_failure(hit, record)
         or _section_failure(hit, record)
     )
 
@@ -428,6 +447,25 @@ def _names(question: str, heading: str) -> bool:
     words = _plain(question).split()
     stems = [word[:8] for word in _plain(heading).split() if len(word) > 3]
     return all(any(word.startswith(stem) for word in words) for stem in stems)
+
+
+INSTANT = re.compile(r"instant[aâ]ne", re.IGNORECASE)
+
+
+def _instant_failure(hit: Hit, record: Record) -> GateFailure | None:
+    """The value at one instant is not the day's.
+
+    Measured on 22/09/2026, three times of three: asked for the Nordeste's
+    verified wind generation of 12/09/2023, the day's average (12.197 MWmed),
+    the answer gave 12.542 MW from the IPDO's table of maximum instantaneous
+    demand, which lists each source's generation at the minute of the peak. The
+    row label is the same, the quantity is not, and both readers took it.
+    """
+    if INSTANT.search(record.question) or not INSTANT.search(f"{hit.section_path or ''} {hit.text[:200]}"):
+        return None
+    return GateFailure(
+        "citation_instant_value", f"{hit.external_id} is a value at one instant, the question asks the day's"
+    )
 
 
 MONTH_TO_DATE = "Acumulado no Mês"
