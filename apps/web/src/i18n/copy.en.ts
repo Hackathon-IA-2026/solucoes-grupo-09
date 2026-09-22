@@ -1195,8 +1195,6 @@ export const en = {
       peakHourWindow: "{hour}h BRT on {date}",
       peakHourNote:
         "An energy in MWh, not a power in MW: ONS publishes energy per hour, and the peak-power band a forecast states is a model's claim about the shape inside that hour. There is no such model today, so no such figure is shown.",
-      splitNote:
-        "ONS settles the two fleets separately — the published grain is subsystem, technology and hour — so these are two measurements and the total is their sum. The forecast version of this panel is the opposite: one modelled expectation, divided in two.",
       emptyDay:
         "The day settled with no curtailment at all in this subsystem, which is a measurement and not a missing figure.",
       nationalTitle: "The last 24 hours, across all four subsystems",
@@ -1252,7 +1250,6 @@ export const en = {
         profileLabel: "Hour by hour",
         peakLabel: "Largest hour",
         refusedTitle: "The grid did not answer",
-        pickHint: "Tap a region on the map to re-point everything around it.",
         ofNational: "of the national total",
         noBand: "A settlement is a number, not an interval.",
         nationalLabel: "Brazil",
@@ -1466,7 +1463,6 @@ export const en = {
 
     split: {
       title: "Wind and solar",
-      note: "The forecaster has one head per subsystem, so wind and solar are a division of that expectation and nothing more. There is no wind band and no solar band to draw, which is why picking a technology above emphasises one of these two numbers instead of filtering the forecast.",
       // "shown" made the badge read "Wind · shown", which says the other number
       // is not — a filter, which is precisely the misreading `note` above
       // exists to prevent, and it said it two lines above a sentence promising

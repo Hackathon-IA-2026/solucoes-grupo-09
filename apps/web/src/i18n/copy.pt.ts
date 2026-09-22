@@ -957,8 +957,6 @@ export const pt: Copy = {
       peakHourWindow: "{hour}h BRT de {date}",
       peakHourNote:
         "Uma energia em MWh, não uma potência em MW: o ONS publica energia por hora, e a faixa de pico de potência que uma previsão informa é uma afirmação do modelo sobre o formato dentro daquela hora. Não há modelo nenhum hoje, então nenhum número desses é mostrado.",
-      splitNote:
-        "O ONS liquida as duas frotas separadamente — o grão publicado é subsistema, tecnologia e hora — então estas são duas medições e o total é a soma delas. A versão de previsão deste painel é o contrário: uma expectativa modelada, dividida em duas.",
       emptyDay:
         "O dia liquidou sem nenhum corte neste subsistema, o que é uma medição e não um número faltando.",
       nationalTitle: "As últimas 24 horas, nos quatro subsistemas",
@@ -1035,7 +1033,6 @@ export const pt: Copy = {
         profileLabel: "Hora a hora",
         peakLabel: "Maior hora",
         refusedTitle: "A rede não respondeu",
-        pickHint: "Toque numa região do mapa para re-apontar tudo em volta.",
         ofNational: "do total nacional",
         noBand: "Uma liquidação é um número, não um intervalo.",
         nationalLabel: "Brasil",
@@ -1234,7 +1231,6 @@ export const pt: Copy = {
 
     split: {
       title: "Eólica e solar",
-      note: "O previsor tem uma cabeça por subsistema, então eólica e solar são uma divisão dessa expectativa e nada além disso. Não existe faixa eólica nem faixa solar para desenhar, e é por isso que escolher uma tecnologia ali em cima destaca um destes dois números em vez de filtrar a previsão.",
       emphasised: "em destaque",
     },
 

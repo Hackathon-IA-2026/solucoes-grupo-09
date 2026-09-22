@@ -99,10 +99,7 @@ test.describe("a click on the map selects, and does not navigate", () => {
       two are still cards about the selected region, which is what this test is
       about.
     */
-    for (const heading of [
-      "Energia cortada, dia inteiro",
-      "Pico de potência horária",
-    ]) {
+    for (const heading of ["Energia cortada, dia inteiro", "Pico de potência horária"]) {
       const at = after.indexOf(heading);
       expect(at, `"${heading}" is on the screen`).toBeGreaterThanOrEqual(0);
       expect(after.slice(at, at + 90)).toContain("NORTE");

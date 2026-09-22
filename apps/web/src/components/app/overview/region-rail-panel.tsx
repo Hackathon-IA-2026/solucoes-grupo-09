@@ -61,14 +61,6 @@ export function RegionRail({
   text: {
     regionsLabel: string;
     windowLabel: string;
-    pickHint: string;
-    /**
-     * Why the two fleet figures are what they are — and it differs by state.
-     * A forecast divides one modelled expectation; a settled day is two
-     * separate ONS measurements whose sum is the total. Said once, under the
-     * four rows, rather than on each of them.
-     */
-    splitNote: string;
   };
 }) {
   const colors = usePalette();
@@ -140,12 +132,21 @@ export function RegionRail({
           emphasis={emphasis}
         />
       ))}
-      <Text style={{ ...type.caption, color: colors.inkFaint, paddingTop: space.xs }}>
-        {text.pickHint}
-      </Text>
-      <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
-        {text.splitNote}
-      </Text>
+      {/*
+        **Two footnotes gone, and neither is coming back here.**
+
+        One told the reader to tap the map; the other was the split's paragraph
+        — one head per subsystem, so wind and solar divide an expectation and a
+        technology pick emphasises rather than filters. Both were under the four
+        rows, and between them they were taller than a region's row.
+
+        The tap hint had stopped being information: the map is the screen's
+        subject, the rows are visibly pressable, and the hint said so on every
+        render forever. The split paragraph is a real claim and is the one worth
+        missing — it belongs where the division is argued rather than where it
+        is drawn, which is Explicar. The rail keeps what it can carry honestly:
+        the two figures, labelled, under a window that says which.
+      */}
     </Panel>
   );
 }

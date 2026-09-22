@@ -25,25 +25,10 @@
  */
 
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
-import {
-  ClockIcon,
-  LayoutDashboardIcon,
-  MapIcon,
-  Panel,
-  PanelHeader,
-  PieChartIcon,
-  radius,
-  SearchIcon,
-  space,
-  type,
-  usePalette,
-  ZapIcon,
-} from "@wattsteer/ui";
-import { Link } from "expo-router";
+import { Panel, radius, space, type, usePalette } from "@wattsteer/ui";
 import { useState } from "react";
-import { Platform, Text, View } from "react-native";
-import { QuestionCard } from "@/components/app/figures/question-cards";
-import { BandTriple, PanelTitle, RailFact } from "@/components/app/figures/rail-panels";
+import { Text, View } from "react-native";
+import { PanelTitle } from "@/components/app/figures/rail-panels";
 import { useCoverage } from "@/components/app/figures/use-coverage";
 import { useLadder } from "@/components/app/figures/use-ladder";
 import { RegionMap } from "@/components/app/map/region-map";
@@ -56,26 +41,16 @@ import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-netw
 import { useRunLanes } from "@/components/app/use-run-lanes";
 import { FanChart } from "@/components/charts/fan-chart";
 import { ObservedProfile } from "@/components/charts/observed-profile";
-import { RiskChip } from "@/components/charts/risk-class";
-import { riskColor } from "@/components/charts/risk-color";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import { criticalWindow } from "@/lib/critical-window";
 import type { SubsystemCode } from "@/lib/fixtures";
-import { roundProbability, subsystemMeta } from "@/lib/fixtures";
-import {
-  forecastHours,
-  forecastRow,
-  observedDay,
-  observedRows,
-  outlookRows,
-} from "@/lib/network";
+import { subsystemMeta } from "@/lib/fixtures";
+import { forecastHours, observedRows } from "@/lib/network";
 import { HeadlinePanel } from "./headline-panel";
 import { heroFigures } from "./hero-figures";
-import { NationalFigureBlock, ObservedNationalPanel } from "./national-panel";
+import { ObservedNationalPanel } from "./national-panel";
 import { PlanVsActualPanel } from "./plan-vs-actual-panel";
 import { QuestionRow, SettledQuestionRow } from "./question-row";
-import { HeroStat, RegionRow } from "./region-rail";
 import { RegionRail } from "./region-rail-panel";
 
 /**
@@ -257,14 +232,24 @@ export function OverviewHero({
   */
   const profile = (
     <Panel style={{ gap: space.md }}>
-      <PanelHeader
-        icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
+      {/*
+        `PanelTitle`, not `PanelHeader`, and no icon.
+
+        This card sits directly under `headline`, in the same column and at the
+        same width, and that card heads itself with `PanelTitle` — `type.label`
+        over `type.caption`. `PanelHeader` is the wider vocabulary: an icon, a
+        larger title, room for a badge on the right. Two cards a gap apart
+        wearing two different heading scales reads as two kinds of card, and
+        these are the same kind.
+
+        No badge either. The subtitle already says *observado* beside the date,
+        and a card naming its own claim twice in one header stops reading as a
+        claim — the same argument that took the badge out of the settled
+        split's total.
+      */}
+      <PanelTitle
         title={text.profileLabel}
-        // No badge. The subtitle already says *observado* beside the date, and
-        // a card that names its own claim twice in one header stops reading as
-        // a claim and starts reading as decoration — the same argument that
-        // took the badge out of the settled split's total.
-        subtitle={fill(copy.app.overview.settledDaySubtitle, {
+        note={fill(copy.app.overview.settledDaySubtitle, {
           date: f.date(observed.hoursDate),
         })}
       />
@@ -346,16 +331,6 @@ export function OverviewHero({
       text={{
         regionsLabel: text.regionsLabel,
         windowLabel: forecast === null ? text.windowObserved : text.windowForecast,
-        pickHint: text.pickHint,
-        /*
-          The caveat the split card carried, following the figures into the
-          rail. It is not one sentence in two states: a forecast's two fleets
-          are a division of one modelled expectation and have no distribution
-          of their own, while a settled day's are two separate ONS
-          settlements whose sum is the total. The second claim is the stronger
-          one and the screen would be throwing it away by picking either.
-        */
-        splitNote: forecast === null ? copy.app.observed.splitNote : copy.app.split.note,
       }}
     />
   );

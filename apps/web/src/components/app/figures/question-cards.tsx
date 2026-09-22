@@ -203,21 +203,39 @@ export function QuestionCard({
         )}
       </View>
 
-      <Text style={{ ...type.caption, color: colors.inkMuted }} numberOfLines={2}>
-        {detail}
-      </Text>
-      {footnote === undefined ? null : (
-        <Text
-          style={{
-            ...type.caption,
-            color: colors.inkFaint,
-            fontVariant: ["tabular-nums"],
-          }}
-          numberOfLines={1}
-        >
-          {footnote}
+      {/*
+        **The trailing lines sit on the row's bottom edge, not under a hole.**
+
+        The five cards stretch to the tallest, which is whichever one's detail
+        wraps to two lines. Measured at 1600px: every card 127px high, and the
+        last line of "Vai cortar?" and of "Onde?" ended **36px** above their own
+        bottom border while "Por quê?" ended 7px above its. The row's gap to the
+        grid below is 12px — the same 12 the three columns use — but on those
+        two columns a reader sees 48px of nothing and reads the row as belonging
+        to a different block.
+
+        `marginTop: "auto"` eats the slack above these lines instead of below
+        them, so the five last lines land on one baseline and every card's
+        trailing space is its own 12px of padding. The gap did not change; what
+        changed is that it is now the whole of what separates the two rows.
+      */}
+      <View style={{ marginTop: "auto", gap: 6 }}>
+        <Text style={{ ...type.caption, color: colors.inkMuted }} numberOfLines={2}>
+          {detail}
         </Text>
-      )}
+        {footnote === undefined ? null : (
+          <Text
+            style={{
+              ...type.caption,
+              color: colors.inkFaint,
+              fontVariant: ["tabular-nums"],
+            }}
+            numberOfLines={1}
+          >
+            {footnote}
+          </Text>
+        )}
+      </View>
     </>
   );
 
@@ -284,6 +302,9 @@ export function QuestionCard({
               margin: -space.md,
               padding: space.md,
               gap: 6,
+              // Fills the stretched box rather than sizing to its content, or
+              // the `marginTop: "auto"` inside it has no slack to eat.
+              flexGrow: 1,
               borderRadius: radius.lg,
               borderCurve: "continuous",
               // The open state is a fill rather than a border: the border is
