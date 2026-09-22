@@ -44,22 +44,36 @@ const OWNED = [
   code(read("i18n", "time-machine.ts")),
 ].join("\n");
 
-describe("the honesty block comes first, as on /app/replay", () => {
+describe("the provenance comes first, as on /app/replay", () => {
   it("precedes every figure of the replayed day", () => {
     const replayed = SCREEN.slice(SCREEN.indexOf("const replay = state.replay;"));
-    const honesty = replayed.indexOf("<HonestyNote");
-    expect(honesty).toBeGreaterThan(0);
+    const strip = replayed.indexOf("<ProvenanceStrip");
+    expect(strip).toBeGreaterThan(0);
     for (const figure of ["<Headline", "<Panel", "<ReviewChart", "<SubsystemTable"]) {
-      expect(replayed.indexOf(figure)).toBeGreaterThan(honesty);
+      expect(replayed.indexOf(figure)).toBeGreaterThan(strip);
     }
   });
 
-  it("carries both badges and is not collapsible", () => {
-    expect(SCREEN).toContain("<ProvenanceBadge");
-    expect(SCREEN).toContain("<VintageBadge");
-    const note = read("components", "app", "honesty.tsx");
-    const body = note.slice(note.indexOf("export function HonestyNote"));
-    expect(body.slice(0, body.indexOf("\n}\n"))).not.toMatch(/onPress|collapsed/);
+  it("always draws both badges and the held-out mark, with no collapsed state", () => {
+    const strip = code(read("components", "app", "time-machine", "provenance-strip.tsx"));
+    expect(strip).toContain("<ProvenanceBadge");
+    expect(strip).toContain("<VintageBadge");
+    expect(strip).toContain("modelSawThisDay === false");
+    // The marks are unconditional children of the strip; only the paragraphs
+    // sit behind the ⓘ, and the strip itself holds no open/closed state.
+    expect(strip).not.toMatch(/useState|collapsed|onPress/);
+  });
+
+  it("keeps every honesty paragraph one press away, word for word", () => {
+    const strip = code(read("components", "app", "time-machine", "provenance-strip.tsx"));
+    for (const call of [
+      "provenanceNote(replay, copy, f)",
+      "vintageNote(replay.vintageFidelity, copy, f)",
+      "vintageExtent(replay.integrity, copy)",
+      "copy.app.replay.claimsNote",
+    ]) {
+      expect(strip).toContain(call);
+    }
   });
 });
 

@@ -51,7 +51,7 @@ Feature: The demo script
   Scenario: 5 — would that have worked last week
     When the model calls replay with {"relative_day":-7}
     Then the intent kind is "navigate"
-    And the route is "/app/replay"
+    And the route is "/app/time-machine"
     And the param "episode" is "2026-08-11-ne"
 
   Scenario: 6 — take me back to the overview

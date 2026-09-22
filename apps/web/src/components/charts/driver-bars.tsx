@@ -44,7 +44,18 @@ import { fill } from "@/i18n/format";
 import { type DriverRow, driverRows, HOUR_DISAGREEMENT_NOTABLE } from "@/lib/driver-rows";
 import type { AttributedDriver } from "@/lib/fixtures";
 
-export function DriverBars({ drivers }: { drivers: readonly AttributedDriver[] }) {
+export function DriverBars({
+  drivers,
+  notes = true,
+}: {
+  drivers: readonly AttributedDriver[];
+  /**
+   * Whether the two footnotes are drawn under the bars. `false` where the
+   * screen carries them itself — the Time Machine dashboard puts them behind
+   * its ⓘ — never where nothing else would say them.
+   */
+  notes?: boolean;
+}) {
   const rows = driverRows(drivers);
   const max = Math.max(...rows.map((row) => row.share), 0.01);
 
@@ -53,7 +64,7 @@ export function DriverBars({ drivers }: { drivers: readonly AttributedDriver[] }
       {rows.map((row) => (
         <DriverBar key={row.code} row={row} max={max} />
       ))}
-      <DriverNotes />
+      {notes ? <DriverNotes /> : null}
     </View>
   );
 }

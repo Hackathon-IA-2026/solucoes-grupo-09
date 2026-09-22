@@ -66,12 +66,7 @@ import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { BatteryEditor, LoadEditor } from "@/components/app/asset-editor";
 import { useCoverage } from "@/components/app/figures/use-coverage";
 import { useSimilarDays } from "@/components/app/figures/use-similar-days";
-import {
-  ForecastStamp,
-  HonestyNote,
-  ProvenanceBadge,
-  VintageBadge,
-} from "@/components/app/honesty";
+import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
 import { PlanVsActualPanel } from "@/components/app/overview/plan-vs-actual-panel";
 import {
   fixtureBattery,
@@ -84,7 +79,9 @@ import {
 import { ReadingState } from "@/components/app/thinking-orb";
 import { EvidenceTabs } from "@/components/app/time-machine/evidence-tabs";
 import { GateTimeline } from "@/components/app/time-machine/gate-timeline";
+import { InfoHint } from "@/components/app/time-machine/info-hint";
 import { KpiCard } from "@/components/app/time-machine/kpi-card";
+import { ProvenanceStrip } from "@/components/app/time-machine/provenance-strip";
 import { SubsystemTable } from "@/components/app/time-machine/subsystem-table";
 import { TraceabilityPanel } from "@/components/app/time-machine/traceability-panel";
 import { useAppParams } from "@/components/app/use-app-params";
@@ -98,12 +95,15 @@ import {
   useReplayTimeline,
 } from "@/components/app/use-replay-review";
 import { useScenario } from "@/components/app/use-scenario";
+import { useServing } from "@/components/app/use-serving";
+import { NO_BRIEFING_DATA } from "@/components/briefing/briefing-data";
+import { usePublishBriefingSubject } from "@/components/briefing/briefing-subject";
 import { EpisodeList } from "@/components/charts/episode-list";
 import { PlanVsExecuted } from "@/components/charts/plan-vs-executed";
 import { ReviewChart } from "@/components/charts/review-chart";
-import { useCopy, useFormat } from "@/i18n";
+import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
-import { dayLabel, provenanceNote, vintageExtent, vintageNote } from "@/i18n/replay";
+import { compareRows, dayLabel, vintageNote } from "@/i18n/replay";
 import { mwh, signedMwh } from "@/i18n/time-machine";
 import { apiUrl } from "@/lib/api-url";
 import { API_URL } from "@/lib/config";
@@ -128,6 +128,23 @@ export default function TimeMachineDashboard() {
     followTargetDate: true,
   });
   const state = useReplay(scenarioState.scenario);
+  const serving = useServing();
+  const { locale } = useI18n();
+
+  /*
+    Published for the briefing host, exactly as `/app/replay` publishes it: the
+    chrome's Time Machine pill opens this screen now, so this is the screen a
+    briefing is asked for from, and the plan-beside-what-happened scene exists
+    only where these rows do.
+  */
+  usePublishBriefingSubject({
+    context: { locale, screen: "replay", params, serving },
+    data: {
+      ...NO_BRIEFING_DATA,
+      comparison: state.status === "replayed" ? compareRows(state.replay, copy, f) : null,
+    },
+    counterfactual: undefined,
+  });
   const compare = useReplayCompare(day.date, REPLAY_LANE);
   const timeline = useReplayTimeline(day.date, day.subsystem);
   const attribution = useReplayAttribution(day.date, day.subsystem, REPLAY_LANE);
@@ -224,9 +241,6 @@ export default function TimeMachineDashboard() {
           lede={scored ? copy.app.timeMachine.lede : copy.app.timeMachine.ledeAbsent}
           right={right}
         />
-        <Text style={{ fontSize: 12, lineHeight: 18, color: colors.inkFaint }}>
-          {text.betaNote}
-        </Text>
         {controls}
         {body}
       </AppShell>
@@ -342,24 +356,10 @@ export default function TimeMachineDashboard() {
       {/*
         **First, and not collapsible**, as on `/app/replay`: which artifact
         produced this forecast and how far the settled record can be trusted
-        change what every number below means.
+        change what every number below means. Marks here, and the paragraphs
+        one press away behind the strip's ⓘ.
       */}
-      <HonestyNote
-        title={copy.app.replay.honestyTitle}
-        columns={true}
-        right={
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, flexShrink: 1 }}>
-            <ProvenanceBadge provenance={replay.integrity.provenance} />
-            <VintageBadge fidelity={replay.vintageFidelity} />
-          </View>
-        }
-        points={[
-          provenanceNote(replay, copy, f),
-          vintageNote(replay.vintageFidelity, copy, f),
-          ...vintageExtent(replay.integrity, copy),
-          copy.app.replay.claimsNote,
-        ]}
-      />
+      <ProvenanceStrip replay={replay} />
 
       <Headline replay={replay} coverage={coverage} />
 
@@ -405,7 +405,6 @@ export default function TimeMachineDashboard() {
             <ChartFact
               label={text.chart.peakSettled}
               value={`${mwh(replay.actual.peakMw, f)} MW`}
-              note={text.chart.peakSettledNote}
             />
             <ChartFact
               label={text.chart.peakForecast}
@@ -418,7 +417,6 @@ export default function TimeMachineDashboard() {
             <ChartFact
               label={text.chart.dayChance}
               value={f.percent(replay.forecast.dayOccurrenceProbability)}
-              note={text.chart.dayChanceNote}
             />
           </View>
         </Panel>
@@ -459,14 +457,19 @@ export default function TimeMachineDashboard() {
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             <TrendingUpIcon size={18} color={colors.inkMuted} />
-            <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink }}>
+            <Text
+              style={{
+                fontSize: 15,
+                fontWeight: "700",
+                color: colors.ink,
+                flexShrink: 1,
+              }}
+            >
               {text.context.title}
             </Text>
+            <InfoHint label={text.about} points={[text.context.note]} />
           </View>
           <PlanVsActualPanel state={context} subsystem={day.subsystem} />
-          <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
-            {text.context.note}
-          </Text>
         </View>
       </View>
 
@@ -582,7 +585,6 @@ function Headline({
         kicker={text.settledKicker}
         value={mwh(settled, f)}
         unit="MWh"
-        lines={[fill(text.settledDeviation, { value: signedMwh(error, f) })]}
       />
       <KpiCard
         testID="kpi-deviation"
@@ -592,11 +594,13 @@ function Headline({
         kicker={text.deviationKicker}
         value={signedMwh(error, f)}
         unit="MWh"
-        lines={[
+        lines={[copy.app.timeMachine.compare.placement[placement]]}
+        hint={[
           fill(copy.app.replay.accuracyPlacement[placement], {
             p10: mwh(band.p10, f),
             p90: mwh(band.p90, f),
           }),
+          copy.app.replay.accuracyNote,
         ]}
       />
       <KpiCard
@@ -613,11 +617,12 @@ function Headline({
         }
         lines={
           coverage.status === "read"
+            ? [fill(text.coverageValue, { days: f.number(coverage.coverage.days) })]
+            : []
+        }
+        hint={
+          coverage.status === "read"
             ? [
-                fill(text.coverageValue, {
-                  share: f.percent(coverage.coverage.dayTotal),
-                  days: f.number(coverage.coverage.days),
-                }),
                 fill(text.coverageTarget, {
                   target: f.percent(coverage.coverage.target),
                 }),
@@ -641,11 +646,19 @@ function Headline({
             floor: mwh(replay.recoveredFloorMwh, f),
             met: replay.floorMet ? copy.app.replay.floorMet : copy.app.replay.floorMissed,
           }),
+          ...(replay.avoidability === null
+            ? []
+            : [
+                `${copy.app.replay.headlineAvoided}: ${f.percent(replay.avoidability, 1)}`,
+              ]),
+        ]}
+        hint={[
+          copy.app.replay.floorNote,
           replay.avoidability === null
             ? fill(copy.app.replay.avoidabilityUndefined, {
                 mw: f.number(replay.thresholdMw),
               })
-            : `${copy.app.replay.headlineAvoided}: ${f.percent(replay.avoidability, 1)}`,
+            : copy.app.replay.avoidabilityNote,
         ]}
       />
     </View>
@@ -667,7 +680,13 @@ function Fleet({ replay }: { replay: Replay }) {
         <PanelHeader
           icon={<ZapIcon size={18} color={colors.inkMuted} />}
           title={copy.app.timeMachine.fleet.title}
-          subtitle={copy.app.timeMachine.fleet.note}
+          subtitle={copy.app.timeMachine.fleet.subtitle}
+          right={
+            <InfoHint
+              label={copy.app.timeMachine.about}
+              points={[copy.app.timeMachine.fleet.note, text.planVsExecutedNote]}
+            />
+          }
         />
         <View style={{ marginTop: space.lg }}>
           <PlanVsExecuted
@@ -676,16 +695,6 @@ function Fleet({ replay }: { replay: Replay }) {
             actualHours={replay.actual.hours}
           />
         </View>
-        <Text
-          style={{
-            marginTop: space.md,
-            fontSize: 11,
-            lineHeight: 18,
-            color: colors.inkFaint,
-          }}
-        >
-          {text.planVsExecutedNote}
-        </Text>
       </Panel>
       <View
         style={{ flexGrow: 2, flexShrink: 1, flexBasis: 380, minWidth: 0, gap: space.lg }}
@@ -702,9 +711,26 @@ function Fleet({ replay }: { replay: Replay }) {
             gap: space.sm,
           }}
         >
-          <Text style={{ fontSize: 13, fontWeight: "700", color: colors.ink }}>
-            {text.foresightLabel}
-          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: "700",
+                color: colors.ink,
+                flexShrink: 1,
+              }}
+            >
+              {text.foresightLabel}
+            </Text>
+            <InfoHint label={copy.app.timeMachine.about} points={[text.foresightNote]} />
+          </View>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xl }}>
             <Scalar
               label={text.foresightRecovered}
@@ -715,9 +741,6 @@ function Fleet({ replay }: { replay: Replay }) {
               value={`${mwh(replay.upperBound.forecastValueGapMwh, f)} MWh`}
             />
           </View>
-          <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
-            {text.foresightNote}
-          </Text>
         </View>
         <EpisodeList
           episodes={replay.episodes}
@@ -725,7 +748,7 @@ function Fleet({ replay }: { replay: Replay }) {
           title={text.episodesTitle}
           subtitle={fill(text.episodesSubtitle, { mw: f.number(replay.thresholdMw) })}
           columns={text.episodeColumns}
-          note={text.episodeNote}
+          note=""
           empty={text.episodesEmpty}
         />
       </View>
@@ -740,7 +763,7 @@ function ChartFact({
 }: {
   label: string;
   value: string;
-  note: string;
+  note?: string;
 }) {
   const colors = usePalette();
   return (
@@ -756,7 +779,11 @@ function ChartFact({
       >
         {value}
       </Text>
-      <Text style={{ fontSize: 11, lineHeight: 16, color: colors.inkFaint }}>{note}</Text>
+      {note === undefined ? null : (
+        <Text style={{ fontSize: 11, lineHeight: 16, color: colors.inkFaint }}>
+          {note}
+        </Text>
+      )}
     </View>
   );
 }

@@ -17,6 +17,7 @@
 import type { ReplayTimeline } from "@wattsteer/core/api";
 import { ClockIcon, Panel, PanelHeader, space, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
+import { InfoHint } from "@/components/app/time-machine/info-hint";
 import type { ReviewState } from "@/components/app/use-replay-review";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
@@ -44,6 +45,7 @@ export function GateTimeline({ state }: { state: ReviewState<ReplayTimeline> }) 
       icon={<ClockIcon size={18} color={colors.inkMuted} />}
       title={text.title}
       subtitle={text.subtitle}
+      right={<InfoHint label={copy.app.timeMachine.about} points={[text.noIntraday]} />}
     />
   );
 
@@ -172,9 +174,6 @@ export function GateTimeline({ state }: { state: ReviewState<ReplayTimeline> }) 
           </View>
         ))}
       </View>
-      <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
-        {text.noIntraday}
-      </Text>
     </Panel>
   );
 }

@@ -21,7 +21,13 @@
 import { expect, type Page, test } from "@playwright/test";
 import { routeGateway } from "./gateway-fixtures";
 
-const APP_SCREENS = ["/app", "/app/explain", "/app/mitigate", "/app/replay"] as const;
+const APP_SCREENS = [
+  "/app",
+  "/app/explain",
+  "/app/mitigate",
+  "/app/replay",
+  "/app/time-machine",
+] as const;
 
 /** Wait for a screen to stop reading before measuring anything about it. */
 async function settled(page: Page): Promise<void> {

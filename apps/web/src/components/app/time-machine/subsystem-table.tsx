@@ -17,6 +17,7 @@ import { subsystemMeta } from "@wattsteer/core";
 import type { ReplayCompare, ReplayCompareSubsystem } from "@wattsteer/core/api";
 import { LayersIcon, Panel, PanelHeader, radius, space, usePalette } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
+import { InfoHint } from "@/components/app/time-machine/info-hint";
 import type { ReviewState } from "@/components/app/use-replay-review";
 import { useCopy, useFormat } from "@/i18n";
 import { mwh, signedMwh } from "@/i18n/time-machine";
@@ -136,6 +137,12 @@ export function SubsystemTable({
       icon={<LayersIcon size={18} color={colors.inkMuted} />}
       title={text.title}
       subtitle={text.subtitle}
+      right={
+        <InfoHint
+          label={copy.app.timeMachine.about}
+          points={[text.nationalSettledNote, text.note]}
+        />
+      }
     />
   );
   if (state.status !== "read") {
@@ -286,12 +293,6 @@ export function SubsystemTable({
           </Text>
         </View>
       </View>
-      <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
-        {text.nationalSettledNote}
-      </Text>
-      <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
-        {text.note}
-      </Text>
     </Panel>
   );
 }

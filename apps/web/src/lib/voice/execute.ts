@@ -95,7 +95,8 @@ export const SCREEN_PATHS = {
   overview: "/app",
   explain: "/app/explain",
   mitigate: "/app/mitigate",
-  replay: "/app/replay",
+  // Where the chrome's Time Machine pill goes, so the agent and the nav agree.
+  replay: "/app/time-machine",
 } as const;
 
 /**

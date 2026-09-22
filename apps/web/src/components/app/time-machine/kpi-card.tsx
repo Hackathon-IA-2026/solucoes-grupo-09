@@ -14,6 +14,7 @@
 import { Panel, radius, space, usePalette } from "@wattsteer/ui";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
+import { InfoHint } from "@/components/app/time-machine/info-hint";
 
 export type KpiTone = "forecast" | "settled" | "neutral" | "record" | "fleet";
 
@@ -26,6 +27,7 @@ export function KpiCard({
   absent,
   tone,
   lines = [],
+  hint = [],
   testID,
 }: {
   icon: ReactNode;
@@ -38,6 +40,8 @@ export function KpiCard({
   absent?: string;
   tone: KpiTone;
   lines?: readonly string[];
+  /** The figure's explanation, behind the ⓘ rather than under the number. */
+  hint?: readonly string[];
   testID?: string;
 }) {
   const colors = usePalette();
@@ -71,7 +75,14 @@ export function KpiCard({
         borderTopColor: accent,
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: space.sm,
+        }}
+      >
         <View
           style={{
             width: 30,
@@ -89,6 +100,8 @@ export function KpiCard({
         >
           {title}
         </Text>
+        <View style={{ flexGrow: 1 }} />
+        <InfoHint label={title} points={hint} />
       </View>
       <Text style={{ fontSize: 12, lineHeight: 17, color: colors.inkMuted }}>
         {kicker}

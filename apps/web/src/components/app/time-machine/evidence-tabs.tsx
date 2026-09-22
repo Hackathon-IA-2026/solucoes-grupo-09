@@ -36,6 +36,7 @@ import {
 import { useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import type { SimilarDaysState } from "@/components/app/figures/use-similar-days";
+import { InfoHint } from "@/components/app/time-machine/info-hint";
 import type { DayReasons, ReviewState } from "@/components/app/use-replay-review";
 import { DriverBars } from "@/components/charts/driver-bars";
 import { useCopy, useFormat } from "@/i18n";
@@ -58,15 +59,6 @@ function Muted({ children }: { children: string }) {
   const colors = usePalette();
   return (
     <Text style={{ fontSize: 13, lineHeight: 20, color: colors.inkMuted }}>
-      {children}
-    </Text>
-  );
-}
-
-function Note({ children }: { children: string }) {
-  const colors = usePalette();
-  return (
-    <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
       {children}
     </Text>
   );
@@ -100,8 +92,7 @@ function Drivers({ state }: { state: ReviewState<ReplayAttribution> }) {
           baseline: mwh(attribution.baselineExpectedMwh, f),
         })}
       </Muted>
-      <DriverBars drivers={attributedDrivers(attribution.drivers)} />
-      <Note>{text.note}</Note>
+      <DriverBars drivers={attributedDrivers(attribution.drivers)} notes={false} />
     </View>
   );
 }
@@ -119,7 +110,6 @@ function Analogues({ state }: { state: SimilarDaysState }) {
   }
   return (
     <View style={{ gap: space.sm }}>
-      <Muted>{text.subtitle}</Muted>
       {state.days.neighbours.map((neighbour) => (
         <View
           key={neighbour.targetDate}
@@ -152,7 +142,6 @@ function Analogues({ state }: { state: SimilarDaysState }) {
           </Text>
         </View>
       ))}
-      <Note>{text.caveat}</Note>
     </View>
   );
 }
@@ -172,7 +161,6 @@ function Reasons({ state }: { state: ReviewState<DayReasons> }) {
   const citation = state.value.citation;
   return (
     <View style={{ gap: space.sm }}>
-      <Muted>{text.note}</Muted>
       {ranked.length === 0 ? <Muted>{text.empty}</Muted> : null}
       {ranked.map((reason) => (
         <View key={reason.reason} style={{ gap: 4 }}>
@@ -218,17 +206,14 @@ function Reasons({ state }: { state: ReviewState<DayReasons> }) {
           </Text>
         </Pressable>
       )}
-      <Note>{copy.app.explain.reasonLegend}</Note>
     </View>
   );
 }
 
 function Audit({ links }: { links: readonly AuditLink[] }) {
   const colors = usePalette();
-  const copy = useCopy();
   return (
     <View style={{ gap: space.sm }}>
-      <Muted>{copy.app.timeMachine.audit.note}</Muted>
       {links.map((link) => (
         <Pressable
           key={link.key}
@@ -269,6 +254,26 @@ export function EvidenceTabs({
       style={{ gap: space.md, flexGrow: 2, flexShrink: 1, flexBasis: 420, minWidth: 0 }}
     >
       <PanelHeader
+        right={
+          <InfoHint
+            label={copy.app.timeMachine.about}
+            points={
+              {
+                drivers: [
+                  copy.app.timeMachine.attribution.note,
+                  copy.app.drivers.note,
+                  copy.app.drivers.scopeNote,
+                ],
+                analogues: [copy.app.analogue.subtitle, copy.app.analogue.caveat],
+                reasons: [
+                  copy.app.timeMachine.reasons.note,
+                  copy.app.explain.reasonLegend,
+                ],
+                audit: [copy.app.timeMachine.audit.note],
+              }[tab]
+            }
+          />
+        }
         icon={<SearchIcon size={18} color={colors.inkMuted} />}
         title={text.label}
         subtitle={
