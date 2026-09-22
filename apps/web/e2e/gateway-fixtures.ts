@@ -33,6 +33,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
+import { REVIEW_BY_PREFIX } from "./time-machine-fixtures";
 
 /**
  * The day being forecast, and the settled day behind it.
@@ -917,10 +918,21 @@ export async function routeGateway(
      * deployment's real state, which is what puts the badge on the chrome.
      */
     serving = "unstubbed",
+    /**
+     * Serve the Time Machine dashboard's reads — the four-subsystem
+     * comparison, the timeline, the pinned attribution, the analogues and
+     * ONS's programme for the day — around the contract's replay example.
+     *
+     * Opt-in for the reason `serving` is: a spec written before these reads
+     * existed measured the screens without them, and serving them everywhere
+     * would change what those specs measure.
+     */
+    review = false,
   }: {
     forecast: boolean;
     reasons?: boolean;
-    serving?: "unstubbed" | "nothingPromoted";
+    serving?: "unstubbed" | "nothingPromoted" | "promoted";
+    review?: boolean;
   },
 ): Promise<void> {
   await page.route("http://localhost:3000/**", async (route) => {
@@ -928,6 +940,39 @@ export async function routeGateway(
     if (serving === "nothingPromoted" && path === "/v1/meta") {
       await route.fulfill({ json: META_NOTHING_PROMOTED });
       return;
+    }
+    if (serving === "promoted" && path === "/v1/meta") {
+      await route.fulfill({ json: specExample("01-meta.json") });
+      return;
+    }
+    if (review && path === "/v1/model/card") {
+      // The dashboard's track-record card reads the day-grain group, which the
+      // default card withholds; a measured fold is what that card is for.
+      await route.fulfill({
+        json: {
+          ...MODEL_CARD,
+          ensemble: {
+            ...MODEL_CARD.ensemble,
+            day_grain: {
+              fold_id: "F6",
+              days: 83,
+              day_total_coverage: 0.78,
+              peak_coverage: 0.81,
+              target: 0.8,
+              population: "complete_settled_days",
+            },
+            day_grain_absent_reason: null,
+          },
+        },
+      });
+      return;
+    }
+    if (review) {
+      const found = REVIEW_BY_PREFIX.find(([prefix]) => path.startsWith(prefix));
+      if (found !== undefined) {
+        await route.fulfill({ json: found[1] });
+        return;
+      }
     }
     if (reasons && path === "/v1/curtailment/reasons") {
       await route.fulfill({ json: CURTAILMENT_REASONS_WITH_ROWS });

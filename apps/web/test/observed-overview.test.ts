@@ -201,6 +201,15 @@ describe("no observed label claims a forecast", () => {
     "map.subtitleObserved": dict.app.overview.map.subtitleObserved,
     "map.figureObserved": dict.app.overview.map.figureObserved,
     "map.regionObserved": dict.app.overview.map.regionObserved,
+    // The Time Machine dashboard's settled figures: the headline card, the
+    // chart's settled series, the table's settled column and the timeline's
+    // settled node. They sit beside a forecast on every one of those panels,
+    // which is exactly why their own words may not borrow its vocabulary.
+    "timeMachine.kpi.settledTitle": dict.app.timeMachine.kpi.settledTitle,
+    "timeMachine.kpi.settledKicker": dict.app.timeMachine.kpi.settledKicker,
+    "timeMachine.chart.legendSettled": dict.app.timeMachine.chart.legendSettled,
+    "timeMachine.compare.columns.settled": dict.app.timeMachine.compare.columns.settled,
+    "timeMachine.timeline.settledNode": dict.app.timeMachine.timeline.settledNode,
   });
 
   /** Words that would make a settled figure read as a model's output. */
@@ -248,6 +257,10 @@ describe("no observed label claims a forecast", () => {
         dict.app.overview.map.subtitleObserved,
         dict.app.overview.map.figureObserved,
         dict.app.overview.map.regionObserved,
+        dict.app.timeMachine.kpi.settledKicker,
+        dict.app.timeMachine.chart.legendSettled,
+        dict.app.timeMachine.compare.columns.settled,
+        dict.app.timeMachine.timeline.settledNode,
       ];
       const silent = headings.filter(
         (value) => !marker.some((word) => value.toLowerCase().includes(word)),

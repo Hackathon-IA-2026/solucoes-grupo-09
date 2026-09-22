@@ -286,13 +286,27 @@ describe("a lede never promises a panel that is not there", () => {
     );
   });
 
-  it("all four screens pair a lede with an absent one", () => {
+  it("The Time Machine dashboard switches its lede on whether anything was scored", () => {
+    // `/app/time-machine` reads the same replay as `/app/replay`, so it owes the
+    // same pair for the same reason: its observed-only branch offers ONS's
+    // record *instead* of a replay, and a lede promising a scored day above it
+    // would contradict the panels it introduces.
+    const dashboard = code(read("app", "app", "time-machine.tsx"));
+    expect(dashboard).toContain('const scored = state.status === "replayed"');
+    expect(dashboard).toContain(
+      "scored ? copy.app.timeMachine.lede : copy.app.timeMachine.ledeAbsent",
+    );
+  });
+
+  it("every screen pairs a lede with an absent one", () => {
     // ADR-0008. The Overview names its pair differently because it got there
     // first and the state it falls back to is observed rather than absent.
+    // Four `ledeAbsent` keys: Explain, Mitigate, Replay and the Time Machine
+    // dashboard, which is a fifth screen and not a second copy of the fourth.
     for (const locale of ["copy.en.ts", "copy.pt.ts"] as const) {
       const dict = read("i18n", locale);
       expect(dict).toContain("ledeObserved:");
-      expect((dict.match(/ledeAbsent:/g) ?? []).length).toBe(3);
+      expect((dict.match(/ledeAbsent:/g) ?? []).length).toBe(4);
     }
   });
 
