@@ -98,8 +98,17 @@ class ReplayEpisode:
     threshold_mw: float
     max_gap_hours: int
 
-    def as_payload(self) -> dict[str, object]:
+    def as_payload(self, subsystem: str) -> dict[str, object]:
+        """The episode as the shared `CurtailmentEpisode` shape publishes it.
+
+        ``subsystem`` is the replay's own, passed in rather than stored: a
+        replay is one subsystem, so an episode read for it cannot be in any
+        other. The shape gained the field for the Overview (`40721c1`), where
+        one list spans the grid, and a replay that omitted it published
+        episodes its own schema refused.
+        """
         return {
+            "subsystem": subsystem,
             "started_at": self.started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ended_at": self.ended_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "duration_hours": self.duration_hours,
@@ -182,7 +191,7 @@ def replay_result(
             "brl_per_mwh": rate,
             "brl": observed.recovered_mwh * rate,
         },
-        "episodes": [episode.as_payload() for episode in episodes],
+        "episodes": [episode.as_payload(forecast.subsystem) for episode in episodes],
         "solver": solver_receipt(scores.plan),
     }
 
@@ -241,7 +250,7 @@ def observed_only_result(
         # A property of the day and the fleet, with nothing of WattSteer's
         # beside it to compare against — so no `forecast_value_gap_mwh`.
         "upper_bound": view.upper_bound.as_payload(),
-        "episodes": [episode.as_payload() for episode in episodes],
+        "episodes": [episode.as_payload(view.observed.subsystem) for episode in episodes],
     }
 
 

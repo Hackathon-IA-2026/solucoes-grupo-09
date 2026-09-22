@@ -1460,8 +1460,6 @@ async def similar_days_route(
         return parsed
 
     day = target_date or serving_target_date(datetime.now(tz=UTC))
-    gate_profile = cast(GateProfile, parsed.gate_profile)
-    feature_set = cast(FeatureSet, parsed.feature_set)
     pool_from = day - timedelta(days=days)
 
     connection_pool = await database.connect()
