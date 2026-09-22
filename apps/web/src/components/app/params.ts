@@ -123,6 +123,15 @@ export function technologyParam(technology: Technology): string {
   return technology.toLowerCase();
 }
 
+/**
+ * `YYYY-MM-DD`, which is the wire's spelling of a civil date.
+ *
+ * A shape test and not a calendar one: `2026-02-31` passes here and answers
+ * with absences, which is the right outcome for a public read-only screen — the
+ * alternative is a reader pasting a plausible date and meeting an error page.
+ */
+const CIVIL_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -186,13 +195,29 @@ export function parseAppParams(
   const technology = first(raw.technology);
   const run = first(raw.run);
   const episode = first(raw.episode);
+  const date = first(raw.date);
   const namedSubsystem = SUBSYSTEM_DISPLAY_ORDER.includes(subsystem as SubsystemCode);
   return {
     subsystem: namedSubsystem ? (subsystem as SubsystemCode) : "NE",
     subsystemFromUrl: namedSubsystem,
     technology: TECHNOLOGY_PARAM[technology ?? ""] ?? "WIND",
     run: RUN_LABELS.includes(run as RunLabel) ? (run as RunLabel) : fallbackRun,
-    date: latestTargetDate(now),
+    /*
+      **Read back, and it was not.** `writeParams` learned to emit `date` when
+      the scope bar's arrows landed, and this line went on overwriting it with
+      the clock — so the arrow wrote a URL the parser threw away and nothing
+      moved. It is precisely the failure the docstring below this function
+      records for `technology`: a field written one way and parsed another,
+      with the fallback quietly doing its job on a value this module had just
+      written itself.
+
+      Validated by shape rather than by membership, like `episode` two lines
+      down. The screen is public and read-only, and a hand-edited or truncated
+      date must render *something* — a day the gateway has nothing for answers
+      with stated absences, which is a screen, while a malformed one would be
+      an invalid request on every read.
+    */
+    date: date !== undefined && CIVIL_DATE.test(date) ? date : latestTargetDate(now),
     episode:
       // Shape, not membership: the picker's days come from the gateway now, so
       // a link to any day it can answer has to survive a reload.
@@ -222,6 +247,14 @@ export function sharedParams(params: AppParams): Record<string, string> {
     subsystem: params.subsystem,
     technology: params.technology,
     run: params.run,
+    /*
+      The day travels between tabs too, now that it is a choice rather than a
+      reading of the clock. Leaving it out would mean a reader who walked back
+      three days on the Overview and pressed `Máquina do tempo` arrived on
+      today — the selection silently discarded by a navigation, which is the
+      round-trip property this function exists to hold.
+    */
+    date: params.date,
   });
 }
 

@@ -168,14 +168,27 @@ describe("show_grid", () => {
   it("opens the overview carrying the selection", () => {
     const { pathname, params } = navigation(run("show_grid", {}));
     expect(pathname).toBe(SCREEN_PATHS.overview);
-    expect(params).toEqual({ subsystem: "NE", technology: "wind", run: "12Z" });
+    // `date` travels too, now that the Overview's arrows make it a choice
+    // rather than a reading of the clock: a navigation that dropped it would
+    // silently put a reader who had walked back three days on today.
+    expect(params).toEqual({
+      subsystem: "NE",
+      technology: "wind",
+      run: "12Z",
+      date: "2026-09-16",
+    });
   });
 
   it("carries whatever the selection happens to be", () => {
     const { params } = navigation(
       run("show_grid", {}, { ...NE, subsystem: "S", technology: "SOLAR", run: "00Z" }),
     );
-    expect(params).toEqual({ subsystem: "S", technology: "solar", run: "00Z" });
+    expect(params).toEqual({
+      subsystem: "S",
+      technology: "solar",
+      run: "00Z",
+      date: "2026-09-16",
+    });
   });
 
   it("any argument at all is unexpected_argument", () => {
@@ -191,7 +204,12 @@ describe("explain", () => {
   it("no arguments keeps the current selection", () => {
     const { pathname, params } = navigation(run("explain", {}));
     expect(pathname).toBe(SCREEN_PATHS.explain);
-    expect(params).toEqual({ subsystem: "NE", technology: "wind", run: "12Z" });
+    expect(params).toEqual({
+      subsystem: "NE",
+      technology: "wind",
+      run: "12Z",
+      date: "2026-09-16",
+    });
   });
 
   for (const subsystem of SUBSYSTEM_DISPLAY_ORDER) {
