@@ -11,6 +11,23 @@ Two reasons to score it this way rather than by running the whole pipeline:
 - It needs no generation quota, so the comparison is repeatable and the two
   arms are scored on identical inputs. An end-to-end A/B would also move with
   the drafter's sampling, and a reranker would be credited or blamed for it.
+
+**Unresolved, and left here rather than smoothed over.** Run directly against
+one question, `_answered(base)` for A09 is `True` and `_answered(ranked)` is
+`False` — the reranker *demotes* the answering passage out of the top 8, which
+is a `LOST` this summary should name. Run through `main()`, the same question
+records `rrf: False`, so the loss is invisible: it looks like retrieval never
+found it. The pool, both arm counts and the vector head are identical in both
+paths, and retrieval is stable across trials. Until that is explained, treat
+`rrf_hits` as unverified — and note that the decision this file exists to
+support was taken on a number produced the same way.
+
+It does need **embedding** quota, and that is the trap this file fell into.
+`retrieve.py` answers from text search alone when the query embedding is
+refused — correct for the product, silent by design — so a run that exhausts
+the free tier part-way keeps scoring, and the later rows are a different
+retrieval under the same name. Each row now records how many hits each arm
+contributed, and the summary is computed over the two-armed rows only.
 - It is the property reranking can affect. A passage the drafter never sees is
   the failure this exists for; what the drafter then does with it belongs to
   `gate.py` and `verify.py`, which are measured by `run_eval.py`.
@@ -69,28 +86,65 @@ async def main() -> int:
             pool = await search(rt.db, rt.gateway, case["question"], target_date=case.get("date"), limit=200)
             base = pool[:top]
             ranked = rerank(case["question"], pool, top, model=args.model).hits
+            # Which arms actually ran. `retrieve.py` swallows a `QuotaExhausted`
+            # on the query embedding and answers from text search alone — right
+            # for the product, and silent, which is wrong for a measurement:
+            # every such row scores a *different retrieval* under the same name.
+            vector_arm = sum(1 for hit in pool if hit.vector_rank is not None)
+            text_arm = sum(1 for hit in pool if hit.text_rank is not None)
+            # The vector arm's own head, recorded so two runs can be compared
+            # chunk by chunk. A count of 40 says the arm *ran*; it does not say
+            # it returned the same 40, and the two are not the same claim —
+            # A09 scores rank 1 standalone and a miss inside a 67-question run,
+            # with both arms reporting 40 in each. Something moves the query
+            # embedding late in a run and nothing here could see it.
+            vector_head = [
+                hit.external_id
+                for hit in sorted(
+                    (h for h in pool if h.vector_rank is not None),
+                    key=lambda h: h.vector_rank or 0,
+                )[:5]
+            ]
             row = {
                 "id": case["id"],
                 "rrf": _answered(base, case),
                 "reranked": _answered(ranked, case),
                 "pool": len(pool),
+                "vector_arm": vector_arm,
+                "text_arm": text_arm,
+                "hybrid": vector_arm > 0 and text_arm > 0,
+                "vector_head": vector_head,
             }
             rows.append(row)
             moved = {(False, True): "RESCUED", (True, False): "LOST"}.get((row["rrf"], row["reranked"]), "")
             print(
                 f"{row['id']:<5} rrf={'hit ' if row['rrf'] else 'miss'} "
-                f"rerank={'hit ' if row['reranked'] else 'miss'} {moved}",
+                f"rerank={'hit ' if row['reranked'] else 'miss'} "
+                f"vec={vector_arm:<3} txt={text_arm:<3}"
+                f"{'' if row['hybrid'] else '  ONE-ARMED'} {moved}",
                 flush=True,
             )
 
+    # Scored over the hybrid rows only. A one-armed row is not a worse
+    # retrieval, it is a *different* one, and averaging the two produced the
+    # headline this file carried for a day: "52 -> 59, 7 rescued" over a set in
+    # which 37 of 67 rows had lost the vector arm to the free tier. Re-measured
+    # with both arms, the reranker rescued none of them. Which of those two
+    # numbers is the reranker's is not a question an average can answer, so the
+    # partial rows are counted and named rather than folded in.
+    scored = [r for r in rows if r["hybrid"]]
+    one_armed = [r["id"] for r in rows if not r["hybrid"]]
     summary = {
         "model": args.model,
         "top_hits": top,
         "cases": len(rows),
-        "rrf_hits": sum(r["rrf"] for r in rows),
-        "reranked_hits": sum(r["reranked"] for r in rows),
-        "rescued": [r["id"] for r in rows if not r["rrf"] and r["reranked"]],
-        "lost": [r["id"] for r in rows if r["rrf"] and not r["reranked"]],
+        "scored": len(scored),
+        "one_armed": one_armed,
+        "rrf_hits": sum(r["rrf"] for r in scored),
+        "reranked_hits": sum(r["reranked"] for r in scored),
+        "rescued": [r["id"] for r in scored if not r["rrf"] and r["reranked"]],
+        "lost": [r["id"] for r in scored if r["rrf"] and not r["reranked"]],
+        "missed_by_both": [r["id"] for r in scored if not r["rrf"] and not r["reranked"]],
     }
     Path(args.out).write_text(json.dumps({"summary": summary, "rows": rows}, indent=2))
     print("\n" + json.dumps(summary, indent=2))
