@@ -319,6 +319,53 @@ export const GRID_CONTEXT = (() => {
   };
 })();
 
+/**
+ * The replay itself, with the dispatch a real one carries: all twenty-four
+ * hours.
+ *
+ * `12-replay.json` illustrates the dispatch with one hour (13:00), which is
+ * enough for the contract and too little for a chart of the day. The hours
+ * below keep the example's own totals — the executed absorption sums to its
+ * `avoided_energy_mwh` of 281 — and absorb only inside the settled episode
+ * (09:00–17:00), clipped below what was scheduled, which is the execution
+ * rule's shape on a day the forecast ran high at the edges.
+ */
+const SCHEDULED = [
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 35, 40, 40, 40, 40, 40, 35, 20, 0, 0, 0, 0, 0, 0,
+];
+const EXECUTED = [
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 30, 35, 35, 35, 35, 35, 36, 25, 0, 0, 0, 0, 0, 0,
+];
+
+/*
+  Literal state-of-charge figures, typed in rather than accumulated: a fixture
+  that charged a battery hour by hour would be a second implementation of the
+  execution rule, which `test/one-execution-rule.test.ts` exists to forbid —
+  and caught here the first time this was written as a loop.
+*/
+const STORED = [
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 14, 45, 81, 117, 153, 189, 225, 256, 274, 274, 274, 274, 274,
+  274, 274,
+];
+
+const dispatchDay = (absorbed: readonly number[]) =>
+  absorbed.map((mwh, hour) => ({
+    hour_local: hour,
+    offered_mwh: mwh,
+    battery_charge_mw: mwh,
+    battery_discharge_mw: 0,
+    state_of_charge_mwh: STORED[hour] ?? 0,
+    load_shift_up_mw: 0,
+    load_shift_down_mw: 0,
+    absorbed_mwh: mwh,
+  }));
+
+export const REPLAY_FULL_DAY = {
+  ...specExample("12-replay.json"),
+  dispatch: dispatchDay(SCHEDULED),
+  executed: dispatchDay(EXECUTED),
+};
+
 /** The reads the dashboard adds, by pathname prefix. */
 export const REVIEW_BY_PREFIX: readonly [string, unknown][] = [
   ["/v1/replay/compare/", REPLAY_COMPARE],

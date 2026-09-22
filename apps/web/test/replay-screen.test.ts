@@ -277,6 +277,23 @@ describe("scheduled and executed are two series", () => {
   });
 });
 
+describe("the plan chart's axis is the settled day, not the dispatch", () => {
+  it("does not drop the day off the plot when the dispatch is sparse", () => {
+    // The defect: `slot = chartW / executed.length`. The contract's own example
+    // carries one dispatch hour, which made one slot the whole plot and put
+    // every settled bar after the first past its right edge — an empty chart
+    // over a 612 MWh day, on /app/replay and /app/time-machine alike.
+    const chart = sourceWithoutComments(
+      join(ROOT, "apps", "web", "src", "components", "charts", "plan-vs-executed.tsx"),
+    );
+    expect(chart).toContain("chartW / Math.max(actualHours.length, 1)");
+    expect(chart).not.toContain("chartW / executed.length");
+    // Each dispatch point sits at its own hour, never at its array position.
+    expect(chart).toContain("x(hour.hourLocal)");
+    expect(EXAMPLE.dispatch.length).toBeLessThan(EXAMPLE.actual.hours.length);
+  });
+});
+
 describe("perfect foresight is fenced, and labelled in the spec's own words", () => {
   it("the label is verbatim", () => {
     expect(EN.app.replay.foresightLabel).toBe(

@@ -16,6 +16,7 @@
 
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { pt as PT } from "../src/i18n/copy.pt";
 import { routeGateway } from "./gateway-fixtures";
 
 const PATH = "/app/time-machine?episode=2025-09-14-ne";
@@ -64,6 +65,27 @@ test.describe("the Time Machine dashboard", () => {
     expect(body).toContain("671");
     expect(body).toContain("768");
     await shoot(page, "01-dashboard-pt");
+  });
+
+  test("the plan chart draws every settled hour, whatever the dispatch carries", async ({
+    page,
+  }) => {
+    // The contract example carries one dispatch hour; the chart once sized its
+    // slot from that and drew an empty figure. Twenty-four settled hours, all
+    // above zero, are twenty-four bars on the plot.
+    await open(page);
+    const figure = page.locator(`[aria-label="${PT.app.replay.planVsExecutedFigure}"]`);
+    await expect(figure).toHaveCount(1);
+    const bars = await figure.locator("rect").evaluateAll(
+      (nodes) =>
+        nodes.filter((node) => {
+          const box = (node as SVGGraphicsElement).getBBox();
+          const svg = (node as SVGGraphicsElement).ownerSVGElement;
+          const width = svg?.viewBox.baseVal.width ?? 0;
+          return box.height > 0 && box.x + box.width <= width;
+        }).length,
+    );
+    expect(bars).toBe(24);
   });
 
   test("grades no day with an accuracy and names no cause", async ({ page }) => {

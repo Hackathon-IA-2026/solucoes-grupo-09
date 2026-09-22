@@ -33,7 +33,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { REVIEW_BY_PREFIX } from "./time-machine-fixtures";
+import { REPLAY_FULL_DAY, REVIEW_BY_PREFIX } from "./time-machine-fixtures";
 
 /**
  * The day being forecast, and the settled day behind it.
@@ -965,6 +965,10 @@ export async function routeGateway(
           },
         },
       });
+      return;
+    }
+    if (review && path === "/v1/replay") {
+      await route.fulfill({ json: REPLAY_FULL_DAY });
       return;
     }
     if (review) {

@@ -4,6 +4,7 @@ import {
   GRID_CONTEXT,
   REPLAY_ATTRIBUTION,
   REPLAY_COMPARE,
+  REPLAY_FULL_DAY,
   REPLAY_TIMELINE,
   SIMILAR_DAYS,
 } from "../e2e/time-machine-fixtures";
@@ -20,12 +21,24 @@ describe("the dashboard's e2e stubs are shapes the gateway can send", () => {
     ["replay-attribution.schema.json", REPLAY_ATTRIBUTION],
     ["similar-days.schema.json", SIMILAR_DAYS],
     ["grid-context.schema.json", GRID_CONTEXT],
+    ["replay.schema.json", REPLAY_FULL_DAY],
   ] as const) {
     it(`${schema} accepts its stub`, () => {
       const result = validate(schema, body);
       expect(result.valid ? "" : explain(result)).toBe("");
     });
   }
+
+  it("the full-day dispatch keeps the example's own avoided energy", () => {
+    const executed = REPLAY_FULL_DAY.executed.reduce(
+      (sum, hour) => sum + hour.absorbed_mwh,
+      0,
+    );
+    expect(executed).toBe(
+      (REPLAY_FULL_DAY as unknown as { avoided_energy_mwh: number }).avoided_energy_mwh,
+    );
+    expect(REPLAY_FULL_DAY.dispatch).toHaveLength(24);
+  });
 
   it("the national band is not four P50s added", () => {
     const sum = REPLAY_COMPARE.subsystems.reduce(
