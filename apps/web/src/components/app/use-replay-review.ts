@@ -84,9 +84,13 @@ function useRead<T>(
 }
 
 /** Four subsystems against their pinned bands, for one day and one lane. */
-export function useReplayCompare(date: string, lane: string): ReviewState<ReplayCompare> {
-  return useRead(`${date}|${lane}`, (signal) =>
-    api.replayCompare({ date, lane }, signal),
+export function useReplayCompare(
+  date: string,
+  /* `null` while the serving lane is unknown — see `use-replay-lane.ts`. */
+  lane: string | null,
+): ReviewState<ReplayCompare> {
+  return useRead(lane === null ? null : `${date}|${lane}`, (signal) =>
+    api.replayCompare({ date, lane: lane ?? "" }, signal),
   );
 }
 
@@ -104,10 +108,11 @@ export function useReplayTimeline(
 export function useReplayAttribution(
   date: string,
   subsystem: SubsystemCode,
-  lane: string,
+  /* `null` while the serving lane is unknown — see `use-replay-lane.ts`. */
+  lane: string | null,
 ): ReviewState<ReplayAttribution> {
-  return useRead(`${date}|${subsystem}|${lane}`, (signal) =>
-    api.replayAttribution({ date, subsystem, lane }, signal),
+  return useRead(lane === null ? null : `${date}|${subsystem}|${lane}`, (signal) =>
+    api.replayAttribution({ date, subsystem, lane: lane ?? "" }, signal),
   );
 }
 

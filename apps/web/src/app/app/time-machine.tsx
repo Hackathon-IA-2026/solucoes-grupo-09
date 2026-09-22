@@ -88,6 +88,7 @@ import { useAppParams } from "@/components/app/use-app-params";
 import { useGridContext } from "@/components/app/use-grid-context";
 import { useReplay } from "@/components/app/use-replay";
 import { useReplayDays } from "@/components/app/use-replay-days";
+import { useReplayLane } from "@/components/app/use-replay-lane";
 import {
   useDayReasons,
   useReplayAttribution,
@@ -108,7 +109,7 @@ import { mwh, signedMwh } from "@/i18n/time-machine";
 import { apiUrl } from "@/lib/api-url";
 import { API_URL } from "@/lib/config";
 import { replayDay, replayDayId, type SubsystemCode } from "@/lib/fixtures";
-import { dispatchSeries, forecastHours, observedHours, REPLAY_LANE } from "@/lib/replay";
+import { dispatchSeries, forecastHours, observedHours } from "@/lib/replay";
 import { forecastError, placementOf } from "@/lib/replay-accuracy";
 import { likelyWindow, openingDay, replayableSubsystems } from "@/lib/time-machine";
 
@@ -145,12 +146,14 @@ export default function TimeMachineDashboard() {
     },
     counterfactual: undefined,
   });
-  const compare = useReplayCompare(day.date, REPLAY_LANE);
+  /* Read from `/v1/meta`, never written down — see `use-replay-lane.ts`. */
+  const { lane: replayLane, gateProfile: replayGate } = useReplayLane();
+  const compare = useReplayCompare(day.date, replayLane);
   const timeline = useReplayTimeline(day.date, day.subsystem);
-  const attribution = useReplayAttribution(day.date, day.subsystem, REPLAY_LANE);
+  const attribution = useReplayAttribution(day.date, day.subsystem, replayLane);
   const reasons = useDayReasons(day.date, day.subsystem);
-  const analogues = useSimilarDays(day.subsystem, day.date, "gate_late");
-  const coverage = useCoverage("gate_late");
+  const analogues = useSimilarDays(day.subsystem, day.date, replayGate);
+  const coverage = useCoverage(replayGate);
   const context = useGridContext(day.subsystem, day.date);
 
   /*
@@ -335,13 +338,13 @@ export default function TimeMachineDashboard() {
       url: auditUrl("/v1/replay", {
         d: day.date,
         s: encodeScenario(scenario),
-        lane: REPLAY_LANE,
+        lane: replayLane ?? "",
       }),
     },
     {
       key: "compare",
       label: text.audit.compare,
-      url: auditUrl(`/v1/replay/compare/${day.date}`, { lane: REPLAY_LANE }),
+      url: auditUrl(`/v1/replay/compare/${day.date}`, { lane: replayLane ?? "" }),
     },
     {
       key: "timeline",
@@ -353,7 +356,7 @@ export default function TimeMachineDashboard() {
       label: text.audit.attribution,
       url: auditUrl(`/v1/replay/attribution/${day.date}`, {
         subsystem: day.subsystem,
-        lane: REPLAY_LANE,
+        lane: replayLane ?? "",
       }),
     },
   ];
@@ -520,7 +523,7 @@ export default function TimeMachineDashboard() {
         subject={{
           subsystem: day.subsystem,
           targetDate: day.date,
-          lane: REPLAY_LANE,
+          lane: replayLane ?? "",
           artifactId: replay.forecastOrigin.runLabel,
         }}
         testID="time-machine-feedback"

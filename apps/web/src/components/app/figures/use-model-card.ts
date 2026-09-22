@@ -61,14 +61,21 @@ function read(lane: string): Promise<ModelCard | null> {
 }
 
 /** The lane serving this gate, or `undefined` while that is not known. */
-export function usePromotedLane(gateProfile: GateProfile): string | undefined {
+export function usePromotedLane(
+  /*
+    `null` is admitted and behaves exactly as a profile with no serving lane
+    does — `absent`, not a guess. The Time Machine reads its profile off the
+    lane `/v1/meta` says is serving, and that is unknown for one render.
+  */
+  gateProfile: GateProfile | null,
+): string | undefined {
   const serving = useServing();
-  return serving.status === "known"
+  return serving.status === "known" && gateProfile !== null
     ? servingLaneFor(serving.lanes, gateProfile)?.name
     : undefined;
 }
 
-export function useModelCard(gateProfile: GateProfile): ModelCardState {
+export function useModelCard(gateProfile: GateProfile | null): ModelCardState {
   const serving = useServing();
   const lane = usePromotedLane(gateProfile);
   const [state, setState] = useState<ModelCardState>({ status: "reading" });

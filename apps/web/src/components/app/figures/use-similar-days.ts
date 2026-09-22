@@ -37,7 +37,7 @@ export type SimilarDaysState =
 export function useSimilarDays(
   subsystem: SubsystemCode,
   date: string,
-  gateProfile: GateProfile,
+  gateProfile: GateProfile | null,
 ): SimilarDaysState {
   const serving = useServing();
   const lane = usePromotedLane(gateProfile);
