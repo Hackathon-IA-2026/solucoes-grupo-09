@@ -589,7 +589,16 @@ export function OverviewHero({
             flexShrink: 1,
             flexBasis: wide ? space.md * 2 : "auto",
             minWidth: 0,
-            gap: space.lg,
+            /*
+              `space.md`, like every other gap in this hero. It was `space.lg`,
+              which is only visible where this column's children stack against
+              something else's: the question cards sit 12 apart and the whole
+              column under them sat 16, and on a phone — where the rails fall
+              into this column too — that 16 ran the length of the screen under
+              a 12. One gap, or the card edges and the column edges stop
+              agreeing, which is what the comment above this grid is about.
+            */
+            gap: space.md,
           }}
         >
           <Panel style={{ gap: space.md, alignItems: "stretch" }}>
