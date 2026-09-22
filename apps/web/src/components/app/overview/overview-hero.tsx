@@ -47,6 +47,7 @@ import { gateProfileOf } from "@/components/app/use-app-params";
 import { useGridContext } from "@/components/app/use-grid-context";
 import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-network";
 import { useRunLanes } from "@/components/app/use-run-lanes";
+import { BandCard } from "@/components/charts/band-figure";
 import { FanChart } from "@/components/charts/fan-chart";
 import {
   ObservedCard,
@@ -312,11 +313,11 @@ export function OverviewHero({
     reader comparing the total with the shape it came from no longer scrolls
     between them.
 
-    Only where there is no forecast. With one on the screen the day's energy is
-    a `BandCard` in `ForecastPanels`, and two cards a few hundred pixels apart
-    saying "the day" in the forecast and the observed vocabulary is the
-    adjacency `lib/network.ts` refuses — see `honesty.md` on the two
-    vocabularies.
+    Only where there is no forecast. With one on the screen this slot holds
+    `forecastFigures` instead — the same two questions in the forecast
+    vocabulary, as bands — and two cards a few hundred pixels apart saying "the
+    day" in the two vocabularies at once is the adjacency `lib/network.ts`
+    refuses; see `honesty.md`.
 
     `peakHour === null` is the day that settled with no curtailment in it, which
     is a different sentence from a zero and gets a different card.
@@ -357,6 +358,50 @@ export function OverviewHero({
         </>
       )
     ) : null;
+
+  /*
+    **The forecast day's two figures, in the same slot the settled pair takes.**
+
+    They were the last thing on the page, two `BandCard`s at the bottom of
+    `ForecastPanels`, a full scroll below the map that names the region they
+    are about. The settled pair had already moved up under the profile for that
+    reason; leaving these where they were would have meant the same claim
+    living in two places depending on whether a model happened to be promoted,
+    which teaches a reader that the position of a number means nothing.
+
+    Gated on `selectedRow` rather than on `forecast` alone because both are
+    needed — the band comes from the selected row and the peak's footnote from
+    the run's threshold — and because `selectedRow` is `null` exactly when
+    `forecast` is, so this pair and `dayFigures` above are mutually exclusive by
+    construction. Never both: a P10-P90 and a settled megawatt-hour a few
+    hundred pixels apart, both labelled "the day", is the adjacency
+    `lib/network.ts` keeps its two row types apart to prevent — see
+    `honesty.md` on the two vocabularies.
+  */
+  const forecastFigures =
+    forecast === null || selectedRow === null ? null : (
+      <>
+        <BandCard
+          label={fill(copy.app.overview.dailyEnergy, {
+            subsystem: meta.onsDisplayName,
+          })}
+          band={selectedRow.dailyEnergy}
+          unit="MWh"
+          footnote={copy.app.overview.dailyEnergyNote}
+        />
+        <BandCard
+          label={fill(copy.app.overview.peakPower, {
+            subsystem: meta.onsDisplayName,
+          })}
+          band={selectedRow.peakPower}
+          unit="MW"
+          tone="violet"
+          footnote={fill(copy.app.overview.peakPowerNote, {
+            mw: f.number(forecast.forecast.thresholdMw),
+          })}
+        />
+      </>
+    );
 
   const window24h = fill(copy.app.observed.window24h, {
     hour: f.dateTime(observed.now.latestSettledHour),
@@ -533,6 +578,7 @@ export function OverviewHero({
             {headline}
             {profile}
             {dayFigures}
+            {forecastFigures}
           </View>
         ) : null}
 
@@ -801,8 +847,14 @@ export function OverviewHero({
             chart draws. Leaving them out of this branch dropped them off the
             screen entirely at 390px — `app-observed-overview.spec.ts` caught it
             on the run, looking for "Energia cortada liquidada, dia inteiro".
+
+            Both pairs, for the same reason and with the same exclusivity: the
+            forecast state's two bands would otherwise be on the wide layout and
+            nowhere else, and `app-overview-selection.spec.ts` looks for
+            "Energia cortada, dia inteiro" on the rendered page.
           */}
           {wide ? null : dayFigures}
+          {wide ? null : forecastFigures}
         </View>
 
         {wide ? (

@@ -93,6 +93,15 @@ const OVERVIEW_FLAT = OVERVIEW_PARTS.map(flat).join(" ");
  */
 const OBSERVED_STACK = code(read("components", "app", "overview", "observed-panels.tsx"));
 const FORECAST_STACK = code(read("components", "app", "overview", "forecast-panels.tsx"));
+/**
+ * The hero, alone, because two of the forecast panels live there now.
+ *
+ * The day's energy and the peak used to be the last two cards on the page, at
+ * the bottom of `ForecastPanels`. They sit under the hourly profile in the
+ * hero's left column now, where the settled state's two figures already were,
+ * so the guard below reads this file for them rather than that one.
+ */
+const HERO = code(read("components", "app", "overview", "overview-hero.tsx"));
 const EXPLAIN_FLAT = flat(read("app", "app", "explain.tsx"));
 const EXPLAIN = code(read("app", "app", "explain.tsx"));
 const SHELL = code(read("components", "app", "app-shell.tsx"));
@@ -430,12 +439,37 @@ describe("a refused forecast renders no forecast", () => {
     // ordering comparison it used to be. That comparison was true only while
     // the two functions stayed adjacent and in that order in one string; a
     // reordering would have silently inverted it while still passing.
-    for (const panel of ["<SubsystemMap", "<FanChart", "<BandCard", "<SubsystemRow"]) {
+    for (const panel of ["<SubsystemMap", "<FanChart", "<SubsystemRow"]) {
       expect({ panel, inForecastPanels: FORECAST_STACK.includes(panel) }).toEqual({
         panel,
         inForecastPanels: true,
       });
     }
+    /*
+      `<BandCard` is the hero's now, and the property is unchanged rather than
+      relaxed: it is still the case that nothing draws a band outside a
+      `forecast !== null` branch. What moved is where that branch is — the two
+      cards are built in `OverviewHero`, which the screen renders only on the
+      `read` side of the ternary asserted above, and inside it they are behind a
+      gate of their own.
+
+      That inner gate is what this asserts, and it is the honest half of the
+      move: `dayFigures` is the settled pair under `forecast === null` and
+      `forecastFigures` is the band pair under its negation, so the two can
+      never be on the page together. A band and a settled megawatt-hour under
+      labels that both say "the day" is the adjacency `lib/network.ts` keeps its
+      two row types apart to prevent.
+
+      Non-vacuity: the two `toContain`s would fail on a renamed hero or on a
+      pair built unconditionally, and `<BandCard` reaching `observed-panels.tsx`
+      is still caught by the next test.
+    */
+    expect(HERO).toContain("<BandCard");
+    const heroFlat = HERO.replace(/\s+/g, " ");
+    expect(heroFlat).toContain(
+      "const forecastFigures = forecast === null || selectedRow === null ? null : (",
+    );
+    expect(heroFlat).toContain("const dayFigures = forecast === null ? (");
   });
 
   /**
