@@ -78,14 +78,39 @@ export function SettledPanels({
   onSelect: (subsystem: SubsystemCode) => void;
 }) {
   return (
-    <>
-      <SettledSubsystemsPanel
-        observed={observed}
-        subsystem={subsystem}
-        onSelect={onSelect}
-      />
-      <EpisodesPanel observed={observed} scope={scope} subsystem={subsystem} />
-    </>
+    /*
+      **Two columns, on the grid the rest of the screen uses.**
+
+      The episode list was a 50%-wide card alone in a vertical stack, which is
+      not half a layout — it is a half-width card with the other half empty,
+      and it read as one. Beside the settled subsystems it is a column: the two
+      panels answer the same question at two grains, *what has settled across
+      the four* and *which runs those hours formed*, and they are the width
+      they are because there are two of them.
+
+      `flexBasis: 0` with an explicit `flexShrink`, per ADR-0001: on
+      react-native-web a basis without one is a floor rather than a preference,
+      so the pair would size to content and never give anything back.
+
+      `minWidth: 280` is where the row wraps to one column, and it is a **floor
+      the narrowest line can hold** rather than the width the table would like.
+      420 was the first number here and it broke `/app` at 320, 360 and 400 in
+      `no-horizontal-overflow.spec.ts`: a flex item whose minimum exceeds its
+      container does not wrap, it overflows, and the page grew a sideways
+      scroll. The shell's line at a 320px viewport is 288.
+    */
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
+      <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 280 }}>
+        <SettledSubsystemsPanel
+          observed={observed}
+          subsystem={subsystem}
+          onSelect={onSelect}
+        />
+      </View>
+      <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 280 }}>
+        <EpisodesPanel observed={observed} scope={scope} subsystem={subsystem} />
+      </View>
+    </View>
   );
 }
 
@@ -191,25 +216,23 @@ export function EpisodesPanel({
   if (read === null) {
     return (
       <FadeIn delay={210}>
-        <View style={{ maxWidth: layout.page / 2, width: "100%" }}>
-          <Panel>
-            <PanelHeader
-              icon={<LayersIcon size={18} color={colors.inkMuted} />}
-              title={copy.app.overview.episodesTitle}
-              subtitle={copy.app.overview.episodesRefusedSubtitle}
-            />
-            <Text
-              style={{
-                marginTop: space.lg,
-                fontSize: 12,
-                lineHeight: 19,
-                color: colors.inkMuted,
-              }}
-            >
-              {copy.app.overview.episodesRefused}
-            </Text>
-          </Panel>
-        </View>
+        <Panel>
+          <PanelHeader
+            icon={<LayersIcon size={18} color={colors.inkMuted} />}
+            title={copy.app.overview.episodesTitle}
+            subtitle={copy.app.overview.episodesRefusedSubtitle}
+          />
+          <Text
+            style={{
+              marginTop: space.lg,
+              fontSize: 12,
+              lineHeight: 19,
+              color: colors.inkMuted,
+            }}
+          >
+            {copy.app.overview.episodesRefused}
+          </Text>
+        </Panel>
       </FadeIn>
     );
   }
@@ -287,14 +310,12 @@ export function EpisodesPanel({
   return (
     <FadeIn delay={210}>
       {/*
-        Half of `layout.page`, the content column every full-width surface on
-        this screen uses — not half of `layout.desktop`, which is a *viewport
-        breakpoint* and was giving 512px of a 1280px column: 40% of the line,
-        with 768px of gutter beside it, under a comment promising half. It
-        would also have moved this card the day somebody changed where the
-        layout switches to two columns, which is not this card's business.
+        No width of its own: the two-column row in `SettledPanels` owns it. It
+        carried `maxWidth: layout.page / 2` for one commit, which is a
+        half-width card alone in a vertical stack — half a card, not half a
+        layout, with the other half empty beside it.
       */}
-      <View style={{ maxWidth: layout.page / 2, width: "100%" }}>
+      <>
         <EpisodeList
           episodes={episodes}
           maxGapHours={read.maxGapHours}
@@ -313,7 +334,7 @@ export function EpisodesPanel({
               : undefined
           }
         />
-      </View>
+      </>
 
       <Sheet
         open={open}

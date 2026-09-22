@@ -686,17 +686,28 @@ describe("the region responds to a pointer, and so does its row", () => {
   it("the pick is confirmed in place, and in both of the screen's states", () => {
     const code = overview.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
     /*
-      Three in the source, one on the screen — and the difference is why this
-      assertion cannot be the whole guard any more.
+      Three in the source, one on the screen, and which one has changed.
 
-      The two old ones are still where they were: under the map in `read`, and
-      at screen level when the forecast refused. The third is the hero's, which
-      is the one that actually renders now, because `heroElsewhere` skips the
-      blocks the other two live in. Source counting cannot tell those apart, so
+      Two are where they always were: under the map in `read`, and at screen
+      level when the forecast refused — both inside blocks `heroElsewhere`
+      skips, so neither renders on `/app`. The third is the hero's, and it is
+      now the **narrow** layout's: on a wide screen the card is gone and what
+      it uniquely had — the two controls — sits on the map's bottom-right
+      corner, carrying `testID="selected-region"` and the live region with it.
+      The card said four things and three were already on the screen: the rail
+      names the region and carries the chip, and the question cards above state
+      the expectation and its interval.
+
+      Which is why source counting was never the whole guard:
       `e2e/app-overview-selection.spec.ts` asserts the property that matters —
-      exactly one `selected-region` in the rendered DOM, in both states.
+      exactly one `selected-region` in the rendered DOM, in both states and at
+      both widths — and it is what would catch the wide layout losing the
+      announcement along with the card.
     */
     expect(code.match(/<SelectedRegion/g) ?? []).toHaveLength(3);
+    // The hero's replacement, in the corner the controls act on.
+    expect(code).toContain('testID="selected-region-explain"');
+    expect(code).toContain('accessibilityLiveRegion="polite"');
     expect(code).toContain("row={null}");
     // The settled rows are a selector too, which is the only one the refusal
     // path has. They used to mark the selection and refuse to take one.

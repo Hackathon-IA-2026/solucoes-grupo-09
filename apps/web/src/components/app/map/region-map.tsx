@@ -107,6 +107,7 @@ export function RegionMap({
   /** `true` on the console, where the map is the screen rather than a figure. */
   stage = false,
   overlay,
+  controls,
 }: {
   paint: MapPaint;
   scope: Scope;
@@ -138,6 +139,15 @@ export function RegionMap({
    * credit is still on the scene, the same size, in the opposite corner.
    */
   overlay?: ReactNode;
+  /**
+   * The opposite corner: the controls that act on the selected region.
+   *
+   * A second slot rather than more children in `overlay`, because the two are
+   * different things in different corners — `overlay` is a readout and this is
+   * a pair of buttons — and because this one has to know about the ion credit,
+   * which shares its corner and is the reason it lifts in 3D.
+   */
+  controls?: ReactNode;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -355,6 +365,29 @@ export function RegionMap({
             }}
           >
             {overlay}
+          </View>
+        )}
+
+        {controls === undefined ? null : (
+          <View
+            // `box-none` as the overlay: the map keeps every pixel the buttons
+            // do not cover, and the buttons themselves stay pressable.
+            pointerEvents="box-none"
+            style={{
+              ...(Platform.OS === "web" ? ({ position: "absolute" } as object) : null),
+              right: space.md,
+              /*
+                Lifted clear of ion's credit line when the globe is showing.
+                The credit is one caption at `bottom: space.sm` and its terms
+                ask for it to be *visible*, so the controls move rather than
+                cover it: 18px is that line's box at caption size.
+              */
+              bottom: showing3d ? space.md + 18 : space.md,
+              alignItems: "flex-end",
+              zIndex: 3,
+            }}
+          >
+            {controls}
           </View>
         )}
 

@@ -24,8 +24,15 @@
  * says why rather than drawing one.
  */
 
-import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
-import { Panel, radius, space, type, usePalette } from "@wattsteer/ui";
+import {
+  ArrowRightIcon,
+  Panel,
+  PillButton,
+  radius,
+  space,
+  type,
+  usePalette,
+} from "@wattsteer/ui";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { PanelTitle } from "@/components/app/figures/rail-panels";
@@ -43,8 +50,11 @@ import { FanChart } from "@/components/charts/fan-chart";
 import { ObservedProfile } from "@/components/charts/observed-profile";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import type { SubsystemCode } from "@/lib/fixtures";
-import { subsystemMeta } from "@/lib/fixtures";
+import {
+  SUBSYSTEM_DISPLAY_ORDER,
+  type SubsystemCode,
+  subsystemMeta,
+} from "@/lib/fixtures";
 import { forecastHours, observedRows } from "@/lib/network";
 import { HeadlinePanel } from "./headline-panel";
 import { heroFigures } from "./hero-figures";
@@ -525,6 +535,94 @@ export function OverviewHero({
                 `height={150}` — letterboxed it to 164px wide inside 284, with
                 ~60px dead on either side.
               */
+              /*
+                **The two controls, in the corner, and the card they came from
+                is gone.**
+
+                `SelectedRegion` sat under the map and said four things: which
+                region is selected, its risk chip, the expected energy with its
+                P10–P90, and a paragraph explaining that the panels below are
+                about it. Three of those four are already on the screen — the
+                rail names the region and carries the chip, and the five
+                question cards above state the expectation and the interval —
+                so what the card uniquely had was the two buttons.
+
+                They move onto the map, which is the thing they act on. The
+                wrapper keeps `testID="selected-region"` and the live region:
+                the selection changes from four places, and this is still the
+                one element that speaks the new one to a screen reader. Losing
+                that with the card would have been an accessibility regression
+                nobody asked for.
+
+                A row of two pills rather than a card, because the corner is
+                over Sul: the fan's own comment records a 340px card at this
+                corner eating the click that selects that region, caught by
+                `app-overview-selection.spec.ts` as "subtree intercepts pointer
+                events". `box-none` on the slot means only the pills themselves
+                take a press, and two pills are a fraction of what a card was.
+
+                **Only where a forecast exists.** With nothing promoted the
+                card is not redundant at all: it carries the settled figure,
+                the window it covers, and the sentence saying the *forecast* is
+                what is missing — and none of those is anywhere else in the
+                hero. Swapping it for two pills there dropped "Nenhum número de
+                previsão" off the screen, which `app-overview-selection.spec.ts`
+                caught within the run. The redundancy this replaces is the
+                forecast state's: there the expectation and its P10–P90 are
+                already on two of the five question cards above.
+              */
+              controls={
+                wide && forecast !== null ? (
+                  <View
+                    testID="selected-region"
+                    accessibilityLiveRegion="polite"
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: space.sm,
+                    }}
+                  >
+                    {/*
+                      The name, small, beside the controls. It is what the live
+                      region announces — "Explicar NORDESTE" carries it too, but
+                      only on one of the two buttons and only as part of a verb.
+                    */}
+                    <Text
+                      testID="selected-region-name"
+                      style={{
+                        ...type.caption,
+                        fontWeight: "700",
+                        color: colors.ink,
+                        paddingHorizontal: space.sm,
+                        paddingVertical: 4,
+                        borderRadius: radius.pill,
+                        borderCurve: "continuous",
+                        backgroundColor: colors.surface,
+                        opacity: 0.96,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {meta.onsDisplayName}
+                    </Text>
+                    <PillButton
+                      testID="selected-region-explain"
+                      label={fill(copy.app.overview.rowExplainLabel, {
+                        subsystem: meta.onsDisplayName,
+                      })}
+                      onPress={() => onExplain(params.subsystem)}
+                      primary={true}
+                      icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
+                    />
+                    {onWhatToDo === undefined ? null : (
+                      <PillButton
+                        testID="selected-region-mitigate"
+                        label={copy.app.overview.selectedMitigateLabel}
+                        onPress={onWhatToDo}
+                      />
+                    )}
+                  </View>
+                ) : undefined
+              }
               overlay={
                 wide && forecast !== null ? (
                   <View
@@ -572,12 +670,26 @@ export function OverviewHero({
                 ) : undefined
               }
             />
-            {/*
-              The selection, named under the map that changes it. `/app` puts it
-              in the same place and for the reason its own docstring gives: the
-              selection moves from four places, and this is the element that
-              speaks the new one to a screen reader.
-            */}
+          </Panel>
+          {/*
+            **The strip stays wherever the corner cannot take its place.**
+
+            Two cases, and neither is a fallback. On a phone, two pills laid
+            over a 320px map would cover most of a region and eat the press
+            that selects it — the failure the fan chart's comment above records
+            from this very corner. And with nothing promoted the card is not
+            redundant: it states the settled figure, its window, and the
+            sentence naming the forecast as the thing that is absent, none of
+            which is elsewhere in the hero.
+
+            So the corner takes the controls only on a wide screen with a
+            forecast on it, which is the one state where everything else the
+            card said is already above it. `e2e/app-overview-selection.spec.ts`
+            asserts exactly one `selected-region` in the DOM in either state,
+            which is what stops these two becoming both — and it is what caught
+            the first cut dropping the absence sentence.
+          */}
+          {wide && forecast !== null ? null : (
             <SelectedRegion
               subsystem={params.subsystem}
               row={selectedRow}
@@ -592,7 +704,7 @@ export function OverviewHero({
               onExplain={() => onExplain(params.subsystem)}
               onWhatToDo={onWhatToDo}
             />
-          </Panel>
+          )}
           {/*
             **Plan against outcome sits in the centre column, under the map.**
 
