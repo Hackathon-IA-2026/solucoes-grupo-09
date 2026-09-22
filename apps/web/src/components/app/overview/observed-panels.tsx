@@ -255,51 +255,74 @@ export function ObservedPanels({
         `peakHour === null` is the day that settled with no curtailment in it,
         which is a different sentence from a zero and gets a different card.
       */}
-      <FadeIn
-        delay={280}
-        style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
-      >
-        {day.peakHour === null ? (
-          <>
-            <ObservedEmptyCard
-              label={fill(copy.app.observed.dayTotal, {
-                subsystem: meta.onsDisplayName,
-              })}
-            />
-            <ObservedEmptyCard
-              label={fill(copy.app.observed.peakHour, {
-                subsystem: meta.onsDisplayName,
-              })}
-            />
-          </>
-        ) : (
-          <>
-            <ObservedCard
-              label={fill(copy.app.observed.dayTotal, {
-                subsystem: meta.onsDisplayName,
-              })}
-              value={day.totalMwh}
-              unit="MWh"
-              window={windowDay}
-              footnote={copy.app.observed.dayTotalNote}
-            />
-            <ObservedCard
-              label={fill(copy.app.observed.peakHour, {
-                subsystem: meta.onsDisplayName,
-              })}
-              value={day.peakHour.constrainedOffMwh}
-              unit="MWh"
-              window={fill(copy.app.observed.peakHourWindow, {
-                hour: f.number(day.peakHour.hourLocal),
-                date: f.date(observed.hoursDate),
-              })}
-              footnote={copy.app.observed.peakHourNote}
-            />
-          </>
-        )}
-      </FadeIn>
+      {/*
+        **The two day figures and the episode list, as two columns.**
 
-      <EpisodesPanel observed={observed} scope={scope} subsystem={subsystem} />
+        The same grid `settled-panels.tsx` puts the episode list on beside the
+        settled four. There is no settled-four card in *this* stack — the hero
+        drew it — so the partner here is the pair of day figures, stacked in
+        their own column rather than laid across the whole line with the
+        episode table under them.
+
+        `minWidth: 280` is the wrap floor, and it is deliberately smaller than
+        the table would like: a flex item whose minimum exceeds its container
+        does not wrap, it overflows, and 420 here put a sideways scroll on
+        `/app` at 320, 360 and 400 in `no-horizontal-overflow.spec.ts`.
+      */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
+        <FadeIn
+          delay={280}
+          style={{
+            flexGrow: 1,
+            flexShrink: 1,
+            flexBasis: 0,
+            minWidth: 280,
+            gap: space.md,
+          }}
+        >
+          {day.peakHour === null ? (
+            <>
+              <ObservedEmptyCard
+                label={fill(copy.app.observed.dayTotal, {
+                  subsystem: meta.onsDisplayName,
+                })}
+              />
+              <ObservedEmptyCard
+                label={fill(copy.app.observed.peakHour, {
+                  subsystem: meta.onsDisplayName,
+                })}
+              />
+            </>
+          ) : (
+            <>
+              <ObservedCard
+                label={fill(copy.app.observed.dayTotal, {
+                  subsystem: meta.onsDisplayName,
+                })}
+                value={day.totalMwh}
+                unit="MWh"
+                window={windowDay}
+                footnote={copy.app.observed.dayTotalNote}
+              />
+              <ObservedCard
+                label={fill(copy.app.observed.peakHour, {
+                  subsystem: meta.onsDisplayName,
+                })}
+                value={day.peakHour.constrainedOffMwh}
+                unit="MWh"
+                window={fill(copy.app.observed.peakHourWindow, {
+                  hour: f.number(day.peakHour.hourLocal),
+                  date: f.date(observed.hoursDate),
+                })}
+                footnote={copy.app.observed.peakHourNote}
+              />
+            </>
+          )}
+        </FadeIn>
+        <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 280 }}>
+          <EpisodesPanel observed={observed} scope={scope} subsystem={subsystem} />
+        </View>
+      </View>
     </>
   );
 }
