@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/grid-day.schema.json",
+  "title": "GridDay",
+  "description": "`GET /v1/grid/day?date=` - the four subsystems over one **settled civil day**, and the day-axis twin of `GET /v1/grid/now`. Observed, not forecast: it needs no model, and its national total is legitimate for the reason `GridNow`'s is - observations add exactly, and `national.derived` states the addition on the wire rather than leaving it to be assumed. It exists because `now` has no date axis and cannot grow one: a `now` that takes a day is a contradiction, and the Overview needs the same four figures for a day a reader picked. An empty day is answered 200 with zeros and a `settled_hours` of 0, never a refusal: a day that settled with no curtailment is a measurement.",
+  "type": "object",
+  "properties": {
+    "date": {
+      "$ref": "common.schema.json#/$defs/civil_date",
+      "description": "The Brasilia civil day these figures cover, echoed so a cached body can never be read against another day."
+    },
+    "as_of": {
+      "$ref": "common.schema.json#/$defs/utc_instant",
+      "description": "The vintage cut: what WattSteer had learned by this instant."
+    },
+    "data_version": { "type": "string" },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "settled_hours": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 24,
+      "description": "How many of the day's hours have any settled row at all. 24 is a closed day; fewer is a day still settling, and the screen is expected to say which - the figures are a sum over what exists, not over what the day will eventually hold."
+    },
+    "subsystems": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/subsystem_day" }
+    },
+    "national": { "$ref": "#/$defs/national_day" }
+  },
+  "required": [
+    "date",
+    "as_of",
+    "data_version",
+    "vintage_fidelity",
+    "settled_hours",
+    "subsystems",
+    "national"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "subsystem_day": {
+      "title": "SubsystemDay",
+      "type": "object",
+      "properties": {
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "ons_display_name": { "type": "string" },
+        "constrained_off_mwh": { "type": "number", "minimum": 0 },
+        "peak_hour_mwh": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "The largest single hour of the day, in MWh. `null` where the day settled with no curtailment in this subsystem - which is a measurement and not a zero, and the pair with `peak_hour_unavailable_reason` is what makes that unrepresentable as a bare null."
+        },
+        "peak_hour_unavailable_reason": {
+          "type": ["string", "null"],
+          "enum": ["no_settled_curtailment", null]
+        },
+        "split": { "$ref": "common.schema.json#/$defs/technology_split" }
+      },
+      "required": [
+        "subsystem",
+        "ons_display_name",
+        "constrained_off_mwh",
+        "peak_hour_mwh",
+        "peak_hour_unavailable_reason",
+        "split"
+      ],
+      "additionalProperties": false
+    },
+    "national_day": {
+      "title": "NationalDay",
+      "description": "The national observed total for the day, with its derivation named on the object. `SIN` is not a subsystem; this key is where a national number is allowed to exist, and `derived` says it is the four added rather than ONS's own `SIN` row - which WattSteer never uses because it would double-count the four beside it.",
+      "type": "object",
+      "properties": {
+        "constrained_off_mwh": { "type": "number", "minimum": 0 },
+        "derived": { "type": "string", "enum": ["sum_of_four"] }
+      },
+      "required": ["constrained_off_mwh", "derived"],
+      "additionalProperties": false
+    }
+  }
+}

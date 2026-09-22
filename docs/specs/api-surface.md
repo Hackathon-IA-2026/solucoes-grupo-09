@@ -1,6 +1,6 @@
 # Spec — WattSteer Public API Surface
 
-> One gateway, twenty-three routes, and a boundary drawn so that the ML service
+> One gateway, twenty-four routes, and a boundary drawn so that the ML service
 > being down is a stale timestamp rather than an outage.
 >
 > **Upstream specs.** [`forecaster.md`](forecaster.md) fixes the content of a
@@ -467,6 +467,7 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 | 1 | `GET /v1/meta` | artifact lanes, ingestion freshness, window bounds, constants, attribution | every screen's precondition |
 | 2 | `GET /v1/grid/outlook` | four subsystems, one target date | landing hero, Overview first paint |
 | 3 | `GET /v1/grid/now` | latest settled hour, four subsystems + derived national | landing hero's "right now" line |
+| 24 | `GET /v1/grid/day` | one **named** settled civil day, four subsystems + derived national | Overview's day picker |
 | 4 | `GET /v1/forecast/day-ahead` | one subsystem, one day, one gate | Overview, Explain, Mitigate |
 | 5 | `GET /v1/curtailment/hours` | observed `CurtailmentHour` series | Overview's observed panel, Time Machine |
 | 6 | `GET /v1/curtailment/episodes` | `CurtailmentEpisode` read-time view | Time Machine, Overview |
@@ -864,6 +865,35 @@ thing to show on a landing page when no artifact is promoted.
 domain model makes `SIN` structurally unrepresentable as a `Subsystem` and this
 is the one place a national number exists. Observations add exactly, so this
 national total is legitimate where the forecast's is not.
+
+#### 24. `GET /v1/grid/day?date=&as_of=`
+
+The day-axis twin of row 3, and a **separate route rather than a `date` on it**.
+`now` finds its own window — it reads the latest hour every subsystem has
+settled and counts back 24 — and the two fields that make it mean anything,
+`latest_settled_hour` and `lag_hours`, describe a clock a caller asking for a
+Tuesday did not ask about. A `now` that takes a day is a contradiction.
+
+So: the same four subsystems and the same derived national total over a window
+the caller **states**, plus the one thing a named day has that a rolling window
+does not — `settled_hours`, how many of the day's 24 hours have any settled row
+at all.
+
+- The date is a **civil** date resolved through `civilDayWindow`, never a UTC
+  midnight plus 24 hours. ONS's timestamps are Brasília local time.
+- **A day that settled nothing is 200**, with zeros and `settled_hours: 0`. Row
+  3 refuses when no hour is settled in all four subsystems, because an invented
+  "now" under four zeroes reads as *no curtailment anywhere*; a named day cannot
+  make that mistake, and refusing here would make "tomorrow" and "a quiet
+  Sunday" the same answer.
+- `peak_hour_mwh` is `null` beside `peak_hour_unavailable_reason:
+  "no_settled_curtailment"` where a subsystem settled nothing that day, and the
+  schema requires the pair so a null without a reason is unrepresentable. A zero
+  there would say the subsystem settled hours that happened to be empty, which
+  is a different measurement.
+- Cached on the settled/settling switch the observed routes share
+  (`observedPolicyFor`), keyed on the max `data_version` in the day, the settled
+  hour count and the date.
 
 #### 4. `GET /v1/forecast/day-ahead?subsystem=&target_date=&gate_profile=`
 
@@ -2208,7 +2238,7 @@ validates against the schema.
   v1 and the whole caching and rate-limiting posture above depends on their
   absence. Adding them later is additive: a `Vary: Authorization` and a per-key
   budget tier.
-- **GraphQL, tRPC, gRPC.** The surface is twenty-three routes — twenty-one of them read-shaped, plus row 19, which mints a credential rather than reading anything, and row 23, which files one — with
+- **GraphQL, tRPC, gRPC.** The surface is twenty-four routes — twenty-two of them read-shaped, plus row 19, which mints a credential rather than reading anything, and row 23, which files one — with
   four fixed-by-spec POST contracts and a static-exported client. REST plus a
   generated typed client is the shape with the least machinery.
 - **Webhooks, subscriptions, SSE, WebSockets.** Nothing *this gateway serves*

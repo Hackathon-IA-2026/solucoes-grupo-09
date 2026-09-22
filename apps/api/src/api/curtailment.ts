@@ -39,7 +39,7 @@ import {
 import {
   applyCachePolicy,
   CACHE_POLICIES,
-  type CachePolicy,
+  observedPolicyFor,
 } from "./plugins/cache-policy.js";
 
 /**
@@ -136,22 +136,6 @@ const MAX_REASON_LIMIT = 500;
  * `api-surface.md`'s caching table, and it is **never** `immutable`: ONS
  * rewrites history in place.
  */
-const SETTLING_TAIL_MS = 48 * 3_600_000;
-
-/**
- * Which of the table's two observed rows this range falls on.
- *
- * The one switch on the whole surface that reads a clock, and it reads it to
- * pick a *freshness window* and never a key: both rows key on the same
- * provenance — the max `data_version` in range — so a restatement invalidates
- * a settled range and a settling one identically, and the clock only decides
- * how long a shared cache may go without asking.
- */
-function policyFor(to: Date, now: Date): CachePolicy {
-  return to.getTime() > now.getTime() - SETTLING_TAIL_MS
-    ? CACHE_POLICIES.observedTail
-    : CACHE_POLICIES.observedSettled;
-}
 
 /** `2026-08-28` — a civil date in `America/Sao_Paulo`, never a UTC slice. */
 function civilDateOf(instantValue: Date): string {
@@ -347,7 +331,7 @@ export function createCurtailmentRoutes(deps: { db: Database | undefined }) {
         // two filters are on it because they select *which* rows of that
         // version answered.
         if (
-          applyCachePolicy({ set, request }, policyFor(range.to, new Date()), [
+          applyCachePolicy({ set, request }, observedPolicyFor(range.to, new Date()), [
             observation.dataVersion,
             query.subsystem,
             query.technology ?? "*",
@@ -428,7 +412,7 @@ export function createCurtailmentRoutes(deps: { db: Database | undefined }) {
         // different threshold is a different answer, and an ETag that ignored
         // them would serve one screen's episodes to another screen's request.
         if (
-          applyCachePolicy({ set, request }, policyFor(range.to, new Date()), [
+          applyCachePolicy({ set, request }, observedPolicyFor(range.to, new Date()), [
             observation.dataVersion,
             // `*` and not an empty string: the key is a provenance, and the two
             // answers it separates — one subsystem, or all four — must never
@@ -511,7 +495,7 @@ export function createCurtailmentRoutes(deps: { db: Database | undefined }) {
         });
 
         if (
-          applyCachePolicy({ set, request }, policyFor(day.to, new Date()), [
+          applyCachePolicy({ set, request }, observedPolicyFor(day.to, new Date()), [
             observation.dataVersion,
             query.subsystem,
             query.date,

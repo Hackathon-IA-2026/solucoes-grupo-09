@@ -42,6 +42,7 @@ import type {
   DiagnosisDayAhead,
   ForecastDayAhead,
   GridContext,
+  GridDay,
   GridNow,
   GridOutlook,
   Meta,
@@ -298,6 +299,25 @@ export class ApiClient {
   /** `GET /v1/grid/now` — observed, and therefore honest with no promoted artifact. */
   gridNow(signal?: AbortSignal): Promise<GridNow> {
     return this.request<GridNow>("GridNow", "/v1/grid/now", { signal });
+  }
+
+  /**
+   * `GET /v1/grid/day` — the same four subsystems over a **named** settled day.
+   *
+   * The day-axis twin of `gridNow`, and a separate call rather than a parameter
+   * on that one: `now` finds its own window from the latest hour every
+   * subsystem has settled, and the two fields that make it mean anything —
+   * `latest_settled_hour` and `lag_hours` — describe a clock a caller asking
+   * for a Tuesday did not ask about.
+   */
+  gridDay(
+    query: { date: string; asOf?: string },
+    signal?: AbortSignal,
+  ): Promise<GridDay> {
+    return this.request<GridDay>("GridDay", "/v1/grid/day", {
+      query: { date: query.date, as_of: query.asOf },
+      signal,
+    });
   }
 
   /**

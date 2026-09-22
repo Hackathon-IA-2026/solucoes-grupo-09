@@ -115,6 +115,12 @@ const CALLS: ReadonlyArray<{
       }),
   },
   {
+    name: "gridDay",
+    path: "/v1/grid/day",
+    keys: ["as_of", "date"],
+    invoke: (c) => c.gridDay({ date: "2026-09-22", asOf: "2026-09-23T00:00:00Z" }),
+  },
+  {
     name: "curtailmentEpisodes",
     path: "/v1/curtailment/episodes",
     keys: [

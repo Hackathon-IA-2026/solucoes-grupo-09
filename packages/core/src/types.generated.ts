@@ -1039,6 +1039,68 @@ export interface CorridorDay {
 }
 
 /**
+ * `GET /v1/grid/day?date=` - the four subsystems over one **settled civil
+ * day**, and the day-axis twin of `GET /v1/grid/now`. Observed, not forecast:
+ * it needs no model, and its national total is legitimate for the reason
+ * `GridNow`'s is - observations add exactly, and `national.derived` states the
+ * addition on the wire rather than leaving it to be assumed. It exists because
+ * `now` has no date axis and cannot grow one: a `now` that takes a day is a
+ * contradiction, and the Overview needs the same four figures for a day a
+ * reader picked. An empty day is answered 200 with zeros and a `settled_hours`
+ * of 0, never a refusal: a day that settled with no curtailment is a
+ * measurement.
+ */
+export interface GridDay {
+  /**
+   * The Brasilia civil day these figures cover, echoed so a cached body can
+   * never be read against another day.
+   */
+  date: CivilDate;
+  /**
+   * The vintage cut: what WattSteer had learned by this instant.
+   */
+  asOf: UtcInstant;
+  dataVersion: string;
+  vintageFidelity: VintageFidelity;
+  /**
+   * How many of the day's hours have any settled row at all. 24 is a closed day;
+   * fewer is a day still settling, and the screen is expected to say which - the
+   * figures are a sum over what exists, not over what the day will eventually
+   * hold.
+   */
+  settledHours: number;
+  subsystems: SubsystemDay[];
+  national: NationalDay;
+}
+
+export interface SubsystemDay {
+  subsystem: Subsystem;
+  onsDisplayName: string;
+  constrainedOffMwh: number;
+  /**
+   * The largest single hour of the day, in MWh. `null` where the day settled
+   * with no curtailment in this subsystem - which is a measurement and not a
+   * zero, and the pair with `peak_hour_unavailable_reason` is what makes that
+   * unrepresentable as a bare null.
+   */
+  peakHourMwh: number | null;
+  peakHourUnavailableReason: "no_settled_curtailment" | null;
+  split: TechnologySplit;
+}
+
+/**
+ * The national observed total for the day, with its derivation named on the
+ * object. `SIN` is not a subsystem; this key is where a national number is
+ * allowed to exist, and `derived` says it is the four added rather than ONS's
+ * own `SIN` row - which WattSteer never uses because it would double-count the
+ * four beside it.
+ */
+export interface NationalDay {
+  constrainedOffMwh: number;
+  derived: "sum_of_four";
+}
+
+/**
  * `GET /v1/grid/now` - observed, not forecast. It needs no model, which is
  * what makes it the honest thing to show on a landing page when no artifact is
  * promoted. Its national total *is* legitimate where the forecast's is not:
@@ -3220,6 +3282,27 @@ export const WIRE_SHAPES = {
     verifiedMwh: { wire: "verified_mwh" },
     programmedMwh: { wire: "programmed_mwh" },
     hoursSettled: { wire: "hours_settled" },
+  },
+  GridDay: {
+    date: { wire: "date" },
+    asOf: { wire: "as_of" },
+    dataVersion: { wire: "data_version" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    settledHours: { wire: "settled_hours" },
+    subsystems: { wire: "subsystems", shape: "SubsystemDay", list: true },
+    national: { wire: "national", shape: "NationalDay" },
+  },
+  SubsystemDay: {
+    subsystem: { wire: "subsystem" },
+    onsDisplayName: { wire: "ons_display_name" },
+    constrainedOffMwh: { wire: "constrained_off_mwh" },
+    peakHourMwh: { wire: "peak_hour_mwh" },
+    peakHourUnavailableReason: { wire: "peak_hour_unavailable_reason" },
+    split: { wire: "split", shape: "TechnologySplit" },
+  },
+  NationalDay: {
+    constrainedOffMwh: { wire: "constrained_off_mwh" },
+    derived: { wire: "derived" },
   },
   GridNow: {
     asOf: { wire: "as_of" },
