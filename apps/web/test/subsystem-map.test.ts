@@ -635,9 +635,18 @@ describe("the region responds to a pointer, and so does its row", () => {
    */
   it("a click selects, and only a named control navigates", () => {
     const code = overview.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-    expect(code).toContain(
-      "const select = (subsystem: SubsystemCode) => params.setParams({ subsystem });",
+    /*
+      `select` gained a line — it burns the deep-link latch before it writes,
+      because `subsystemFromUrl` cannot tell a link from a press — so this reads
+      its body rather than a one-line spelling of it. The claim is unchanged:
+      a click writes the URL and does not navigate.
+    */
+    const selectBody = code.slice(
+      code.indexOf("const select = (subsystem: SubsystemCode)"),
+      code.indexOf("const explain ="),
     );
+    expect(selectBody).toContain("params.setParams({ subsystem })");
+    expect(selectBody).not.toContain("router.");
     // Non-vacuity: `select` writing the URL is only half the claim. The other
     // half is that nothing in the click path leaves the page — and now nothing
     // on this screen does at all, because the named control travels the length

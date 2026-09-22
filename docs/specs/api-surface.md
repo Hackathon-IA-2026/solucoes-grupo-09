@@ -938,6 +938,16 @@ GET /v1/curtailment/reasons?subsystem=&date=&limit=
   `threshold_mw` and `max_gap_hours` that produced it**, per the domain model.
   The parameters default to 5 and 0 and are echoed at the top level too, so a
   screen cannot render an episode list beside a threshold it did not use.
+  **`subsystem` is optional here alone**: omitted, the answer is the whole
+  grid — every subsystem's episodes, chronological with the subsystem as the
+  tiebreak, each row carrying its own `subsystem`, and the response's top-level
+  `subsystem` absent rather than filled in with something the caller did not
+  ask for. `subsystem` is **required on every episode**, in both modes, because
+  on this one it is the only place it is stated; newest-first is a rendering
+  decision and is not the wire's. That is a concatenation
+  and not an aggregate: an episode is a measured run of settled hours, and four
+  subsystems' runs add exactly where four bands would not. There is no `SIN`
+  row and the threshold is applied per subsystem either way.
 - `reasons` returns `ObservedReason` rows: `grain`
   (`conjunto | self_reporting_plant`), `entity_code`, `entity_label`, `reason`,
   `origin`, `constrained_off_mwh`, `description`, `cause_mixed`. **`grain` is
@@ -1427,7 +1437,7 @@ key built from those has no manual invalidation path to forget to call.
 | `/v1/meta` | `no-store` | — | It is what you read to discover something is broken |
 | `/v1/grid/outlook`, `/v1/forecast/day-ahead` | `public, max-age=300, stale-while-revalidate=3600` | `W/"<artifact_id>:<published_at>:<max data_version>"` | A superseding 12Z run changes the ETag by construction; `max-age` never crosses the next gate |
 | `/v1/grid/now` | `public, max-age=60` | `W/"<latest ingested_at>"` | Moves with ingestion, which is hourly at best |
-| `/v1/curtailment/*` for a settled past range | `public, max-age=3600, stale-while-revalidate=86400` | `W/"<max data_version in range>"` | **Not `immutable`** — ONS rewrites history in place |
+| `/v1/curtailment/*` for a settled past range | `public, max-age=3600, stale-while-revalidate=86400` | `W/"<data version>:<scope>:<technology>:<…the route's own parameters>"` | **Not `immutable`** — ONS rewrites history in place. On `/episodes` the data version is **one max per subsystem read**, dot-joined, not one max over all of them: `data_version` is a per-key revision depth, so a single max lets a deeply-restated subsystem hide a shallow restatement in another |
 | `/v1/curtailment/*` touching the last 48 h | `public, max-age=300` | same | The tail is still settling |
 | `/v1/diagnosis/day-ahead` | `public, max-age=300`, `Vary: Accept-Language` | attribution row's version + `diagnosis.md`'s narration key | Two caches, not one — see below |
 | `/v1/model/card` | `public, max-age=3600` | `W/"<artifact_id>"` | Changes only on promotion |

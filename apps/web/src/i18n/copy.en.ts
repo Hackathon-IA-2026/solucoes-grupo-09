@@ -225,8 +225,9 @@ export const en = {
   readout: {
     title: "Tomorrow on the Brazilian grid",
     nationalLabel: "Expected constrained-off energy, all four subsystems",
+    /* Shortened; see the pt-BR entry. */
     nationalGrainNote:
-      "The national figure is the sum of the four subsystems' expected energy, and that sum is exact — expectations add however the subsystems happen to move together. ONS publishes a SIN row; WattSteer never uses it, because it double-counts against the subsystem rows it sits beside.",
+      "The four subsystems, added. Expectations add exactly; ONS's SIN row is not used, because it would double-count.",
     riskCounts: "Subsystems by risk: high {high} · elevated {elevated} · low {low}",
     sampleBadge: "Sample data",
     sampleNote:
@@ -1411,16 +1412,30 @@ export const en = {
         "One bar per local hour, wind and solar added. An hour with no settled row draws no bar at all: an hour that settled at zero and an hour that has not settled are different facts.",
       settledDayEmpty: "No curtailment settled in this subsystem on this day.",
       episodesTitle: "Recent episodes",
-      episodesSubtitle: "{from} to {to}, above {mw} MW",
+      /* Named: this panel follows the map's scope, so it is about one
+         subsystem or about the four, and a card that does not say whose
+         numbers it holds cannot show a reader that they changed. */
+      episodesSubtitle: "{subsystem} · {from} to {to}, above {mw} MW",
+      episodesSubtitleAll: "The four subsystems · {from} to {to}, above {mw} MW",
       episodeColumns: {
+        date: "Date",
         period: "Period",
+        region: "Region",
         duration: "Duration",
-        energy: "Energy",
-        peak: "Peak",
+        energy: "Curtailed energy",
+        peak: "Peak (MW)",
       },
+      /** `{count}` is the whole list, not the remainder — see `episode-list.tsx`. */
+      episodesSeeAll: "See all ({count})",
+      /* The refusal, not the empty sentence; see the pt-BR entry. */
+      episodesRefused:
+        "The episode list could not be read. Everything else on this screen is measured and still holds.",
+      episodesRefusedSubtitle: "The gateway refused this read",
       episodeNote:
         "An episode is a run of hours above the threshold, joined across gaps of at most {gap} h. Both parameters are stamped on every episode, because they are part of what an episode is.",
       episodesEmpty: "No hour in this window went above the threshold in this subsystem.",
+      episodesEmptyAll:
+        "No hour in this window went above the threshold in any of the four subsystems.",
       map: {
         title: "The four subsystems",
         subtitle: "Same risk class as the rows below",

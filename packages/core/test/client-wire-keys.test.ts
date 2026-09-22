@@ -138,6 +138,23 @@ const CALLS: ReadonlyArray<{
       }),
   },
   {
+    /*
+      The same route with no subsystem — the whole-grid answer, which is the
+      case the parameter was made optional for. The key must be **absent** from
+      the query string rather than sent as `subsystem=undefined`, which is a
+      subsystem outside the enum and a 422.
+    */
+    name: "curtailmentEpisodes",
+    path: "/v1/curtailment/episodes",
+    keys: ["from", "max_gap_hours", "to"],
+    invoke: (c) =>
+      c.curtailmentEpisodes({
+        from: "2026-09-01",
+        to: "2026-09-15",
+        maxGapHours: 3,
+      }),
+  },
+  {
     name: "observedReasons",
     path: "/v1/curtailment/reasons",
     keys: ["as_of", "date", "limit", "subsystem"],
@@ -230,6 +247,14 @@ describe("the general form of the bug, for methods added after this file", () =>
     const exposed = Object.getOwnPropertyNames(Object.getPrototypeOf(client))
       .filter((name) => name !== "constructor" && !name.startsWith("request"))
       .filter((name) => !posts.has(name));
-    expect(exposed.sort()).toEqual(CALLS.map((entry) => entry.name).sort());
+    /*
+      Unique names, because the table is keyed by *call*, not by method: one
+      method can appear twice where two call shapes send different keys —
+      `curtailmentEpisodes` with a subsystem and without, which is the whole
+      point of that parameter being optional. What this check is about is that
+      no exposed GET is missing from the table, and that no row names a method
+      that no longer exists.
+    */
+    expect(exposed.sort()).toEqual([...new Set(CALLS.map((entry) => entry.name))].sort());
   });
 });

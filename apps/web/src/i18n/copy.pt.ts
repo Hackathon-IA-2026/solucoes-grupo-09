@@ -162,8 +162,15 @@ export const pt: Copy = {
   readout: {
     title: "Amanhã na rede brasileira",
     nationalLabel: "Energia esperada em constrained-off, os quatro subsistemas",
+    /*
+      Encurtado. Dizia a mesma coisa três vezes — que a soma é exata, por que
+      é exata, e o que o WattSteer faz com a linha SIN do ONS — num rodapé
+      abaixo de um único número. A afirmação que precisa estar na tela é que
+      isto é uma soma dos quatro; o argumento de por que somar expectativas é
+      legítimo mora em `docs/domain-model.md` §9 e em `honesty.md`.
+    */
     nationalGrainNote:
-      "O número nacional é a soma da energia esperada dos quatro subsistemas, e essa soma é exata — valores esperados somam qualquer que seja a dependência entre os subsistemas. O ONS publica uma linha SIN; o WattSteer nunca a usa, porque ela duplicaria a contagem em relação às linhas de subsistema ao lado.",
+      "Soma dos quatro subsistemas. Expectativas somam exatamente; a linha SIN do ONS não é usada, porque duplicaria a contagem.",
     riskCounts: "Subsistemas por risco: alto {high} · elevado {elevated} · baixo {low}",
     sampleBadge: "Dados de exemplo",
     sampleNote:
@@ -1200,16 +1207,36 @@ export const pt: Copy = {
         "Uma barra por hora local, eólica e solar somadas. Uma hora sem registro liquidado não desenha barra nenhuma: uma hora que liquidou em zero e uma hora que não liquidou são fatos diferentes.",
       settledDayEmpty: "Nenhum curtailment liquidado neste subsistema neste dia.",
       episodesTitle: "Episódios recentes",
-      episodesSubtitle: "{from} a {to}, acima de {mw} MW",
+      /*
+        Nomeado. Este painel segue o escopo do mapa, então ele é sobre um
+        subsistema ou sobre os quatro — e um cartão que não diz de quem são os
+        números não consegue mostrar a um leitor que os números mudaram.
+      */
+      episodesSubtitle: "{subsystem} · {from} a {to}, acima de {mw} MW",
+      episodesSubtitleAll: "Os quatro subsistemas · {from} a {to}, acima de {mw} MW",
       episodeColumns: {
+        date: "Data",
         period: "Período",
+        region: "Região",
         duration: "Duração",
-        energy: "Energia",
-        peak: "Pico",
+        energy: "Energia cortada",
+        peak: "Pico (MW)",
       },
+      /** `{count}` é a lista inteira, não o que sobrou — ver `episode-list.tsx`. */
+      episodesSeeAll: "Ver todos ({count})",
+      /*
+        A recusa, e não a frase de lista vazia. "Nenhuma hora passou do limiar"
+        é uma constatação sobre a rede; esta é sobre a leitura. As duas estados
+        que `honesty.md` exige separar.
+      */
+      episodesRefused:
+        "A lista de episódios não pôde ser lida. O resto desta tela é medido e continua válido.",
+      episodesRefusedSubtitle: "Leitura recusada pelo gateway",
       episodeNote:
         "Um episódio é uma sequência de horas acima do limiar, unida por lacunas de no máximo {gap} h. Os dois parâmetros vão carimbados em cada episódio, porque fazem parte do que um episódio é.",
       episodesEmpty: "Nenhuma hora desta janela passou do limiar neste subsistema.",
+      episodesEmptyAll:
+        "Nenhuma hora desta janela passou do limiar em nenhum dos quatro subsistemas.",
       map: {
         title: "Os quatro subsistemas",
         subtitle: "Mesma classe de risco das linhas abaixo",

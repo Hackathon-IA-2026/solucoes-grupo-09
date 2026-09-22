@@ -66,6 +66,8 @@ const RAILS_BESIDE_MAP = 980;
 export function OverviewHero({
   observed,
   forecast,
+  scope,
+  onScope,
   params,
   onExplain,
   onWhy,
@@ -74,6 +76,9 @@ export function OverviewHero({
 }: {
   observed: ObservedNetwork;
   forecast: ForecastNetwork | null;
+  /** Whether the map is narrowed to the selection, owned by the screen. */
+  scope: Scope;
+  onScope: (scope: Scope) => void;
   /**
    * The screen's own Explain handler.
    *
@@ -111,25 +116,22 @@ export function OverviewHero({
   const text = copy.app.grid.hero;
   const [hovered, setHovered] = useState<SubsystemCode | null>(null);
   /*
-    Which region the map's pills are pointing at. Local, like the console's, and
-    for the same reason: `subsystem` is the shared choice every screen reads, and
-    scope only says whether this map is currently narrowed to it.
-  */
-  const [scope, setScope] = useState<Scope>(
-    /*
-      A link that named a region is somebody pointing at it, and the screen opens
-      where they pointed. A plain visit opens on the whole grid.
+    **The scope moved up to the screen, and it used to live here.**
 
-      **This reads a value `use-app-params.ts` withholds on the first client
-      render**, and gets away with it only because the hero mounts after the
-      gateway has answered — by then the params have been re-read from the real
-      URL. Anything that makes this component mount earlier (a warm cache, a
-      suspense boundary above it) would silently drop deep links into the wrong
-      scope with nothing failing. If that changes, this has to become an effect
-      that corrects once, not a mount-time read.
-    */
-    params.subsystemFromUrl === true ? "region" : "sin",
-  );
+    It says whether the map is narrowed to the selected region or showing the
+    whole grid, and for as long as only this component read it, local state was
+    right. The episode list at the bottom of the page follows the same filter
+    now — it is the map's filter, and every other figure on the screen obeys it
+    — so the one fact has one owner, in `app/index.tsx`, rather than a second
+    copy down there that could disagree with the pills.
+
+    The deep-link initialisation went with it, and had to change shape on the
+    way: it read `params.subsystemFromUrl`, a value `use-app-params.ts`
+    deliberately withholds on the first client render, and got away with it only
+    because this component mounts after the gateway has answered. The screen
+    mounts immediately, so up there it is an effect that corrects once — which
+    is what the note here always said it would have to become.
+  */
   /*
     The run chips moved onto the map with the region chips, so this screen asks
     for the lane table the way the console does. The hook also carries the
@@ -484,13 +486,13 @@ export function OverviewHero({
             <RegionMap
               paint={paint}
               scope={scope}
-              onScope={setScope}
+              onScope={onScope}
               selected={params.subsystem}
               hovered={hovered}
               onHoverChange={setHovered}
               onSelect={(code) => {
                 params.setParams({ subsystem: code });
-                setScope("region");
+                onScope("region");
               }}
               run={params.run}
               runInert={runInert}

@@ -274,7 +274,7 @@
     },
     "episode": {
       "title": "CurtailmentEpisode",
-      "description": "A read-time view, never a stored table. Every episode carries the `threshold_mw` and `max_gap_hours` that produced it (vocabulary rule 8), because an unstamped duration cannot be compared with another one.",
+      "description": "A read-time view, never a stored table. Every episode carries the `threshold_mw` and `max_gap_hours` that produced it (vocabulary rule 8), because an unstamped duration cannot be compared with another one - and its `subsystem`, for the same reason one step out: an episode is a run of hours in exactly one, `GET /v1/curtailment/episodes` may answer for all four at once, and a row that could not say where it happened would leave a response with the subsystem stated nowhere.",
       "type": "object",
       "properties": {
         "subsystem": { "$ref": "#/$defs/subsystem" },
@@ -291,6 +291,7 @@
         "max_gap_hours": { "$ref": "#/$defs/max_gap_hours" }
       },
       "required": [
+        "subsystem",
         "started_at",
         "ended_at",
         "duration_hours",

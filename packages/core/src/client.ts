@@ -396,7 +396,13 @@ export class ApiClient {
    */
   curtailmentEpisodes(
     query: {
-      subsystem: string;
+      /**
+       * Omit it for the whole grid: the episodes of all four subsystems,
+       * chronological, each stamped with its own. Concatenating four subsystems' runs is exact —
+       * they are measurements, not quantiles — so this is not the aggregate
+       * that `SIN` would be and the gateway does not build one.
+       */
+      subsystem?: string;
       from: string;
       to: string;
       technology?: string;

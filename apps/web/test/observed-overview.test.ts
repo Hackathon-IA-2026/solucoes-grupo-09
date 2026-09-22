@@ -171,6 +171,19 @@ describe("no observed label claims a forecast", () => {
     // own, and the rail draws it in both states — so the label has to stay
     // clear of the forecast vocabulary for the same reason the card's did.
     "grid.hero.railSplit": dict.app.grid.hero.railSplit,
+    // The episode list is settled data in both scopes, and its headings and
+    // sentences are new. None of them may borrow the forecast vocabulary.
+    "overview.episodesTitle": dict.app.overview.episodesTitle,
+    "overview.episodesSubtitle": dict.app.overview.episodesSubtitle,
+    "overview.episodesSubtitleAll": dict.app.overview.episodesSubtitleAll,
+    "overview.episodesEmpty": dict.app.overview.episodesEmpty,
+    "overview.episodesEmptyAll": dict.app.overview.episodesEmptyAll,
+    "overview.episodesSeeAll": dict.app.overview.episodesSeeAll,
+    "overview.episodesRefused": dict.app.overview.episodesRefused,
+    "overview.episodeColumns.date": dict.app.overview.episodeColumns.date,
+    "overview.episodeColumns.region": dict.app.overview.episodeColumns.region,
+    "overview.episodeColumns.energy": dict.app.overview.episodeColumns.energy,
+    "overview.episodeColumns.peak": dict.app.overview.episodeColumns.peak,
     "observed.q1": dict.app.observed.q1,
     "observed.q1Yes": dict.app.observed.q1Yes,
     "observed.q1No": dict.app.observed.q1No,

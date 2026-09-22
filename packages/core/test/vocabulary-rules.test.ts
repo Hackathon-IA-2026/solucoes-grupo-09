@@ -287,6 +287,33 @@ describe("rule 8 — threshold_mw is on every object it applies to", () => {
     });
   }
 
+  it("the whole-grid episode list requires a subsystem on every row", () => {
+    /*
+      **The one constraint the whole-grid answer rests on.**
+
+      `GET /v1/curtailment/episodes` takes an optional `subsystem`; omitted, it
+      returns all four and the envelope's `subsystem` is absent. So the row's is
+      the only place the subsystem is ever stated, and if it were merely
+      *usually* present, a response saying nothing about where any of its
+      episodes happened would be schema-valid — the screen that filters them by
+      region would compare against `undefined`, silently render an empty list,
+      and print "no hour went above the threshold in this subsystem", which is
+      a finding about the grid drawn from a missing key.
+
+      The argument is the one the test below makes about `threshold_mw`: an
+      unstamped figure cannot be compared with another one.
+    */
+    const common = readSchemas().get("common.schema.json") as {
+      $defs: Record<string, { required: string[] }>;
+    };
+    expect(common.$defs.episode?.required).toContain("subsystem");
+    // And the envelope's is optional, which is what makes the row's load-bearing.
+    const curtailment = readSchemas().get("curtailment.schema.json") as {
+      $defs: Record<string, { required: string[] }>;
+    };
+    expect(curtailment.$defs.episodes?.required).not.toContain("subsystem");
+  });
+
   it("every episode carries it, and its max_gap_hours too", () => {
     const episode = readSchemas().get("common.schema.json") as {
       $defs: Record<string, { required: string[] }>;

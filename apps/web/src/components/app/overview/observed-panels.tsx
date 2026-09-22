@@ -26,6 +26,7 @@ import {
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { ObservedBadge, VintageBadge } from "@/components/app/honesty";
+import type { Scope } from "@/components/app/map/scope-bar";
 import { ObservedNationalPanel } from "@/components/app/overview/national-panel";
 import { EpisodesPanel } from "@/components/app/overview/settled-panels";
 import { SelectedRegion } from "@/components/app/selected-region";
@@ -64,12 +65,15 @@ import { observedDay, observedRows } from "@/lib/network";
  */
 export function ObservedPanels({
   observed,
+  scope,
   subsystem,
   onSelect,
   onExplain,
   heroElsewhere = false,
 }: {
   observed: ObservedNetwork;
+  /** The map's filter, which the episode list follows like every other figure. */
+  scope: Scope;
   subsystem: SubsystemCode;
   onSelect: (subsystem: SubsystemCode) => void;
   onExplain: (subsystem: SubsystemCode) => void;
@@ -295,7 +299,7 @@ export function ObservedPanels({
         )}
       </FadeIn>
 
-      <EpisodesPanel observed={observed} />
+      <EpisodesPanel observed={observed} scope={scope} subsystem={subsystem} />
     </>
   );
 }

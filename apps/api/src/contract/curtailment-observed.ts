@@ -1,3 +1,4 @@
+import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core/constants";
 import { sql } from "drizzle-orm";
 import { canonicalCurtailmentByReportingEntity } from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
@@ -199,6 +200,14 @@ export async function readCurtailmentHours(
 
 /** One episode, as the parameterised SQL function computes it. */
 export interface CurtailmentEpisodeRow {
+  /**
+   * Which subsystem's run this is.
+   *
+   * On the row and not only on the query, because the query may not have named
+   * one: an episode is a run of hours in *one* subsystem, so a whole-grid read
+   * returns four subsystems' runs interleaved and each has to say which it is.
+   */
+  subsystem: SubsystemCode;
   startedAt: Date;
   /** Exclusive: the valid_time of the first hour not in the episode. */
   endedAt: Date;
@@ -215,7 +224,16 @@ export interface CurtailmentEpisodesObservation extends ObservedVintage {
 
 export interface CurtailmentEpisodesQuery {
   asOf: Date;
-  subsystem: SubsystemCode;
+  /**
+   * Omitted for the whole grid: every subsystem's episodes, chronological.
+   *
+   * This is **not** a national aggregate, and the distinction is the same one
+   * `NationalNow.derived` makes. An episode is a measured run of settled
+   * hours; four subsystems' runs concatenate exactly, because measurements
+   * add. Nothing here computes an interval, a median or a `SIN` row, and the
+   * threshold is applied per subsystem exactly as it is for one.
+   */
+  subsystem?: SubsystemCode;
   from: Date;
   to: Date;
   technology?: Technology;
@@ -226,6 +244,7 @@ export interface CurtailmentEpisodesQuery {
 
 interface EpisodeRow {
   [column: string]: unknown;
+  subsystem: string;
   started_at: string;
   ended_at: string;
   duration_hours: number;
@@ -256,38 +275,146 @@ export async function readCurtailmentEpisodes(
     await applyAxes(tx, { asOf: query.asOf });
 
     const technology = query.technology ?? null;
+    /*
+      **The whole grid is a lateral over the four, not a fifth signature.**
+
+      `canonical_curtailment_episodes(...)` takes one subsystem and that is
+      correct: the run-length rule is per subsystem, and a function that also
+      accepted "all" would be a second implementation of the threshold inside
+      the one place the rule is supposed to live. So the four codes are driven
+      into it from the outside, and the grouping and the ordering stay in
+      Postgres rather than being reassembled from four round trips.
+
+      Measured, so that nobody has to re-derive it: this costs **4×** a
+      single-subsystem read. `subsystem` is not in the view's `distinct on`
+      list, so the predicate cannot be pushed through the `Unique`, and each of
+      the four iterations sorts and deduplicates the whole window before
+      discarding three quarters of it. At the fortnight the Overview asks for
+      that is nothing; at this route's own 400-day cap it is four full-window
+      dedup sorts, and the route has no cursor. One pass with
+      `group by subsystem, valid_time` would be 1×, and it needs a second
+      signature on the SQL function — a migration — which is the trade this
+      took. If a long window ever becomes a real request, that is the change.
+
+      `subsystems` is `SUBSYSTEM_DISPLAY_ORDER`, never a literal, so this file
+      does not carry a second copy of the four. It is not a graceful widening,
+      though, and the note is here rather than in a reviewer's head: the codes
+      are cast `::subsystem_code`, and that enum is created in
+      `0000_hot_dakota_north.sql`. A fifth member added to the TypeScript
+      constant without the matching enum migration is a 500 on every whole-grid
+      read, not a fifth row.
+
+      It is driven in one placeholder per code rather than as one array
+      parameter, because drizzle expands a JS array into a **tuple** — an
+      array handed to `unnest(${"$"}1::text[])` compiles to
+      `unnest((${"$"}1, ${"$"}2)::text[])`, which is a syntax error the query
+      planner never sees. Measured: `test:db` went red on all seven episode
+      cases with a failure the driver reported only as "Failed query".
+    */
+    const subsystems =
+      query.subsystem === undefined ? [...SUBSYSTEM_DISPLAY_ORDER] : [query.subsystem];
     const rows = await tx.execute<EpisodeRow>(sql`
-      select started_at, ended_at, duration_hours, total_mwh, peak_mw
-      from canonical_curtailment_episodes(
-        ${query.subsystem}::subsystem_code,
+      select
+        asked.code as subsystem,
+        episode.started_at,
+        episode.ended_at,
+        episode.duration_hours,
+        episode.total_mwh,
+        episode.peak_mw
+      from unnest(array[${sql.join(
+        subsystems.map((code) => sql`${code}`),
+        sql`, `,
+      )}]::text[]) as asked(code)
+      cross join lateral canonical_curtailment_episodes(
+        asked.code::subsystem_code,
         ${query.from.toISOString()}::timestamptz,
         ${query.to.toISOString()}::timestamptz,
         ${query.thresholdMw}::double precision,
         ${query.maxGapHours}::int,
         ${technology}::technology
-      )
+      ) as episode
+      /*
+        Chronological, subsystem as the tiebreak — the order the function
+        already returned for one subsystem, now stated rather than inherited.
+        Not newest-first: that is a rendering decision, and reversing the wire
+        would have silently flipped the Time Machine's list, which reads a day
+        forwards. Four laterals concatenated with no order at all would have
+        given all of N's runs, then all of NE's, which is not a list of what
+        happened recently in any useful sense.
+      */
+      order by episode.started_at, asked.code
     `);
 
     // The version is read from the rows the episodes were computed from, not
     // from the episodes: an episode has no version of its own, because it is
     // not a row anything stores.
-    const versions = await tx.execute<{ max_data_version: number | string | null }>(sql`
-      select max(data_version) as max_data_version
+    /*
+      The version query's array is cast to `subsystem_code[]`, not `text[]`.
+      The column is the enum, and the scalar this replaced — `where subsystem =
+      $1` — only worked because Postgres coerces an *unknown* literal to an
+      enum. Naming the type as text takes that inference away and leaves the
+      comparison with no operator; `test:db` reported it as a failed query with
+      no message attached, which is the shape this note exists to shorten.
+    */
+    /*
+      **Per subsystem, and it used to be one `max` over all four.**
+
+      `data_version` is not a global sequence: `versioned-write.ts` assigns it
+      per business key, as a revision depth. So `max()` over a *set* of keys
+      only moves when the deepest-revised key gets deeper — and over four
+      subsystems that means one subsystem's restatement history can mask
+      another's restatement entirely. Concretely: an NE hour already restated
+      twice sits at 3; ONS then restates an S hour from 40 MWh to 90, taking it
+      from 1 to 2; the max over the four is still 3, the ETag does not move, and
+      a reader revalidating gets a 304 over an episode list in which S's run is
+      the wrong size.
+
+      One per subsystem, in `SUBSYSTEM_DISPLAY_ORDER`, so a restatement anywhere
+      moves the component for *its* subsystem and nothing can hide behind a
+      deeper neighbour. It is what `api-routes.md` means by a cache key being a
+      provenance rather than a number.
+
+      The residual is honest and pre-existing: within one subsystem, entity A at
+      3 still masks entity B going 1→2. Closing that needs a digest over the
+      versions actually read rather than an aggregate of them, which is a change
+      to every observed read and not to this one.
+    */
+    const versions = await tx.execute<{
+      subsystem: string;
+      max_data_version: number | string | null;
+    }>(sql`
+      select subsystem, max(data_version) as max_data_version
       from ${canonicalCurtailmentByReportingEntity}
-      where subsystem = ${query.subsystem}
+      where subsystem = any(array[${sql.join(
+        subsystems.map((code) => sql`${code}`),
+        sql`, `,
+      )}]::subsystem_code[])
         and valid_time >= ${query.from.toISOString()}::timestamptz
         and valid_time < ${query.to.toISOString()}::timestamptz
         ${technology === null ? sql`` : sql`and technology = ${technology}`}
+      group by subsystem
     `);
-    const [version] = [...versions];
+    const bySubsystem = new Map(
+      [...versions].map((row) => [row.subsystem, row.max_data_version]),
+    );
 
     const goLiveAt = await readGoLive(tx, "curtailment-by-reporting-entity");
 
     return {
       asOf: query.asOf,
-      dataVersion: versionOf(version?.max_data_version ?? null),
+      /*
+        One component per subsystem asked for, in display order, so the string
+        is stable across requests and a subsystem with no rows in the window
+        reads as `none` — the value this file already uses for that — rather
+        than shifting the components after it. For a single subsystem it is
+        exactly what it always was: that subsystem's max, alone.
+      */
+      dataVersion: subsystems
+        .map((code) => versionOf(bySubsystem.get(code) ?? null))
+        .join("."),
       vintageFidelity: vintageFidelity(query.from, goLiveAt),
       episodes: [...rows].map((row) => ({
+        subsystem: row.subsystem as SubsystemCode,
         startedAt: new Date(row.started_at),
         endedAt: new Date(row.ended_at),
         durationHours: Number(row.duration_hours),

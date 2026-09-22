@@ -232,7 +232,7 @@ function toCurtailmentHours(
 function toCurtailmentEpisodes(
   observation: CurtailmentEpisodesObservation,
   query: {
-    subsystem: SubsystemCode;
+    subsystem: SubsystemCode | undefined;
     technology: Technology | undefined;
     from: Date;
     to: Date;
@@ -241,7 +241,10 @@ function toCurtailmentEpisodes(
   },
 ): CurtailmentEpisodes {
   return {
-    subsystem: query.subsystem,
+    // Present only when one was asked for. Absent is the whole-grid answer,
+    // and a key that named a subsystem the caller did not pick would be the
+    // envelope making a claim the rows contradict.
+    ...(query.subsystem === undefined ? {} : { subsystem: query.subsystem }),
     from: query.from.toISOString(),
     to: query.to.toISOString(),
     asOf: observation.asOf.toISOString(),
@@ -253,7 +256,9 @@ function toCurtailmentEpisodes(
     maxGapHours: query.maxGapHours,
     episodes: observation.episodes.map(
       (episode): CurtailmentEpisode => ({
-        subsystem: query.subsystem,
+        // The row's, not the query's: a whole-grid read has four of them and
+        // the envelope has none, so this is the only place it is ever stated.
+        subsystem: episode.subsystem,
         // Present only when the caller asked for one technology. An episode
         // computed over both is not a wind episode, and labelling it as one
         // would be the same mistake as a mismatched denominator.
@@ -411,7 +416,7 @@ export function createCurtailmentRoutes(deps: { db: Database | undefined }) {
 
         const observation = await readCurtailmentEpisodes(db, {
           asOf,
-          subsystem: query.subsystem,
+          ...(query.subsystem === undefined ? {} : { subsystem: query.subsystem }),
           from: range.from,
           to: range.to,
           ...(query.technology === undefined ? {} : { technology: query.technology }),
@@ -425,7 +430,10 @@ export function createCurtailmentRoutes(deps: { db: Database | undefined }) {
         if (
           applyCachePolicy({ set, request }, policyFor(range.to, new Date()), [
             observation.dataVersion,
-            query.subsystem,
+            // `*` and not an empty string: the key is a provenance, and the two
+            // answers it separates — one subsystem, or all four — must never
+            // collide on a cache that cannot tell them apart.
+            query.subsystem ?? "*",
             query.technology ?? "*",
             thresholdMw,
             maxGapHours,
@@ -448,7 +456,7 @@ export function createCurtailmentRoutes(deps: { db: Database | undefined }) {
       },
       {
         query: t.Object({
-          subsystem: SUBSYSTEM,
+          subsystem: t.Optional(SUBSYSTEM),
           from: t.String({ description: "Start of the window, inclusive (ISO-8601)." }),
           to: t.String({ description: "End of the window, exclusive (ISO-8601)." }),
           technology: TECHNOLOGY,

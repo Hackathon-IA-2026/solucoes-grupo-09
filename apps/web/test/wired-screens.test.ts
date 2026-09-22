@@ -415,12 +415,17 @@ describe("a refused forecast renders no forecast", () => {
     // the two stacks are exclusive, and nothing that states a forecast exists
     // inside the observed one.
     //
+    // `scope` does not weaken it either. Both stacks take it because the
+    // episode list inside them follows the map's filter like every other
+    // figure on the screen, and it says nothing about whether a forecast
+    // exists — the ternary above is still the only thing that does.
+    //
     // `heroElsewhere` does not weaken it. It tells both stacks to skip what
     // `OverviewHero` already drew — the national figure, the map, the rows, the
     // selection, the fan — and the hero is itself behind the same `forecast`
     // ternary, taking it as a prop rather than reading a state of its own.
     expect(OVERVIEW_FLAT).toContain(
-      "{forecast === null ? ( <ObservedPanels observed={observed} subsystem={params.subsystem} onSelect={select} onExplain={explain} heroElsewhere={true} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} heroElsewhere={true} /> <SettledPanels observed={observed} subsystem={params.subsystem} onSelect={select} /> </> )}",
+      "{forecast === null ? ( <ObservedPanels observed={observed} scope={scope} subsystem={params.subsystem} onSelect={select} onExplain={explain} heroElsewhere={true} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} heroElsewhere={true} /> <SettledPanels observed={observed} scope={scope} subsystem={params.subsystem} onSelect={select} /> </> )}",
     );
     // Each forecast panel is inside `ForecastPanels`, which is now a file of
     // its own — so this is a containment check rather than the `indexOf`
@@ -539,12 +544,15 @@ describe("a refused forecast renders no forecast", () => {
 
 describe("the observed half needs no model", () => {
   it("the Overview's observed reads are the three that answer with nothing promoted", () => {
+    // Flattened, because the formatter wraps a chained call onto its own line
+    // and this is about which reads exist, not about how they are spelled.
+    const hook = NETWORK_HOOK.replace(/\s+/g, " ");
     for (const call of [
       "api.gridNow(",
       "api.curtailmentHours(",
-      "api.curtailmentEpisodes(",
+      "api .curtailmentEpisodes(",
     ]) {
-      expect(NETWORK_HOOK).toContain(call);
+      expect({ call, present: hook.includes(call) }).toEqual({ call, present: true });
     }
     // And they are grouped apart from the forecast's two, so a refusal of one
     // group cannot take the other down with it.
@@ -552,6 +560,21 @@ describe("the observed half needs no model", () => {
     const forecastAt = NETWORK_HOOK.indexOf("const forecast = Promise.all");
     expect(observedAt).toBeGreaterThan(0);
     expect(forecastAt).toBeGreaterThan(observedAt);
+    /*
+      **And the episodes read may fail on its own, inside the observed group.**
+
+      It sat in the `Promise.all` and it was measured taking the whole screen
+      down: one 422 from that route and `gridNow` and `curtailmentHours` went
+      with it, so a page full of settled megawatt-hours rendered "O gateway não
+      respondeu". `architecture.md` says degradation is a property of the
+      graph — the episode list is a panel, not the page — and nothing else on
+      the screen reads it.
+
+      The `catch` is not a swallow: `ObservedNetwork.episodes` is nullable and
+      `EpisodesPanel` renders a stated refusal, which is asserted below.
+    */
+    expect(hook).toContain(".curtailmentEpisodes({ from, to: settled }, signal) .catch(");
+    expect(NETWORK_HOOK).toContain("readonly episodes: CurtailmentEpisodes | null;");
   });
 
   it("Explain's observed read is the restriction reasons, and it is not grouped with the day", () => {

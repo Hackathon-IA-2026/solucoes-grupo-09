@@ -67,7 +67,10 @@
       "title": "CurtailmentEpisodes",
       "type": "object",
       "properties": {
-        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "subsystem": {
+          "$ref": "common.schema.json#/$defs/subsystem",
+          "description": "The subsystem asked for. **Absent when none was**, which is the whole-grid answer: the episodes of all four, each stamped with its own `subsystem`. It is not a national aggregate and there is no `SIN` row - an episode is a run of settled hours in one subsystem, and four subsystems' runs concatenate exactly because measurements add. Reading this key as \"the subsystem these episodes are about\" is only safe when it is there."
+        },
         "from": { "$ref": "common.schema.json#/$defs/utc_instant" },
         "to": { "$ref": "common.schema.json#/$defs/utc_instant" },
         "as_of": { "$ref": "common.schema.json#/$defs/utc_instant" },
@@ -80,11 +83,11 @@
         "max_gap_hours": { "$ref": "common.schema.json#/$defs/max_gap_hours" },
         "episodes": {
           "type": "array",
+          "description": "Chronological, oldest first, with the subsystem as the tiebreak. Every row carries its own `subsystem` - required on `$defs/episode` itself - which is what makes the envelope's optional: on a whole-grid read the row is the only place the subsystem is ever stated.",
           "items": { "$ref": "common.schema.json#/$defs/episode" }
         }
       },
       "required": [
-        "subsystem",
         "from",
         "to",
         "as_of",

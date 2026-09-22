@@ -364,10 +364,14 @@ export interface DispatchHour {
 /**
  * A read-time view, never a stored table. Every episode carries the
  * `threshold_mw` and `max_gap_hours` that produced it (vocabulary rule 8),
- * because an unstamped duration cannot be compared with another one.
+ * because an unstamped duration cannot be compared with another one - and its
+ * `subsystem`, for the same reason one step out: an episode is a run of hours
+ * in exactly one, `GET /v1/curtailment/episodes` may answer for all four at
+ * once, and a row that could not say where it happened would leave a response
+ * with the subsystem stated nowhere.
  */
 export interface CurtailmentEpisode {
-  subsystem?: Subsystem;
+  subsystem: Subsystem;
   technology?: Technology;
   startedAt: UtcInstant;
   /**
@@ -415,7 +419,15 @@ export interface CurtailmentHour {
 }
 
 export interface CurtailmentEpisodes {
-  subsystem: Subsystem;
+  /**
+   * The subsystem asked for. **Absent when none was**, which is the whole-grid
+   * answer: the episodes of all four, each stamped with its own `subsystem`. It
+   * is not a national aggregate and there is no `SIN` row - an episode is a run
+   * of settled hours in one subsystem, and four subsystems' runs concatenate
+   * exactly because measurements add. Reading this key as "the subsystem these
+   * episodes are about" is only safe when it is there.
+   */
+  subsystem?: Subsystem;
   from: UtcInstant;
   to: UtcInstant;
   asOf: UtcInstant;
@@ -427,6 +439,12 @@ export interface CurtailmentEpisodes {
    */
   thresholdMw: ThresholdMw;
   maxGapHours: MaxGapHours;
+  /**
+   * Chronological, oldest first, with the subsystem as the tiebreak. Every row
+   * carries its own `subsystem` - required on `$defs/episode` itself - which is
+   * what makes the envelope's optional: on a whole-grid read the row is the only
+   * place the subsystem is ever stated.
+   */
   episodes: CurtailmentEpisode[];
 }
 
@@ -2929,7 +2947,7 @@ export const WIRE_SHAPES = {
     absorbedMwh: { wire: "absorbed_mwh", optional: true },
   },
   CurtailmentEpisode: {
-    subsystem: { wire: "subsystem", optional: true },
+    subsystem: { wire: "subsystem" },
     technology: { wire: "technology", optional: true },
     startedAt: { wire: "started_at" },
     endedAt: { wire: "ended_at" },
@@ -2958,7 +2976,7 @@ export const WIRE_SHAPES = {
     constrainedOffMwh: { wire: "constrained_off_mwh" },
   },
   CurtailmentEpisodes: {
-    subsystem: { wire: "subsystem" },
+    subsystem: { wire: "subsystem", optional: true },
     from: { wire: "from" },
     to: { wire: "to" },
     asOf: { wire: "as_of" },

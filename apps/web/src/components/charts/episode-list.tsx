@@ -21,8 +21,17 @@
  */
 
 import type { CurtailmentEpisode } from "@wattsteer/core/api";
-import { LayersIcon, Panel, PanelHeader, space, usePalette } from "@wattsteer/ui";
-import { Text, View } from "react-native";
+import {
+  ArrowRightIcon,
+  focusRing,
+  LayersIcon,
+  Panel,
+  PanelHeader,
+  space,
+  type,
+  usePalette,
+} from "@wattsteer/ui";
+import { Platform, Pressable, Text, View } from "react-native";
 import { useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 
@@ -84,6 +93,10 @@ export function EpisodeList({
   columns,
   note,
   empty,
+  limit,
+  onSeeAll,
+  seeAllLabel,
+  bare = false,
 }: {
   episodes: readonly CurtailmentEpisode[];
   maxGapHours: number;
@@ -107,7 +120,61 @@ export function EpisodeList({
    * with — is satisfied by the panel, which is where a per-panel constant
    * belongs, and repeating it per row was what made the list unreadable.
    */
-  columns: { period: string; duration: string; energy: string; peak: string };
+  columns: {
+    /**
+     * The civil day, as its own column.
+     *
+     * Present only where the window spans more than one — the Overview's
+     * fortnight. The Time Machine's episodes are all the day the screen is
+     * about, and a column repeating one date on every row is a column that
+     * costs width and states nothing.
+     *
+     * Where it is present, `period` is the **hours** rather than two full
+     * instants, and the duration column is dropped — which is only honest
+     * because the second hour is the last hour *inside* the episode rather
+     * than the wire's exclusive `ended_at`. See {@link lastHourIn}: printed
+     * raw, `23:00–02:00` read as four hours for a three-hour run.
+     */
+    date?: string;
+    period: string;
+    duration: string;
+    /**
+     * Which subsystem the run happened in.
+     *
+     * Present only where the list is not about one. An episode is a run of
+     * hours in a single subsystem, so a list covering four is four subsystems'
+     * runs interleaved and every row has to say which — the envelope cannot,
+     * because it is not about one either.
+     */
+    region?: string;
+    energy: string;
+    peak: string;
+  };
+  /**
+   * Caps the rows drawn, with the rest behind `onSeeAll`.
+   *
+   * The list itself is not truncated — `episodes` is whole, the count in the
+   * control is the whole of it, and what the cap changes is how many rows this
+   * card spends its height on. A panel that silently dropped rows would be the
+   * absence rule broken in the quietest possible way.
+   */
+  limit?: number;
+  /** Opens the whole list. Without it there is no control and no cap. */
+  onSeeAll?: () => void;
+  seeAllLabel?: string;
+  /**
+   * Draws the table without the panel's own heading.
+   *
+   * For the sheet: `Sheet` states the title as the dialog's name and the
+   * subtitle as its lede, and the panel inside it was stating both again — two
+   * headings 24px apart, and three announcements of one name to a screen
+   * reader (the dialog, the scroll region, and the panel's own `h3`).
+   *
+   * The strings are still required, because the caller that hides the heading
+   * is the one that already rendered it, and a component that took them as
+   * optional would let a caller drop them from both places at once.
+   */
+  bare?: boolean;
   /** The footnote template, with `{gap}`. */
   note: string;
   /**
@@ -121,17 +188,31 @@ export function EpisodeList({
 }) {
   const colors = usePalette();
   const f = useFormat();
+  /*
+    The cap applies only where there is somewhere for the rest to go. A `limit`
+    with no `onSeeAll` would be a panel quietly dropping rows, which is the
+    absence rule broken in the quietest possible way.
+  */
+  const drawn =
+    limit === undefined || onSeeAll === undefined ? episodes : episodes.slice(0, limit);
   return (
     <Panel>
-      <PanelHeader
-        icon={<LayersIcon size={18} color={colors.inkMuted} />}
-        title={title}
-        subtitle={subtitle}
-      />
+      {bare ? null : (
+        <PanelHeader
+          icon={<LayersIcon size={18} color={colors.inkMuted} />}
+          title={title}
+          subtitle={subtitle}
+          right={
+            onSeeAll === undefined || seeAllLabel === undefined ? undefined : (
+              <SeeAll label={seeAllLabel} onPress={onSeeAll} />
+            )
+          }
+        />
+      )}
       {episodes.length === 0 ? (
         <Text
           style={{
-            marginTop: space.lg,
+            marginTop: bare ? 0 : space.lg,
             fontSize: 12,
             lineHeight: 19,
             color: colors.inkMuted,
@@ -149,7 +230,7 @@ export function EpisodeList({
             without reading a single figure. Left-aligned or proportional and it
             is a list again, whatever the borders say.
           */}
-          <View role="table" style={{ marginTop: space.lg, gap: space.xs }}>
+          <View role="table" style={{ marginTop: bare ? 0 : space.lg, gap: space.xs }}>
             <View
               role="row"
               style={{
@@ -159,12 +240,27 @@ export function EpisodeList({
                 borderBottomColor: colors.border,
               }}
             >
-              <Heading style={{ flex: 2.4 }} color={colors.inkFaint}>
+              {columns.date === undefined ? null : (
+                <Heading style={{ flex: 1.1 }} color={colors.inkFaint}>
+                  {columns.date}
+                </Heading>
+              )}
+              <Heading
+                style={{ flex: columns.date === undefined ? 2.4 : 1.4 }}
+                color={colors.inkFaint}
+              >
                 {columns.period}
               </Heading>
-              <Heading style={{ flex: 1, textAlign: "right" }} color={colors.inkFaint}>
-                {columns.duration}
-              </Heading>
+              {columns.region === undefined ? null : (
+                <Heading style={{ flex: 0.9 }} color={colors.inkFaint}>
+                  {columns.region}
+                </Heading>
+              )}
+              {columns.date === undefined ? (
+                <Heading style={{ flex: 1, textAlign: "right" }} color={colors.inkFaint}>
+                  {columns.duration}
+                </Heading>
+              ) : null}
               <Heading style={{ flex: 1.2, textAlign: "right" }} color={colors.inkFaint}>
                 {columns.energy}
               </Heading>
@@ -172,18 +268,49 @@ export function EpisodeList({
                 {columns.peak}
               </Heading>
             </View>
-            {episodes.map((episode) => (
+            {drawn.map((episode) => (
               <View
-                key={episode.startedAt}
+                key={`${episode.subsystem ?? ""}${episode.startedAt}`}
                 role="row"
                 style={{ flexDirection: "row", alignItems: "baseline" }}
               >
-                <Cell style={{ flex: 2.4 }} color={colors.ink}>
-                  {`${f.dateTime(episode.startedAt)} → ${f.dateTime(episode.endedAt)}`}
+                {columns.date === undefined ? null : (
+                  <Cell style={{ flex: 1.1 }} color={colors.ink}>
+                    {/*
+                      `dateShort`, without the year: this column repeats a date
+                      on every row of a fortnight, and four of those characters
+                      are the same on all of them. `format.ts` calls it "a date
+                      without its year, for a run of days inside one".
+                    */}
+                    {f.dateShort(brasilia(episode.startedAt).date)}
+                  </Cell>
+                )}
+                <Cell
+                  style={{ flex: columns.date === undefined ? 2.4 : 1.4 }}
+                  color={columns.date === undefined ? colors.ink : colors.inkMuted}
+                >
+                  {columns.date === undefined
+                    ? `${f.dateTime(episode.startedAt)} → ${f.dateTime(episode.endedAt)}`
+                    : `${f.hour(brasilia(episode.startedAt).hour)}–${f.hour(
+                        brasilia(lastHourIn(episode.endedAt)).hour,
+                      )}`}
                 </Cell>
-                <Cell style={{ flex: 1, textAlign: "right" }} color={colors.inkMuted}>
-                  {`${f.number(episode.durationHours)} h`}
-                </Cell>
+                {columns.region === undefined ? null : (
+                  <Cell style={{ flex: 0.9 }} color={colors.inkMuted}>
+                    {/*
+                      An empty string and not a dash: `subsystem` is optional on
+                      the wire, and the only caller that asks for this column is
+                      the one whose route stamps it on every row. A dash here
+                      would be inventing an absence the schema does not describe.
+                    */}
+                    {episode.subsystem ?? ""}
+                  </Cell>
+                )}
+                {columns.date === undefined ? (
+                  <Cell style={{ flex: 1, textAlign: "right" }} color={colors.inkMuted}>
+                    {`${f.number(episode.durationHours)} h`}
+                  </Cell>
+                ) : null}
                 <Cell style={{ flex: 1.2, textAlign: "right" }} color={colors.ink}>
                   {`${f.compact(episode.totalMwh)} MWh`}
                 </Cell>
@@ -206,5 +333,92 @@ export function EpisodeList({
         </>
       )}
     </Panel>
+  );
+}
+
+/**
+ * A UTC instant as the **Brasília** civil day and hour it fell in.
+ *
+ * Both together, from one formatter, because splitting them is how they came
+ * apart: the date column was `startedAt.slice(0, 10)` — the *UTC* calendar day
+ * — beside an hour converted to São Paulo. An episode starting 22:00 BRT on
+ * 9 September rendered as `10 de set. · 22:00`, a date and a wall clock that
+ * never co-occurred, and every episode starting 21:00–23:00 BRT was off by a
+ * day. `api-routes.md` names this exact mistake: a UTC day is the wrong day by
+ * three hours every day of the year.
+ *
+ * By zone name rather than by a fixed offset: Brazil has abolished daylight
+ * saving and could reinstate it, and `-03:00` would be wrong the day it did.
+ */
+function brasilia(instant: string): { date: string; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(instant));
+  const of = (kind: string) => parts.find((part) => part.type === kind)?.value ?? "";
+  return {
+    date: `${of("year")}-${of("month")}-${of("day")}`,
+    // `en-CA` with `hour12: false` is the h23 cycle, so midnight is 0 and never
+    // 24. Checked rather than assumed: `en-US` gives 24 here.
+    hour: Number(of("hour")),
+  };
+}
+
+/**
+ * The **last hour inside** the episode, which is not the one the wire carries.
+ *
+ * `ended_at` is documented as exclusive — "the valid_time of the first hour
+ * below threshold" — so a three-hour run at 23:00, 00:00 and 01:00 ends at
+ * 02:00. Printed raw beside an inclusive-looking en dash it read `23:00–02:00`:
+ * four hours, in a column headed "Período", with the duration column gone from
+ * this variant so nothing on the row could contradict it. And it was only
+ * sometimes wrong — a one-hour episode read correctly — which is worse than
+ * being wrong consistently.
+ *
+ * One hour back makes the range mean what its punctuation says. A one-hour
+ * episode then reads `14:00–14:00`, which is honest and is what an inclusive
+ * range of one looks like.
+ */
+function lastHourIn(endedAt: string): string {
+  return new Date(new Date(endedAt).getTime() - 3_600_000).toISOString();
+}
+
+/**
+ * The control that opens the whole list.
+ *
+ * A `Pressable` with the product's focus ring rather than a `Link`: what it
+ * opens is a sheet in this document, not a route, and a link that goes nowhere
+ * is the thing `question-cards.tsx` argues against on the same screen.
+ */
+function SeeAll({ label, onPress }: { label: string; onPress: () => void }) {
+  const colors = usePalette();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      aria-haspopup="dialog"
+      onPress={onPress}
+      style={(state) => {
+        const { focused = false } = state as { focused?: boolean };
+        return {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          paddingVertical: 2,
+          paddingHorizontal: 4,
+          borderRadius: 6,
+          ...focusRing(focused, colors.focus, 2),
+          ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+        };
+      }}
+    >
+      <Text style={{ ...type.caption, fontWeight: "600", color: colors.accent }}>
+        {label}
+      </Text>
+      <ArrowRightIcon size={14} color={colors.accent} />
+    </Pressable>
   );
 }

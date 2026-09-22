@@ -73,7 +73,7 @@ import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
 import { usePalette } from "@wattsteer/ui";
 import { router } from "expo-router";
 import Head from "expo-router/head";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Text } from "react-native";
 import ExplainScreen from "@/app/app/explain";
 import MitigateScreen from "@/app/app/mitigate";
@@ -86,6 +86,7 @@ import {
   ObservedStamp,
   useNoModelPromoted,
 } from "@/components/app/honesty";
+import type { Scope } from "@/components/app/map/scope-bar";
 import { ForecastPanels } from "@/components/app/overview/forecast-panels";
 import { ObservedPanels } from "@/components/app/overview/observed-panels";
 import { OverviewHero } from "@/components/app/overview/overview-hero";
@@ -178,6 +179,41 @@ export default function GridOverviewScreen() {
     own refusal, and it said the wrong one on a serving deployment.
   */
   const noModelPromoted = useNoModelPromoted();
+  /**
+   * Whether the map is narrowed to the selected region, or showing all four.
+   *
+   * **Owned here because two subtrees read it.** The map's pills set it and the
+   * hero's panels follow it, and so does the episode list at the bottom of the
+   * page: it is the screen's filter, not the map's decoration, and a second
+   * copy beside the episodes could have disagreed with the pills that set it.
+   *
+   * It opens on the whole grid and *corrects* to the region when the URL named
+   * one, rather than reading the URL at mount. `use-app-params.ts` deliberately
+   * withholds `subsystemFromUrl` on the first client render — the export
+   * prerenders with defaults and hydration must match — so a mount-time read
+   * here would be the default answer, always.
+   *
+   * **`subsystemFromUrl` is not "this was a deep link".** It is *the URL names
+   * a valid subsystem right now*, and `select` and `explain` write exactly
+   * that with `setParams`. So the first cut of this narrowed the map on the
+   * first press of "Explicar NORDESTE" or of any settled row — the reader
+   * pressed Explain and the episode list dropped from four subsystems to one —
+   * and, being once-only, never did it again. Behaviour no reader can form a
+   * model of, and something the mount-time read this replaced could not do.
+   *
+   * So the reader's own writes burn the latch before they land: after any of
+   * them the URL is the reader's doing and there is nothing to correct. What
+   * is left is the deep link, which arrives before any press.
+   */
+  const [scope, setScope] = useState<Scope>("sin");
+  const urlIsTheReaders = useRef(false);
+  useEffect(() => {
+    if (urlIsTheReaders.current || params.subsystemFromUrl !== true) {
+      return;
+    }
+    urlIsTheReaders.current = true;
+    setScope("region");
+  }, [params.subsystemFromUrl]);
 
   /**
    * **Selecting and navigating are two actions now, and they were one.**
@@ -201,7 +237,13 @@ export default function GridOverviewScreen() {
    * Both are still defined once and handed to both affordances, which is what
    * the note that stood here was for, and still true.
    */
-  const select = (subsystem: SubsystemCode) => params.setParams({ subsystem });
+  const select = (subsystem: SubsystemCode) => {
+    // The URL is about to say `subsystem=…` because the reader pressed
+    // something, not because they followed a link. See `scope` below: that
+    // distinction is not in `subsystemFromUrl` and has to be made here.
+    urlIsTheReaders.current = true;
+    params.setParams({ subsystem });
+  };
 
   /** The explicit affordance. Carries the rest of the selection with it. */
   /**
@@ -221,6 +263,8 @@ export default function GridOverviewScreen() {
    * explicit control too — it should travel the length of the page, not off it.
    */
   const explain = (subsystem: SubsystemCode) => {
+    // As `select`: a press, not a link. See `scope`.
+    urlIsTheReaders.current = true;
     params.setParams({ subsystem });
     // Raised rather than scrolled to. The accordion it used to travel the
     // length of the page to reach is gone; Explicar is the sheet now.
@@ -501,6 +545,8 @@ export default function GridOverviewScreen() {
       <OverviewHero
         observed={observed}
         forecast={forecast}
+        scope={scope}
+        onScope={setScope}
         params={params}
         onExplain={explain}
         onWhy={() => setWhyOpen((value) => !value)}
@@ -524,6 +570,7 @@ export default function GridOverviewScreen() {
       {forecast === null ? (
         <ObservedPanels
           observed={observed}
+          scope={scope}
           subsystem={params.subsystem}
           onSelect={select}
           onExplain={explain}
@@ -539,6 +586,7 @@ export default function GridOverviewScreen() {
           />
           <SettledPanels
             observed={observed}
+            scope={scope}
             subsystem={params.subsystem}
             onSelect={select}
           />

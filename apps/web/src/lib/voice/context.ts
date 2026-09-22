@@ -164,7 +164,16 @@ function observedLine(input: VoiceContextInput): string | undefined {
   }
   const { hoursDate, hours, episodes } = network.observed;
   const total = hours.reduce((sum, hour) => sum + hour.constrainedOffMwh, 0);
-  return `Observed and settled (no model involved): on ${hoursDate}, ${input.params.subsystem} was constrained off ${Math.round(total)} MWh across ${hours.length} hours, and ${episodes.episodes.length} episodes were recorded in the fortnight before it. These are facts and you may state them.`;
+  /*
+    The episode count is dropped rather than written as zero when the read
+    refused. A model told "0 episodes were recorded" will say so out loud, and
+    that is a claim about the grid made from a measurement nobody has.
+  */
+  const fortnight =
+    episodes === null
+      ? ""
+      : ` and ${episodes.episodes.length} episodes were recorded in the fortnight before it`;
+  return `Observed and settled (no model involved): on ${hoursDate}, ${input.params.subsystem} was constrained off ${Math.round(total)} MWh across ${hours.length} hours${fortnight}. These are facts and you may state them.`;
 }
 
 function forecastLine(input: VoiceContextInput): string | undefined {

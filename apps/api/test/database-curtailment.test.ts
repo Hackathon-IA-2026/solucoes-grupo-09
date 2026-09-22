@@ -396,6 +396,69 @@ suite("GET /v1/curtailment/* (real Postgres)", () => {
       });
     });
 
+    it("answers the whole grid when no subsystem is asked for", async () => {
+      /*
+        **The case the `ELSEWHERE` fixture was always there for.**
+
+        `CJU_OBS_S` puts 500 MWh in subsystem S at 07:00, at an hour NE also
+        has, and the test above this one exists to prove an NE answer never
+        includes it. This is the other direction: with no `subsystem` the
+        answer is every subsystem's runs, so S's hour must be in it — and must
+        be labelled S rather than inheriting the envelope's idea of where it
+        happened, because the envelope no longer has one.
+      */
+      const path = `/v1/curtailment/episodes?from=${RANGE_FROM.toISOString()}&to=${RANGE_TO.toISOString()}&as_of=${AS_OF_EARLY.toISOString()}`;
+      const payload = await body(path);
+      expect(payload.subsystem).toBeUndefined();
+
+      const episodes = payload.episodes as Record<string, unknown>[];
+      // NE's three, plus S's one. Chronological, and S's 07:00 falls between
+      // NE's 06:00–08:00 run and its 09:00 one — which is the whole point of
+      // ordering in Postgres rather than concatenating four answers.
+      expect(
+        episodes.map((episode) => [
+          episode.subsystem,
+          episode.started_at,
+          episode.total_mwh,
+        ]),
+      ).toEqual([
+        ["NE", H06.toISOString(), 28],
+        ["S", H07.toISOString(), 500],
+        ["NE", H09.toISOString(), 9],
+        ["NE", H11.toISOString(), 7],
+      ]);
+    });
+
+    it("is a concatenation of the per-subsystem answers and not a new number", async () => {
+      /*
+        The honesty property, asserted rather than asserted *about*. An episode
+        is a measured run of settled hours, so four subsystems' runs add
+        exactly — unlike a band, which is why this route may answer for the
+        whole grid and the forecast routes may not. If the whole-grid read ever
+        summed, averaged or merged anything across subsystems, this fails.
+      */
+      const window = `from=${RANGE_FROM.toISOString()}&to=${RANGE_TO.toISOString()}&as_of=${AS_OF_EARLY.toISOString()}`;
+      const all = (await body(`/v1/curtailment/episodes?${window}`)).episodes as Record<
+        string,
+        unknown
+      >[];
+      const perSubsystem: Record<string, unknown>[] = [];
+      for (const code of ["N", "NE", "SE", "S"]) {
+        const one = (await body(`/v1/curtailment/episodes?subsystem=${code}&${window}`))
+          .episodes as Record<string, unknown>[];
+        for (const episode of one) {
+          expect(episode.subsystem).toBe(code);
+          perSubsystem.push(episode);
+        }
+      }
+      perSubsystem.sort((a, b) =>
+        String(a.started_at) === String(b.started_at)
+          ? String(a.subsystem).localeCompare(String(b.subsystem))
+          : String(a.started_at).localeCompare(String(b.started_at)),
+      );
+      expect(all).toEqual(perSubsystem);
+    });
+
     it("stamps the parameters that produced it on every episode", async () => {
       const payload = await body(episodesPath("&threshold_mw=8"));
       const episodes = payload.episodes as Record<string, unknown>[];

@@ -93,6 +93,46 @@ describe("curtailment · the boundary, structurally", () => {
     }
   });
 
+  it("stamps each episode from its own row, and the envelope only when asked", () => {
+    /*
+      **The gate cannot run the whole-grid read, so it reads the code.**
+
+      The behaviour — four subsystems interleaved, each row labelled, the
+      concatenation equalling the four separate answers — is proven in
+      `database-curtailment.test.ts`, which needs a real Postgres and is
+      `describe.skip` without one. `bun run check` skips it. What runs here is
+      a 503 from `requireDb()`, and an implementation that ignored `subsystem`
+      entirely, returned only NE, or wrote a constant onto every row would pass
+      that identically.
+
+      So the two properties the change rests on are asserted against the
+      route's own source, which `testing.md` allows exactly where a rule lives
+      in *how* something is called: the episode's subsystem comes from the
+      **row**, and the envelope's is spread conditionally rather than assigned.
+      Non-vacuity: reverting either to `query.subsystem` fails this.
+    */
+    /*
+      Scoped to the one encoder, not to the file: `/hours` and `/reasons` are
+      in it too, they take a required subsystem, and `subsystem: query.subsystem`
+      is right in both. A guard reading the whole file failed the moment it was
+      written, which is the failure `testing.md` records for `api/grid.ts`.
+    */
+    const encoder = ROUTE.slice(
+      ROUTE.indexOf("function toCurtailmentEpisodes("),
+      ROUTE.indexOf("function toObservedReasons("),
+    );
+    expect(encoder).toContain("subsystem: episode.subsystem,");
+    expect(encoder).not.toContain("subsystem: query.subsystem,\n");
+    expect(encoder).toContain(
+      "...(query.subsystem === undefined ? {} : { subsystem: query.subsystem }),",
+    );
+    // And the cache key separates the two answers, or one would be served for
+    // the other from a validator that cannot tell them apart. In the episodes
+    // handler alone: `/hours` has no whole-grid answer to separate it from.
+    const handler = ROUTE.slice(ROUTE.indexOf('"/v1/curtailment/episodes"'));
+    expect(handler).toContain('query.subsystem ?? "*",');
+  });
+
   it("translates through the one translator rather than by rule", () => {
     expect(ROUTE).toContain("encodeWire");
     expect(ROUTE).not.toContain('from "../contract/wire.js"');
@@ -197,6 +237,45 @@ describe("curtailment · the routes", () => {
   it("refuses lowercase technology rather than treating it as a synonym", async () => {
     const response = await get(
       `/v1/curtailment/hours?subsystem=NE&from=${FROM}&to=${TO}&technology=wind`,
+    );
+    expect(response.status).toBe(422);
+  });
+
+  it("takes no subsystem on episodes, and still requires one everywhere else", async () => {
+    /*
+      **The relaxation is one route's, and this is the guard that keeps it so.**
+
+      `/episodes` is the only observed read whose answer means something
+      without a subsystem: an episode is a measured run of settled hours, and
+      four subsystems' runs concatenate exactly. `/hours` and `/reasons` would
+      have to aggregate to answer the same way, so they still refuse — and a
+      future edit that made `SUBSYSTEM` optional on the shared constant rather
+      than at this one call site turns this test red rather than shipping two
+      routes quietly answering a question nobody defined.
+
+      503 is the *handler* answering: it reached `requireDb()`, which is what
+      proves the parameter was accepted rather than merely tolerated. 422 is
+      the framework refusing before the handler runs.
+    */
+    const reached = await get(`/v1/curtailment/episodes?from=${FROM}&to=${TO}`);
+    expect(reached.status).toBe(503);
+    expect(await codeOf(reached)).toBe("DATA_UNAVAILABLE");
+
+    for (const path of [
+      `/v1/curtailment/hours?from=${FROM}&to=${TO}`,
+      "/v1/curtailment/reasons?date=2026-05-03",
+    ]) {
+      const response = await get(path);
+      expect({ path, status: response.status }).toEqual({ path, status: 422 });
+    }
+  });
+
+  it("still refuses a subsystem outside the enum on episodes", async () => {
+    // Optional is not "anything". `SIN` is structurally unrepresentable, and
+    // the route that now accepts *no* subsystem must not have become one that
+    // accepts a wrong one.
+    const response = await get(
+      `/v1/curtailment/episodes?subsystem=SIN&from=${FROM}&to=${TO}`,
     );
     expect(response.status).toBe(422);
   });

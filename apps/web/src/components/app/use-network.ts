@@ -140,7 +140,11 @@ export interface ObservedNetwork {
    * settlements, that one is a division of a single modelled expectation.
    */
   readonly daySplit: TechnologySplit;
-  readonly episodes: CurtailmentEpisodes;
+  /**
+   * `null` where the episodes route refused. The panel says so; nothing else
+   * on this screen depends on it, which is why its refusal is not the page's.
+   */
+  readonly episodes: CurtailmentEpisodes | null;
 }
 
 /** The day being forecast — present only when one was. */
@@ -264,10 +268,40 @@ export function useNetwork(query: NetworkQuery): NetworkState {
       () => null,
     );
 
+    /*
+      **The whole grid, and the screen filters it — and it may fail alone.**
+
+      This asked for the selected subsystem, which made the episode list the
+      one panel on the page that could not answer `SIN Geral`, the scope every
+      other figure follows. Asking for all four and filtering in the screen is
+      exact: an episode is a measured run of settled hours, so choosing a
+      subset of the rows is a selection and never an aggregate.
+
+      It is *not* one fewer request: this effect's deps still include
+      `subsystem`, so a selection re-issues everything below. What changed is
+      that the answer no longer depends on the selection, which is what lets
+      the screen filter it — and which is the thing a reviewer caught this
+      comment claiming more of than it had.
+
+      `catch` to `null`, like `reasons` and `evidence` above, and this one was
+      measured rather than reasoned: it sat inside the `Promise.all` below, so
+      a refusal from this single route took down `gridNow` and
+      `curtailmentHours` with it and the whole screen rendered "O gateway não
+      respondeu" — a page full of real settled megawatt-hours replaced by an
+      absence, because one panel's list could not be read. `architecture.md`
+      says degradation is a property of the graph; a panel is not the page.
+
+      The absence is rendered rather than hidden — `EpisodesPanel` says the
+      list could not be read — so this is not a swallowed error.
+    */
+    const episodes = api
+      .curtailmentEpisodes({ from, to: settled }, signal)
+      .catch(() => null);
+
     const observed = Promise.all([
       api.gridNow(signal),
       api.curtailmentHours({ subsystem, from: settled, to: hoursTo }, signal),
-      api.curtailmentEpisodes({ subsystem, from, to: settled }, signal),
+      episodes,
     ]).then(
       async ([now, hours, episodes]): Promise<ObservedNetwork> => ({
         subsystem,

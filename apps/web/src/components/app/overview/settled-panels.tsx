@@ -19,15 +19,31 @@
  * the duplicate being left where fewer readers scroll.
  */
 
-import { ClockIcon, FadeIn, Panel, PanelHeader, space, usePalette } from "@wattsteer/ui";
+import {
+  ClockIcon,
+  FadeIn,
+  LayersIcon,
+  layout,
+  Panel,
+  PanelHeader,
+  Sheet,
+  space,
+  usePalette,
+} from "@wattsteer/ui";
+import { useState } from "react";
 import { Text, View } from "react-native";
 import { VintageBadge } from "@/components/app/honesty";
+import type { Scope } from "@/components/app/map/scope-bar";
 import { ObservedSubsystemRow } from "@/components/app/subsystem-row";
 import type { ObservedNetwork } from "@/components/app/use-network";
 import { EpisodeList } from "@/components/charts/episode-list";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import { SUBSYSTEM_DISPLAY_ORDER, type SubsystemCode } from "@/lib/fixtures";
+import {
+  SUBSYSTEM_DISPLAY_ORDER,
+  type SubsystemCode,
+  subsystemMeta,
+} from "@/lib/fixtures";
 import { observedRows } from "@/lib/network";
 
 /**
@@ -44,10 +60,13 @@ import { observedRows } from "@/lib/network";
  */
 export function SettledPanels({
   observed,
+  scope,
   subsystem,
   onSelect,
 }: {
   observed: ObservedNetwork;
+  /** The map's filter, which the episode list follows like every other figure. */
+  scope: Scope;
   subsystem: SubsystemCode;
   /**
    * The same selector the map and the forecast rows take.
@@ -65,7 +84,7 @@ export function SettledPanels({
         subsystem={subsystem}
         onSelect={onSelect}
       />
-      <EpisodesPanel observed={observed} />
+      <EpisodesPanel observed={observed} scope={scope} subsystem={subsystem} />
     </>
   );
 }
@@ -126,25 +145,201 @@ function SettledSubsystemsPanel({
   );
 }
 
-/** A fortnight of episodes, with the parameters that defined them. */
-export function EpisodesPanel({ observed }: { observed: ObservedNetwork }) {
+/**
+ * A fortnight of episodes, following the map's scope like everything else.
+ *
+ * **The list is filtered, never aggregated, and that distinction is why this
+ * panel may answer `SIN Geral` at all.** An episode is a measured run of
+ * settled hours in one subsystem; choosing which rows to draw is a selection,
+ * and four subsystems' runs sitting in one list is a concatenation. Neither
+ * invents a figure, which is exactly what a national *band* would have done —
+ * see `honesty.md`. The gateway reads all four in one query and this picks.
+ *
+ * Half the width, because at full width a five-column table of a dozen rows
+ * left two thirds of the line empty and pushed everything after it a screen
+ * further down. The rest of the fortnight is behind `Ver todos`, in a sheet:
+ * the card spends its height on what is recent and the whole list is one press
+ * away, rather than the panel deciding for the reader that the fourteenth
+ * episode is not worth having.
+ */
+export function EpisodesPanel({
+  observed,
+  scope,
+  subsystem,
+}: {
+  observed: ObservedNetwork;
+  /** `sin` draws all four; `region` draws the selected one. The map's filter. */
+  scope: Scope;
+  subsystem: SubsystemCode;
+}) {
+  const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
+  const [open, setOpen] = useState(false);
+  const read = observed.episodes;
+
+  /*
+    **A refusal, and not the empty sentence.**
+
+    `read === null` is the episodes route having refused — the screen goes on
+    without it, which is the point of catching it — and rendering the list with
+    no rows would print "no hour in this window went above the threshold",
+    which is a finding about the grid stated from a measurement nobody has.
+    Those are the two states `honesty.md` says an empty list must be told
+    apart into, and this is the one that says so.
+  */
+  if (read === null) {
+    return (
+      <FadeIn delay={210}>
+        <View style={{ maxWidth: layout.page / 2, width: "100%" }}>
+          <Panel>
+            <PanelHeader
+              icon={<LayersIcon size={18} color={colors.inkMuted} />}
+              title={copy.app.overview.episodesTitle}
+              subtitle={copy.app.overview.episodesRefusedSubtitle}
+            />
+            <Text
+              style={{
+                marginTop: space.lg,
+                fontSize: 12,
+                lineHeight: 19,
+                color: colors.inkMuted,
+              }}
+            >
+              {copy.app.overview.episodesRefused}
+            </Text>
+          </Panel>
+        </View>
+      </FadeIn>
+    );
+  }
+  /*
+    How many rows the card spends its height on. Four fits beside the day
+    panels without the section growing a scroll of its own, and the rest are
+    not dropped: the control beside the heading states the whole count and
+    opens the whole list. Local, because a `.tsx` exports components and
+    nothing else (ADR-0002) and this is nobody else's number.
+  */
+  const onTheCard = 4;
+
+  /*
+    The filter leans on `subsystem` being on every row, which is optional on the
+    wire and which this route always stamps — `database-curtailment.test.ts`
+    holds it, in both directions, against a fixture that puts an episode in S at
+    an hour NE also has. It matters because the failure would be quiet: rows
+    missing the field would drop out here and the panel would say no hour went
+    above the threshold, which is a finding about the grid rather than about a
+    missing key.
+  */
+  const all =
+    scope === "sin"
+      ? read.episodes
+      : read.episodes.filter((episode) => episode.subsystem === subsystem);
+  /*
+    Newest first here, and chronological on the wire. The order is a rendering
+    decision — the gateway sorts ascending because the Time Machine reads a day
+    forwards — and "Episódios recentes" is a claim about recency that a list
+    starting a fortnight ago does not make.
+
+    A `reverse()` would have done it, and did, wrongly: the gateway's order is
+    `started_at, subsystem`, so reversing the whole list also reversed the
+    subsystem tiebreak and four regions that started the same hour came out
+    S, SE, NE, N — the display order backwards, on the one screen that prints
+    those four codes everywhere else north to south. Only the time is reversed.
+  */
+  const episodes = [...all].sort((a, b) =>
+    a.startedAt === b.startedAt
+      ? SUBSYSTEM_DISPLAY_ORDER.indexOf(a.subsystem as SubsystemCode) -
+        SUBSYSTEM_DISPLAY_ORDER.indexOf(b.subsystem as SubsystemCode)
+      : b.startedAt.localeCompare(a.startedAt),
+  );
+
+  const window = {
+    from: f.date(read.from.slice(0, 10)),
+    to: f.date(read.to.slice(0, 10)),
+    mw: f.number(read.thresholdMw),
+  };
+  const subtitle =
+    scope === "sin"
+      ? fill(copy.app.overview.episodesSubtitleAll, window)
+      : fill(copy.app.overview.episodesSubtitle, {
+          ...window,
+          subsystem: subsystemMeta(subsystem).onsDisplayName,
+        });
+  // "no hour went above the threshold **in this subsystem**" is a different
+  // finding from "in any of the four", and the panel that can be either has to
+  // say which it is.
+  const empty =
+    scope === "sin"
+      ? copy.app.overview.episodesEmptyAll
+      : copy.app.overview.episodesEmpty;
+  /*
+    The region column exists only where the list is about more than one. In the
+    region scope every row would carry the same three letters, which is a column
+    that costs width and states nothing — the same argument that keeps the date
+    off the Time Machine's copy of this table.
+  */
+  const columns =
+    scope === "sin"
+      ? copy.app.overview.episodeColumns
+      : { ...copy.app.overview.episodeColumns, region: undefined };
+
   return (
     <FadeIn delay={210}>
-      <EpisodeList
-        episodes={observed.episodes.episodes}
-        maxGapHours={observed.episodes.maxGapHours}
+      {/*
+        Half of `layout.page`, the content column every full-width surface on
+        this screen uses — not half of `layout.desktop`, which is a *viewport
+        breakpoint* and was giving 512px of a 1280px column: 40% of the line,
+        with 768px of gutter beside it, under a comment promising half. It
+        would also have moved this card the day somebody changed where the
+        layout switches to two columns, which is not this card's business.
+      */}
+      <View style={{ maxWidth: layout.page / 2, width: "100%" }}>
+        <EpisodeList
+          episodes={episodes}
+          maxGapHours={read.maxGapHours}
+          title={copy.app.overview.episodesTitle}
+          subtitle={subtitle}
+          columns={columns}
+          note={copy.app.overview.episodeNote}
+          empty={empty}
+          limit={onTheCard}
+          onSeeAll={episodes.length > onTheCard ? () => setOpen(true) : undefined}
+          seeAllLabel={
+            episodes.length > onTheCard
+              ? fill(copy.app.overview.episodesSeeAll, {
+                  count: f.number(episodes.length),
+                })
+              : undefined
+          }
+        />
+      </View>
+
+      <Sheet
+        open={open}
+        onClose={() => setOpen(false)}
         title={copy.app.overview.episodesTitle}
-        subtitle={fill(copy.app.overview.episodesSubtitle, {
-          from: f.date(observed.episodes.from.slice(0, 10)),
-          to: f.date(observed.episodes.to.slice(0, 10)),
-          mw: f.number(observed.episodes.thresholdMw),
-        })}
-        columns={copy.app.overview.episodeColumns}
-        note={copy.app.overview.episodeNote}
-        empty={copy.app.overview.episodesEmpty}
-      />
+        lede={subtitle}
+        closeLabel={copy.app.shell.closeSheet}
+      >
+        {/*
+          The same component, uncapped, with no control and no heading of its
+          own — `Sheet` has already stated both, as the dialog's name and its
+          lede. A second spelling of this table would be a second place the
+          threshold could stop being printed, which is the argument
+          `episode-list.tsx` opens with.
+        */}
+        <EpisodeList
+          bare={true}
+          episodes={episodes}
+          maxGapHours={read.maxGapHours}
+          title={copy.app.overview.episodesTitle}
+          subtitle={subtitle}
+          columns={columns}
+          note={copy.app.overview.episodeNote}
+          empty={empty}
+        />
+      </Sheet>
     </FadeIn>
   );
 }
