@@ -269,21 +269,29 @@ def test_only_a_reasoning_block_that_opens_the_answer_is_removed():
 
 def test_payment_required_is_a_refusal_not_a_quota(config, monkeypatch):
     """Measured on 22/09/2026: a Cerebras account without a card answers 402 to
-    every request. Read as a spent quota it would be retried on every key every
-    minute and reported as a delay; the configuration is what is wrong, and the
-    run says so."""
+    every request. Read as a spent quota it would be retried every minute and
+    reported as a delay. It is one account, though: review of #42 pointed out
+    that the pool's other keys may belong to accounts that do answer, so the
+    unpaid key is left out and the next key is asked."""
     import asyncio
 
     from wattsteer_rag.gateway.adapters import ProviderError
     from wattsteer_rag.gateway.router import ProviderRefused
 
     gateway = Gateway(config)
+    unpaid = {"key-a1"}
 
-    async def pay_first(*_args, **_kwargs):
-        raise ProviderError("payment required", status=402)
+    async def chat(_client, secret, **_kwargs):
+        if secret in unpaid:
+            raise ProviderError("payment required", status=402)
+        return {"ok": secret}, {}
 
     for provider in gateway.providers.values():
-        monkeypatch.setattr(provider.adapter, "chat", pay_first)
+        monkeypatch.setattr(provider.adapter, "chat", chat)
+    result = asyncio.run(gateway.run("generate_strong", tokens=10, messages=[]))
+    assert result.value == {"ok": "key-a2"} and result.provider == "alpha"
+    assert [call["error"] for call in gateway.calls][:1] == ["payment required"]
+
+    unpaid.update({"key-a2", "key-b1"})
     with pytest.raises(ProviderRefused, match="402"):
         asyncio.run(gateway.run("generate_strong", tokens=10, messages=[]))
-    assert all(slot["state"] != "cooling" for slot in gateway.ledger.snapshot())
