@@ -177,7 +177,7 @@ async def _refresh(days: int) -> None:
         async with httpx.AsyncClient() as client:
             for back in range(days):
                 await crawler.fetch_bdo(client, date.today() - timedelta(days=back + 1))
-                await crawler.fetch_ipdo(client, date.today() - timedelta(days=back))
+            await crawler.fetch_live_ipdo(client, date.today(), days)
         for row in await pending_documents(db, limit=60):
             await ingest_document(db, gateway, row)
         await embed_pending(db, gateway)

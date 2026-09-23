@@ -59,6 +59,9 @@ class Settings(BaseSettings):
 
     user_agent: str = "WattSteer-RAG/0.1 (+https://www.wattsteer.com)"
     fetch_interval_s: float = 1.0
+    # Ask the Internet Archive to keep each new IPDO: the portal serves only the
+    # current edition, and a lost one exists nowhere else (see crawl.py).
+    archive_ipdo: bool = True
 
     @property
     def dsn(self) -> str:

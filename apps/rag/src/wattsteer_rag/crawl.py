@@ -18,10 +18,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote, unquote
 
@@ -30,6 +31,8 @@ import httpx
 from .config import settings
 from .db import Database
 from .parse import pdf_text
+
+log = logging.getLogger("wattsteer_rag.crawl")
 
 MPO_BASE = "https://www.ons.org.br/MPO/Documento Normativo"
 IO_DIR = f"{MPO_BASE}/3. Instruções de Operação - SM 5.12/3.1. Controle da Transmissão/3.1.1. Operação Normal"
@@ -49,6 +52,8 @@ WAYBACK_CDX = (
     "&filter=statuscode:200&filter=mimetype:application/pdf"
     "&collapse=original&limit=3000"
 )
+WAYBACK_SAVE = "https://web.archive.org/save"
+IPDO_LOOKBACK_DAYS = 4
 RAP_2023_08_15 = f"{ACERVO}/RAP%202023.08.15%2008h030min%20vers%C3%A3o%20final.pdf"
 
 # The instructions the curtailment records actually cite, with the revision that
@@ -348,6 +353,8 @@ class Crawler:
             published_at=datetime(day.year, day.month, day.day, tzinfo=UTC),
             meta={"day": day.isoformat()},
         )
+        if is_new:
+            await self._keep_a_public_copy(client, url)
         return {
             "source": "IPDO",
             "day": day.isoformat(),
@@ -355,6 +362,41 @@ class Crawler:
             "document_id": document_id,
             "new": is_new,
         }
+
+    async def fetch_live_ipdo(self, client: httpx.AsyncClient, today: date, days: int = 1) -> list[dict]:
+        """Whichever editions are on the portal now, looking back far enough.
+
+        The file is named for the day it covers, not the day it went up, and the
+        portal keeps one: at 02:29 of 23/09/2026 the only edition served was
+        IPDO-21-09-2026.pdf, and 22 and 23 answered 404. The daily refresh asked
+        for today and yesterday only, at 05:10 in Brasilia, so it never found the
+        edition that was up, and the event's Railway held one IPDO in a week.
+        Asking for the last few days costs a 404 each; the one that is up is kept,
+        and one fetched before is recognised by its hash.
+        """
+        lookback = max(days, IPDO_LOOKBACK_DAYS)
+        return [await self.fetch_ipdo(client, today - timedelta(days=back)) for back in range(lookback)]
+
+    async def _keep_a_public_copy(self, client: httpx.AsyncClient, url: str) -> None:
+        """Ask the Internet Archive to keep the edition too.
+
+        An IPDO the portal has replaced exists nowhere else: on 23/09/2026 the
+        archive held no 2026 edition at all, so three days of them were lost.
+        This is a second copy outside our own volume, and it is best effort: the
+        archive throttles, and a failure here must not cost the edition we have.
+        """
+        if not self.conf.archive_ipdo:
+            return
+        try:
+            response = await client.get(
+                f"{WAYBACK_SAVE}/{url}",
+                headers={"user-agent": self.conf.user_agent},
+                timeout=60,
+                follow_redirects=True,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            log.warning("wayback save failed for %s (%s); the local copy stands", url, exc)
 
     async def known_days(self, source: str) -> set[str]:
         """Which editions are already here, so a rerun only fetches what is missing."""
