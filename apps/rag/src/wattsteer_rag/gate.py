@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+from .chunk import TOPIC_SEPARATOR
 from .retrieve import Hit, codes_in
 
 MAX_QUOTE_CHARS = 600
@@ -199,7 +200,30 @@ def _claim_failures(claim: str, accepted: list[dict], record: Record) -> list[Ga
     if missing:
         return missing
     causal = causal_hits(claim)
-    return [GateFailure("causal_vocabulary", ", ".join(causal))] if causal else []
+    if causal:
+        return [GateFailure("causal_vocabulary", ", ".join(causal))]
+    concluded = conclusion_hits(claim)
+    if concluded:
+        return [GateFailure("claim_draws_conclusion", ", ".join(concluded))]
+    # Only the disturbance report lists one outcome per agent; an operating
+    # instruction naming the agent that must act is the evidence itself.
+    from_report = any(citation.get("source") == "RAP" for citation in accepted)
+    others = agents_not_asked(claim, record.question) if from_report else []
+    if others:
+        return [GateFailure("claim_about_another_agent", ", ".join(others))]
+    if ASKS_FIGURE.search(record.question) and not re.search(r"\d", claim):
+        return [
+            GateFailure(
+                "claim_without_the_figure", "the question asks how much and the claim states no figure"
+            )
+        ]
+    if ASKS_DURATION.search(record.question) and not DURATION.search(claim):
+        return [
+            GateFailure(
+                "claim_without_the_figure", "the question asks how long and the claim states no duration"
+            )
+        ]
+    return []
 
 
 def _points_to_table(quote: str) -> bool:
@@ -220,6 +244,84 @@ def _points_to_table(quote: str) -> bool:
 
 QUOTE_PARTS = re.compile(r"[|\n]|(?<=\.)\s")
 STEP_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?$")
+
+
+# The connective that attaches a reading to the figures just quoted. Measured on
+# 22/09/2026: "verificado de 25.291 e programado de 24.399, indicando excedente
+# de energia" passed every gate and the second reader, three times of three,
+# and the balance it quoted has no restriction line. The claim may say what the
+# quote says; what the figures would mean is the rule's and the operator's.
+# Only right after a figure: of 935 stored claims, the 3 other uses of these
+# words described a document ("define o fluxo ..., indicando o sentido
+# positivo") or repeated its own words, and none followed a number.
+CONCLUSION = re.compile(
+    r"(?<![\w.,])\d+(?:[.,]\d+)*(?:\s*(?:MWh|MWmed|MW|MVA|Mvar|GWh|GW|%))?\s*[,;]?\s+"
+    r"((?:indicand|sugerind|implicand|caracterizand|evidenciand|demonstrand|representand|sinalizand)o"
+    r"|o que (?:indica|sugere|implica|caracteriza|mostra|evidencia|demonstra|significa|representa))\b",
+    re.IGNORECASE,
+)
+
+
+def conclusion_hits(text: str) -> list[str]:
+    return [match.group(1) for match in CONCLUSION.finditer(text or "")]
+
+
+# A question for a quantity. Measured on 22/09/2026: "qual foi a geração eólica
+# verificada" was answered with the bulletin's sentence that it fell below
+# forecast, no figure, accepted by both readers; of 388 stored question and
+# claim pairs it was the only claim without a number under such a question.
+ASKS_FIGURE = re.compile(
+    r"\bquant[oa]s?\b|\bqual (?:foi|era|é|o|a)\s+(?:o |a )?(?:valor|gera[cç][aã]o|carga|produ[cç][aã]o"
+    r"|armazenamento|demanda|limite|interc[aâ]mbio|energia|pot[eê]ncia|redu[cç][aã]o|m[aá]xima|m[ií]nima)",
+    re.IGNORECASE,
+)
+
+# A question for how long, or by when, and only that: "o que ... e em que prazo"
+# is two questions, and the claim about the first need not carry the date.
+# Measured on 22/09/2026, on main as well: "em que intervalos são feitos os
+# programas de geração" (30 minutes) was answered with a clause whose only
+# numbers were "Submódulo 4.1" and "4.2". A duration or a date answers it, in
+# figures or in words ("dez minutos"); every stored correct answer had one.
+ASKS_DURATION = re.compile(
+    r"(?<!\be )\b(?:em que intervalos?|em que prazo|com que (?:anteced[eê]ncia|frequ[eê]ncia|periodicidade)"
+    r"|por quanto tempo|a cada quant)",
+    re.IGNORECASE,
+)
+_AMOUNT = (
+    r"(?:\d+(?:[.,]\d+)?|uma?|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|quinze"
+    r"|vinte|trinta|quarenta|cinquenta|sessenta|noventa|cem|cento e \w+)"
+)
+DURATION = re.compile(
+    rf"\b{_AMOUNT}\s*(?:min(?:uto)?s?|h(?:ora)?s?|dias?|semanas?|m[eê]s(?:es)?|anos?)\b"
+    r"|\b\d{1,2}/\d{1,2}/\d{4}\b|\bmeia hora\b",
+    re.IGNORECASE,
+)
+
+# "O agente LIGHT", "o agente CEMIG D": the name that follows, in capitals.
+# A dot only inside a name ("S.A."), so a sentence's full stop ends it.
+NAME_WORD = r"[A-ZÀ-Ý][\wÀ-ÿ&/-]*(?:\.[\wÀ-ÿ]+)*"
+AGENT = re.compile(rf"\bagentes?\s+({NAME_WORD}(?:\s+{NAME_WORD})*)")
+ASKS_ABOUT_AGENTS = re.compile(r"\bagentes?\b", re.IGNORECASE)
+
+
+def agents_not_asked(claim: str, question: str) -> list[str]:
+    """The agents a claim is about that the question never named.
+
+    Measured on 22/09/2026: a disturbance report states a restoration time for
+    each agent, and asked when the ONS authorised the total restoration the
+    answer gave LIGHT's, CEMIG D's or CPFL's, literal and accepted by the second
+    reader. A question that speaks of the agents at all may be answered with any
+    of them; one that names none of them is not about any one of them. A name
+    counts as asked when any word of it is ("Cemig" asks for CEMIG D).
+    """
+    if not question or ASKS_ABOUT_AGENTS.search(question) and not AGENT.search(question):
+        return []
+    asked = set(_plain(question).split())
+    return [
+        name
+        for name in AGENT.findall(claim)
+        if not any(word in asked for word in _plain(name).split() if len(word) >= 3)
+    ]
 
 
 def causal_hits(text: str) -> list[str]:
@@ -310,7 +412,87 @@ def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
 
 
 def _off_topic(hit: Hit, record: Record) -> GateFailure | None:
-    return _relevance_failure(hit, record) or _month_to_date_failure(hit, record)
+    return (
+        _relevance_failure(hit, record)
+        or _month_to_date_failure(hit, record)
+        or _instant_failure(hit, record)
+        or _section_failure(hit, record)
+    )
+
+
+# The IPDO highlights whose content exists nowhere else in the report: the
+# restriction's value, period and reasons, and the occurrences. The others
+# ("CARGA E PRODUÇÃO ...", "INTERCÂMBIO INTERNACIONAL") restate figures the
+# report's tables also hold, so naming them must not refuse the table. Read as a
+# prefix, because the 2025 editions split the second one into "OCORRÊNCIAS NA
+# REDE DE OPERAÇÃO" and "... DE DISTRIBUIÇÃO".
+IPDO_HIGHLIGHTS = ("RESTRIÇÃO DE GERAÇÃO RENOVÁVEL", "OCORRÊNCIAS")
+# Only after the word that makes it one: "Rio Grande do Norte" and "Mato Grosso
+# do Sul" are places, and an ONS description that names them is not asking for
+# a submarket.
+ASKED_SUBMARKET = re.compile(r"\b(?:submercado|subsistema)s?\s+(?:d[oa]\s+)?(norte|nordeste|sul|sudeste)\b")
+
+
+def _section_failure(hit: Hit, record: Record) -> GateFailure | None:
+    """The IPDO part the question names, and no other.
+
+    Reported by the domain specialist on 20/09/2026: asked for the main
+    occurrence of 14/09, the answer quoted the stored-energy section of the same
+    IPDO. Every quote was literal and the document was the right one, so no
+    gate refused it. The highlights also repeat the four submarkets under each
+    heading, so "Submercado Sul" alone does not say whether it is the Sul's
+    production or its restriction. A question that names one of these
+    highlights, or one submarket, is answered from that part of the report or
+    not at all.
+    """
+    if hit.source != "IPDO":
+        return None
+    section = hit.section_path or ""
+    topic, _, part = section.rpartition(TOPIC_SEPARATOR)
+    asked = [heading for heading in IPDO_HIGHLIGHTS if _names(record.question, heading)]
+    if asked and not any((topic or part).startswith(heading) for heading in asked):
+        return GateFailure(
+            "citation_other_section", f"{hit.external_id} {section!r}, the question asks {asked[0]}"
+        )
+    named = set(ASKED_SUBMARKET.findall(_plain(record.question)))
+    quoted = re.match(r"submercado (\w+)", _plain(part))
+    if len(named) == 1 and quoted and quoted.group(1) not in named:
+        return GateFailure(
+            "citation_other_section", f"{hit.external_id} {section!r}, the question asks {named.pop()}"
+        )
+    return None
+
+
+def _plain(text: str) -> str:
+    text = "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
+    return re.sub(r"[^\w]+", " ", text.lower()).strip()
+
+
+def _names(question: str, heading: str) -> bool:
+    """Every word of the heading, by its first eight letters: "ocorrência"
+    names OCORRÊNCIAS and "ocorreu" does not."""
+    words = _plain(question).split()
+    stems = [word[:8] for word in _plain(heading).split() if len(word) > 3]
+    return all(any(word.startswith(stem) for word in words) for stem in stems)
+
+
+INSTANT = re.compile(r"instant[aâ]ne", re.IGNORECASE)
+
+
+def _instant_failure(hit: Hit, record: Record) -> GateFailure | None:
+    """The value at one instant is not the day's.
+
+    Measured on 22/09/2026, three times of three: asked for the Nordeste's
+    verified wind generation of 12/09/2023, the day's average (12.197 MWmed),
+    the answer gave 12.542 MW from the IPDO's table of maximum instantaneous
+    demand, which lists each source's generation at the minute of the peak. The
+    row label is the same, the quantity is not, and both readers took it.
+    """
+    if INSTANT.search(record.question) or not INSTANT.search(f"{hit.section_path or ''} {hit.text[:200]}"):
+        return None
+    return GateFailure(
+        "citation_instant_value", f"{hit.external_id} is a value at one instant, the question asks the day's"
+    )
 
 
 MONTH_TO_DATE = "Acumulado no Mês"

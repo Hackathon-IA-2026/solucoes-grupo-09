@@ -216,3 +216,23 @@ def test_a_table_keeps_the_heading_that_names_it():
     assert not any(
         "5.4. LIMITACAO DA TRANSMISSAO" in c.text and "5.3. LIMITACAO ANTERIOR" in c.text for c in chunks
     ), "the heading of 5.4 must not end up inside the chunk of 5.3"
+
+
+def test_a_page_of_actions_with_their_deadlines_is_not_a_table():
+    """Measured on 22/09/2026: page 396 of the RAP of 15/08/2023 lists six
+    actions, each followed by "Prazo: 30/03/2024      Gestor: EGE". The gap
+    between the two fields read as a column, the page went to the vision model,
+    and it returned the six actions as prose and the deadlines as a separate
+    five-row table ("Praco: 30/07/2024" among them): which deadline belongs to
+    which action was gone, and the question about 9.1.1's deadline was answered
+    without one. The text layer had it right. Over every stored page this moves
+    24 RAP pages, all of them lists of actions, and no operating instruction."""
+    from wattsteer_rag.parse import looks_tabular
+
+    actions = "\n\n".join(
+        f"9.1.{n}      Avaliar os ajustes das Proteções de Perda de Sincronismo da LT 500 kV\n"
+        f"           Bacabeira – Parnaíba III C1 e C2.\n\n"
+        f"           Prazo: 30/0{n}/2024                            Gestor: EGE"
+        for n in range(1, 7)
+    )
+    assert not looks_tabular(actions)

@@ -177,7 +177,22 @@ async def search(
     try:
         vectors, _ = await embed_texts(gateway, [question], input_type="query")
         params_vec = [*params, to_pgvector(vectors[0]), conf.hybrid_vector_k]
-        async with pool.acquire() as conn:
+        async with pool.acquire() as conn, conn.transaction():
+            # The HNSW index returns its nearest neighbours and the filters run
+            # after it. Measured on 22/09/2026: once the IPDOs and the RAP were
+            # re-chunked, the 40 nearest chunks to a question about 21/09 were
+            # all bulletins of other days, the date filter removed every one,
+            # and the vector arm returned nothing, silently. Iterative scan
+            # keeps reading the index, in exact distance order, until the
+            # filtered rows fill the limit (pgvector 0.8).
+            #
+            # And the graph is approximate: with the default ef_search of 40, the
+            # chunk nearest to "quais motivos ... no submercado Nordeste" (cosine
+            # 0.586) was not reached at all, and two of its neighbours at 0.44
+            # were. At 200 the order equals the exact scan's, measured at 13 ms
+            # against 15 over 18,364 chunks.
+            await conn.execute("SET LOCAL hnsw.iterative_scan = strict_order")
+            await conn.execute("SET LOCAL hnsw.ef_search = 200")
             vector_rows = await conn.fetch(
                 f"""
                 SELECT c.id, c.document_id, c.text, c.locator, c.section_path,
