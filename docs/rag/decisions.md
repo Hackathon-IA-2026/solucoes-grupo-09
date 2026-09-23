@@ -20,14 +20,21 @@ the code, so that nobody reverses one without knowing why it was taken.
 
 ## Models
 
-- **Open models only, on free tiers: NVIDIA NIM and Groq.** No closed provider
-  runs in the cloud. Groq is the fallback for generation when every NVIDIA key
-  is spent. One key is enough; several keys in the same variable are independent
-  quotas, the router uses the one with the most room.
+- **Open models only, on free tiers: NVIDIA NIM, then Google AI Studio and
+  Groq.** No closed provider runs in the cloud. Google (Gemma 4 26B, Apache 2.0)
+  and Groq are the fallback for generation when NVIDIA is spent or answering
+  503; Google is optional and is skipped without `GEMINI_API_KEYS`, and its key
+  lives in a project with no billing account, which cannot be charged. One key
+  is enough; several keys in the same variable are independent quotas, the
+  router uses the one with the most room, and a key whose account answers 402
+  is left out while the others go on.
 - **One model per task, declared in `docs/rag/gateway.yaml`:**
   `nvidia/nemotron-parse` reads a page as an image, `nvidia/nemotron-3-embed-1b`
   embeds (2048 dimensions sliced to 1024 and re-normalised), Nemotron 3 Super
-  drafts the claims, with Kimi K3 and then Groq's gpt-oss-120b behind it.
+  drafts the claims, with Gemma 4 26B, then Groq's gpt-oss-120b, then Kimi K3
+  behind it. Gemma was measured alone on the 95 evaluation questions on
+  22/09/2026 (76 correct, 0 wrong, against Nemotron's 78 correct); Kimi is last
+  because it takes about 100 s a call.
 - **The embedding model never changes at runtime.** Two models in one index
   make every distance meaningless, so the chain is asserted at load and the data
   is asserted before the first search. Changing model is a re-index, a declared

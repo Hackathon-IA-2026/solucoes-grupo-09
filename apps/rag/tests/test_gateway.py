@@ -236,3 +236,62 @@ def test_a_page_of_actions_with_their_deadlines_is_not_a_table():
         for n in range(1, 7)
     )
     assert not looks_tabular(actions)
+
+
+def test_the_answer_after_a_reasoning_block_is_the_json():
+    """Measured on 22/09/2026: Gemma 4 on Google AI Studio writes its reasoning
+    as "<thought>...</thought>" before the JSON, and the API refuses both knobs
+    that would turn it off ("Thinking budget is not supported for this model").
+    The reasoning quoted the JSON it was about to write, braces and all, so
+    reading from the first brace to the last parsed nothing."""
+    from wattsteer_rag.gateway.adapters import _json_from_text
+
+    answer = (
+        '<thought>* Word: "Saudade".\n* `{"ok": true, "word": "Saudade"}`\n'
+        '* Valid JSON? Yes.</thought>{"ok": true, "word": "Saudade"}'
+    )
+    assert _json_from_text(answer) == {"ok": True, "word": "Saudade"}
+    assert _json_from_text('<think>plan {x}</think>\n{"a": 1}') == {"a": 1}
+
+
+def test_only_a_reasoning_block_that_opens_the_answer_is_removed():
+    """Review of this change: the first rule removed everything up to the last
+    closing tag anywhere, so a claim that quoted "</think>" lost its answer, for
+    every model. And a block that never closes is a draft cut by the token
+    limit; the JSON inside it was never given as the answer."""
+    from wattsteer_rag.gateway.adapters import ProviderError, _json_from_text
+
+    assert _json_from_text('{"claim": "a </think> b"}') == {"claim": "a </think> b"}
+    assert _json_from_text('<think>x</think>{"claim": "tag </think> seen"}') == {"claim": "tag </think> seen"}
+    with pytest.raises(ProviderError):
+        _json_from_text('<thought>draft: {"ok": false, "draft": 1}')
+
+
+def test_payment_required_is_a_refusal_not_a_quota(config, monkeypatch):
+    """Measured on 22/09/2026: a Cerebras account without a card answers 402 to
+    every request. Read as a spent quota it would be retried every minute and
+    reported as a delay. It is one account, though: review of #42 pointed out
+    that the pool's other keys may belong to accounts that do answer, so the
+    unpaid key is left out and the next key is asked."""
+    import asyncio
+
+    from wattsteer_rag.gateway.adapters import ProviderError
+    from wattsteer_rag.gateway.router import ProviderRefused
+
+    gateway = Gateway(config)
+    unpaid = {"key-a1"}
+
+    async def chat(_client, secret, **_kwargs):
+        if secret in unpaid:
+            raise ProviderError("payment required", status=402)
+        return {"ok": secret}, {}
+
+    for provider in gateway.providers.values():
+        monkeypatch.setattr(provider.adapter, "chat", chat)
+    result = asyncio.run(gateway.run("generate_strong", tokens=10, messages=[]))
+    assert result.value == {"ok": "key-a2"} and result.provider == "alpha"
+    assert [call["error"] for call in gateway.calls][:1] == ["payment required"]
+
+    unpaid.update({"key-a2", "key-b1"})
+    with pytest.raises(ProviderRefused, match="402"):
+        asyncio.run(gateway.run("generate_strong", tokens=10, messages=[]))

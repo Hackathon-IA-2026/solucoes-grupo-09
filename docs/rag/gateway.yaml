@@ -3,8 +3,10 @@
 # only the name of the environment variable that carries them. When every key of
 # every link is spent, the caller gets `waiting_quota` with the instant to retry.
 #
-# Two providers, both free and neither asks for a card. NVIDIA does all the work;
-# Groq is the fallback for generation when every NVIDIA key is out of quota. One
+# Every provider is free and none asks for a card. NVIDIA does all the work;
+# the others are the fallback for generation when NVIDIA is out of quota or
+# answering 503, and each is optional: a provider whose key variable is unset
+# is skipped, so a checkout with only NVIDIA_API_KEYS runs as it always did. One
 # key is enough. Several keys in the same variable, separated by commas, are
 # treated as independent quotas: the router uses the key with the most room and
 # only moves to the next provider when every key of the current one is spent.
@@ -29,6 +31,18 @@ providers:
       # Nemotron reasons out loud unless told not to, and the knob is NVIDIA's
       # own (chat_template_kwargs). Groq answers 400 to it, so it stays here.
       thinking_toggle: true
+  google:
+    # Optional. Google AI Studio's free tier, in a project with no billing account
+    # linked, so it cannot charge: past the limit it answers 429. Gemma 4 is open
+    # (Apache 2.0). Limits read on the free tier's own page on 22/09/2026.
+    kind: openai_compatible
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    api_keys_env: GEMINI_API_KEYS
+    # Gemma reasons before it answers and the API refuses to turn it off; a
+    # 10,900-token prompt took 38 s on 22/09/2026.
+    timeout_s: 90
+    limits_per_model:
+      gemma-4-26b-a4b-it: { rpm: 30, tpm: 16000, rpd: 14400 }
   groq:
     kind: openai_compatible
     base_url: https://api.groq.com/openai/v1
@@ -47,8 +61,18 @@ tasks:
       # the whole reason the chain exists. It stays first: it is the best of the
       # three and the failure is the provider's load, not the model.
       - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
-      - { provider: nvidia, model: moonshotai/kimi-k3, max_input_tokens: 24000 }
+      # Measured alone on all 95 questions on 22/09/2026, with the reranker the
+      # image ships: 76 correct, 19 refused, 0 wrong, against nemotron's 78
+      # correct. Its 16k tokens a minute hold a question of about 5k three
+      # times a minute; the cap is 12k because the estimate counts characters
+      # over four and leaves out the system prompt. Gemma 4 31B was answering 503 to half the calls that
+      # night, and Z.ai's free GLM-4.5-Flash answered 5 of 95 wrong (a load
+      # read as generation, another line's limit), so neither is here.
+      - { provider: google, model: gemma-4-26b-a4b-it, max_input_tokens: 12000 }
       - { provider: groq, model: openai/gpt-oss-120b, max_input_tokens: 6000 } # TPM 8k
+      # Last: it answers, but in 95 to 115 s a call (22/09/2026), so it only
+      # runs when every other provider is out.
+      - { provider: nvidia, model: moonshotai/kimi-k3, max_input_tokens: 24000 }
     require: { json_schema: true }
     temperature: 0
     max_output_tokens: 1500
@@ -74,11 +98,18 @@ tasks:
       # kimi-k3 sits between them because one 503 should not reach Groq at all:
       # both NVIDIA models answered 200 when this was written, and it is the
       # same second link `generate_strong` already falls back to.
+      #
+      # Superseded on 22/09/2026: kimi-k3 took 95 to 115 s a call and timed out
+      # 147 times in 263, so a 503 from nemotron cost each claim minutes. Gemma
+      # takes its place, measured; kimi-k3 stays, last.
       - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
-      - { provider: nvidia, model: moonshotai/kimi-k3, max_input_tokens: 24000 }
+      # The same measurement: Gemma read every claim of its 95-question run.
+      - { provider: google, model: gemma-4-26b-a4b-it, max_input_tokens: 12000 }
       # A call is about 1,000 tokens with the reasoning, so the 8k TPM holds
       # some 7 claims a minute when it is reached.
       - { provider: groq, model: openai/gpt-oss-20b, max_input_tokens: 6000 }
+      # Last, for the reason given in generate_strong: 95 to 115 s a call.
+      - { provider: nvidia, model: moonshotai/kimi-k3, max_input_tokens: 24000 }
     require: { json_schema: true }
     temperature: 0
     # gpt-oss reasons before it answers: at 300 it spent 298 tokens reasoning

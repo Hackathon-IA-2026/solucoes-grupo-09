@@ -26,6 +26,10 @@ log = logging.getLogger("wattsteer_rag.gateway")
 DEFAULT_COOLING_S = 60.0
 # A quota answers 429 and recovers; these say the request itself is wrong.
 NON_RETRYABLE = {400, 401, 403, 404, 405, 410, 422}
+# An account that has to be paid for before it answers at all (Cerebras without
+# a card, 22/09/2026). A minute of cooling does not change it, and it is one
+# account: the pool's other keys may belong to accounts that do answer.
+PAYMENT_REQUIRED = 402
 CALLS_KEPT = 500
 
 
@@ -103,6 +107,8 @@ class Gateway:
         self.providers: dict[str, Provider] = {}
         self.tasks: dict[str, Task] = {}
         self.calls: list[dict] = []
+        # Keys whose account answered 402, left out until the process restarts.
+        self.unpaid: set[tuple[str, str]] = set()
         self._client: httpx.AsyncClient | None = None
         self._load()
 
@@ -180,6 +186,8 @@ class Gateway:
         now = time.time()
         best: tuple[float, KeySlot] | None = None
         for slot in provider.keys:
+            if (provider.name, slot.id) in self.unpaid:
+                continue
             state = self.ledger.slot(provider.name, slot.id, model)
             if not state.room(tokens, now):
                 continue
@@ -217,6 +225,10 @@ class Gateway:
             except ProviderError as exc:
                 self._record(task.name, provider.name, slot.id, model, walk.attempts, 0, 0, str(exc))
                 log.warning("gateway %s %s key=%s: %s", task.name, model, slot.id, exc)
+                if exc.status == PAYMENT_REQUIRED:
+                    self.unpaid.add((provider.name, slot.id))
+                    walk.refusals.append(f"{provider.name}:{slot.id} HTTP 402")
+                    continue  # this account only; the pool's next key may answer
                 if exc.status in NON_RETRYABLE:
                     # Not a quota problem: the same request fails on every key.
                     walk.refusals.append(f"{provider.name}:{model} HTTP {exc.status}")
@@ -241,6 +253,8 @@ class Gateway:
             )
         now = time.time()
         for key in provider.keys:
+            if (provider.name, key.id) in self.unpaid:
+                continue  # no amount of waiting frees it
             walk.soonest = min(walk.soonest, self.ledger.slot(provider.name, key.id, model).next_free(now))
         return None
 
