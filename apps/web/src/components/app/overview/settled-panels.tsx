@@ -31,7 +31,7 @@ import {
 } from "@wattsteer/ui";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { VintageBadge } from "@/components/app/honesty";
+import { ObservedBadge, VintageBadge } from "@/components/app/honesty";
 import type { Scope } from "@/components/app/map/scope-bar";
 import { ObservedSubsystemRow } from "@/components/app/subsystem-row";
 import type { ObservedNetwork } from "@/components/app/use-network";
@@ -116,9 +116,24 @@ function SettledSubsystemsPanel({
             hour: f.dateTime(observed.now.latestSettledHour),
             lag: f.number(observed.now.lagHours),
           })}
-          right={<VintageBadge fidelity={observed.now.vintageFidelity} />}
+          right={
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              {/* The rows' badge, carried once for all four. */}
+              <ObservedBadge />
+              <VintageBadge fidelity={observed.now.vintageFidelity} />
+            </View>
+          }
         />
-        <View style={{ marginTop: space.lg, gap: space.sm }}>
+        {/*
+          The window and the quantity the four figures are, said once. Each row
+          used to carry `Energia cortada, últimas 24 h` above its own number;
+          the header's subtitle already carries the window, and this carries
+          what is being counted.
+        */}
+        <Text style={{ marginTop: space.sm, fontSize: 11, color: colors.inkFaint }}>
+          {copy.app.observed.rowEnergy}
+        </Text>
+        <View style={{ marginTop: space.sm, gap: 6 }}>
           {rows.map((row) => (
             <ObservedSubsystemRow
               key={row.subsystem}
@@ -126,6 +141,14 @@ function SettledSubsystemsPanel({
               domainMax={domainMax}
               selected={row.subsystem === subsystem}
               onPress={() => onSelect(row.subsystem)}
+              /*
+                One line each. These four are a summary beside a forecast, not
+                the screen's answer — four cards repeating `Observado` and
+                `Energia cortada, últimas 24 h` spent this column's height
+                saying the same two things four times over. Both move into the
+                header above, where they are read once.
+              */
+              compact={true}
             />
           ))}
         </View>

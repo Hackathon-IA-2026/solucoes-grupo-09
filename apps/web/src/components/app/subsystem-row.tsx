@@ -312,6 +312,7 @@ export function ObservedSubsystemRow({
   onPress,
   onExplain,
   onHoverChange,
+  compact = false,
 }: {
   observed: ObservedRow;
   /** The largest of the four, so the bars share one scale. */
@@ -326,12 +327,139 @@ export function ObservedSubsystemRow({
    */
   onExplain?: () => void;
   onHoverChange?: (hovered: boolean) => void;
+  /**
+   * One line instead of a card: the name, the split, a bar and the figure.
+   *
+   * The full card is right where these four rows *are* the screen's answer —
+   * the observed stack, on a day with no forecast, where each one is the
+   * subject. It is wrong where they are a summary beside a forecast: four
+   * cards, each repeating `Observado` and `Energia cortada, últimas 24 h`,
+   * spend a column's height saying the same two things four times.
+   *
+   * What the compact row drops is the repetition, not the content. The badge
+   * moves to the panel header, where it is read once — the rule `copy.md`
+   * states for a caveat the product always carries — and the per-row label
+   * becomes the header's subtitle. The split and the figure stay on the row,
+   * because those are the four different numbers.
+   */
+  compact?: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
   const meta = subsystemMeta(observed.subsystem);
   const share = domainMax <= 0 ? 0 : Math.min(1, observed.dayMwh / domainMax);
+
+  if (compact) {
+    /*
+      **One line: the name, the bar and the figure, with the split under the
+      name.**
+
+      The full card below stacks name, then label and figure, then bar — three
+      rows of a card, four times over. Beside a forecast that is a column of
+      repetition; the header carries the badge and the quantity once, and what
+      is left is the four things that differ. The bar takes the width between
+      the name and the figure rather than a line of its own, which is what
+      makes this a row rather than a card.
+    */
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={fill(copy.app.overview.rowFigure, {
+          subsystem: meta.onsDisplayName,
+        })}
+        onPress={onPress}
+        onHoverIn={() => onHoverChange?.(true)}
+        onHoverOut={() => onHoverChange?.(false)}
+        style={(state) => {
+          const { focused = false, hovered: selfHovered = false } = state as {
+            focused?: boolean;
+            hovered?: boolean;
+          };
+          const hovered = selfHovered || highlighted;
+          return {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: space.md,
+            borderRadius: radius.md,
+            borderCurve: "continuous",
+            borderWidth: 1,
+            borderColor: selected ? colors.accent : "transparent",
+            backgroundColor: hovered || selected ? colors.surfaceSunken : "transparent",
+            paddingHorizontal: 10,
+            paddingVertical: 8,
+            ...focusRing(focused, colors.focus),
+            ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+          };
+        }}
+      >
+        {/*
+          178 rather than 150: at 150 the split truncated to `solar 103 …`,
+          which is a figure the mock this follows did not carry at all and the
+          one thing this row exists to keep. Measured against the longest of
+          the four — `eólica 1.188 MWh · solar 654 MWh` at 10 px.
+
+          A *basis* and not a width, with `flexShrink` written out. ADR-0001:
+          `flexShrink` defaults to 0 here, so a fixed 178 is a floor rather
+          than a preference — the row could not give it back, and at 320 and
+          360 the page scrolled sideways.
+          `no-horizontal-overflow.spec.ts` caught all four widths.
+        */}
+        <View style={{ flexBasis: 178, flexShrink: 1, minWidth: 0 }}>
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "700",
+              color: selected ? colors.accent : colors.ink,
+            }}
+            numberOfLines={1}
+          >
+            {observed.onsDisplayName}
+          </Text>
+          {/* The two fleets, which the mock this follows did not carry at all. */}
+          <Text style={{ fontSize: 10, color: colors.inkFaint }} numberOfLines={1}>
+            {fill(copy.app.overview.settledSplit, {
+              wind: f.compact(observed.split.windMwh),
+              solar: f.compact(observed.split.solarMwh),
+            })}
+          </Text>
+        </View>
+        <View
+          style={{
+            flexGrow: 1,
+            flexShrink: 1,
+            minWidth: 0,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: colors.surfaceSunken,
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              height: "100%",
+              // A region that settled small is still a visible sliver: an empty
+              // track reads as "no data", and this is data saying "almost none".
+              width: `${Math.max(share * 100, share > 0 ? 1.5 : 0)}%`,
+              borderRadius: 3,
+              backgroundColor: observedFill(share, colors),
+            }}
+          />
+        </View>
+        <Text
+          style={{
+            fontSize: 13,
+            fontWeight: "700",
+            color: colors.ink,
+            fontVariant: ["tabular-nums"],
+            flexShrink: 0,
+          }}
+        >
+          {`${f.compact(observed.dayMwh)} MWh`}
+        </Text>
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
