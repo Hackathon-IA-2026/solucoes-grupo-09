@@ -20,9 +20,17 @@
 # `ship_state: true` — the integration builds the code and this brings the part
 # it cannot know about.
 #
-# `with_rag` is off by default and is the one input worth thinking about: it
-# replaces the whole evidence corpus, and a Railway that has been indexing on
-# its own may hold a newer one than the release does.
+# `with_rag` replaces the whole evidence corpus. It is on by default since
+# `state-2026-09-23`, whose corpus (28,340 chunks, BDO to 21/09) is the fullest
+# that exists; anything Railway fetched after it was packed is fetched again by
+# the daily refresh, which fills any missing bulletin of the last week (#45).
+# Turn it off for a release older than what Railway has indexed.
+#
+# `rag` and `worker` were missing from the services: the evidence service's
+# fixes of 22-23/09 (#41-#45) and the worker's schedules reached Railway only if
+# the project happened to deploy from GitHub. `GEMINI_API_KEYS` is optional: if
+# the repository has that secret, the rag service gets it (the free Gemma
+# fallback, #42); if not, the service runs without that link.
 name: deploy-railway
 
 on:
@@ -31,7 +39,7 @@ on:
       services:
         description: "Which services to push, in the order deploy.md gives"
         type: choice
-        options: [none, all, ml, api, web]
+        options: [none, all, rag, ml, api, worker, web]
         default: none
       ship_state:
         description: "Also ship the artifacts and forecast rows"
@@ -40,11 +48,11 @@ on:
       state_tag:
         description: "Release holding models.tgz and forecasts.sql.gz"
         type: string
-        default: state-2026-09-20
+        default: state-2026-09-23
       with_rag:
-        description: "Also replace the RAG corpus (only if Railway's is empty or stale)"
+        description: "Also replace the RAG corpus with the release's (see the header)"
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -60,19 +68,29 @@ jobs:
     if: inputs.services != 'none'
     runs-on: ubuntu-latest
     environment: railway
+    env:
+      # At job level so the step's `if` can read it; a step's own env is not
+      # visible to its condition.
+      GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
     steps:
       - uses: actions/checkout@v4
       - name: Install the Railway CLI
         run: npm install -g @railway/cli
+      - name: Give the rag service the optional Gemma key
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        if: ${{ env.GEMINI_API_KEYS != '' }}
+        # From stdin, so the key is never an argument a process listing shows.
+        run: printf '%s' "$GEMINI_API_KEYS" | railway variables --service rag --set-from-stdin GEMINI_API_KEYS --skip-deploys
       - name: Push the services
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           set -euo pipefail
-          # ml → api → web: the gateway proxies to the modelling service and the
-          # site calls the gateway, so the other order ships a client asking for
-          # routes nothing serves yet.
-          for service in ml api web; do
+          # rag → ml → api → worker → web: the gateway and the worker call the
+          # evidence and modelling services, and the site calls the gateway, so
+          # the other order ships a caller asking for routes nothing serves yet.
+          for service in rag ml api worker web; do
             if [ "${{ inputs.services }}" = "all" ] || [ "${{ inputs.services }}" = "$service" ]; then
               echo "== $service"
               railway up --service "$service" --detach
