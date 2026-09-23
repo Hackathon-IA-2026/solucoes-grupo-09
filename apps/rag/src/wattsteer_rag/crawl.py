@@ -388,9 +388,15 @@ class Crawler:
         if not self.conf.archive_ipdo:
             return
         try:
-            await client.get(f"{WAYBACK_SAVE}/{url}", timeout=60, follow_redirects=True)
-        except httpx.HTTPError:
-            log.info("wayback save failed for %s; the local copy stands", url)
+            response = await client.get(
+                f"{WAYBACK_SAVE}/{url}",
+                headers={"user-agent": self.conf.user_agent},
+                timeout=60,
+                follow_redirects=True,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            log.warning("wayback save failed for %s (%s); the local copy stands", url, exc)
 
     async def known_days(self, source: str) -> set[str]:
         """Which editions are already here, so a rerun only fetches what is missing."""

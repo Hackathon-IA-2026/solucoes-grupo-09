@@ -30,7 +30,7 @@ def test_the_refresh_asks_for_the_edition_that_is_up():
     assert "fetch_live_ipdo" in inspect.getsource(app._refresh)
 
 
-def test_a_new_edition_gets_a_public_copy_and_a_failed_copy_costs_nothing(tmp_path):
+def test_a_new_edition_gets_a_public_copy_and_a_failed_copy_costs_nothing(tmp_path, caplog):
     """The archive held no 2026 edition on 23/09/2026. A new IPDO is sent to
     it once; an edition already held is not, and an archive that fails does not
     lose the edition we fetched."""
@@ -48,6 +48,7 @@ def test_a_new_edition_gets_a_public_copy_and_a_failed_copy_costs_nothing(tmp_pa
 
     def handler(request: httpx.Request) -> httpx.Response:
         saved.append(str(request.url))
+        assert request.headers["user-agent"].startswith("WattSteer-RAG")
         return httpx.Response(502)
 
     crawler._get = get  # type: ignore[method-assign]
@@ -59,6 +60,8 @@ def test_a_new_edition_gets_a_public_copy_and_a_failed_copy_costs_nothing(tmp_pa
 
     assert asyncio.run(fetch())["ok"] is True
     assert saved and saved[0].startswith("https://web.archive.org/save/")
+    # Review of #43: a 502 from the archive used to pass as a copy kept.
+    assert "wayback save failed" in caplog.text
     new["value"] = False
     asyncio.run(fetch())
     assert len(saved) == 1
