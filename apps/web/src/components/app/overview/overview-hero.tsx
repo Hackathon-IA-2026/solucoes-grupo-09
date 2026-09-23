@@ -657,8 +657,6 @@ export function OverviewHero({
               reader can check either one.
             */}
             {nationalPanel}
-            {dayFigures}
-            {forecastFigures}
           </View>
         ) : null}
 
@@ -1061,8 +1059,32 @@ export function OverviewHero({
               subsystem={params.subsystem}
             />
           </View>
-          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
+          {/*
+            **The day's two figures ride with `Planejado × Realizado`.**
+
+            They were the fourth and fifth cards of the left rail, which made
+            that column half again as tall as the map beside it: measured on the
+            export at 1672, the grid row was the left column's height and the
+            other two ended a screen short of it, so the middle of the page was
+            a void with a rail down one side of it.
+
+            This column was the shortest of the three — the plan panel is a
+            paragraph and a refusal — and these two are figures about the same
+            day the plan is about. Filling it with them costs no height that was
+            not already being spent and takes the void out of the page.
+          */}
+          <View
+            style={{
+              flexGrow: 1,
+              flexShrink: 1,
+              flexBasis: 0,
+              minWidth: 0,
+              gap: space.md,
+            }}
+          >
             {planned}
+            {dayFigures}
+            {forecastFigures}
           </View>
           {/*
             The settled four. Absent in the settled state rather than drawn
