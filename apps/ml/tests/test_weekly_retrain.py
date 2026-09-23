@@ -680,9 +680,11 @@ def test_a_failed_holdout_backfill_carries_the_reason_its_child_printed(
 ) -> None:
     """The same loss, on the other route that spawns a reporting child.
 
-    ``/internal/backfill/holdout`` answers synchronously, so the body under test
-    is the POST's own: a child that reconstructed no lane exits 1 with its
-    report on stdout and nothing on stderr, and the refusal must carry it.
+    This route used to answer synchronously and now starts the run and answers
+    202, for the reason the retrain does — so the body under test is the
+    *status* route's. What it must carry is unchanged: a child that
+    reconstructed no lane exits 1 with its report on stdout and nothing on
+    stderr, and a failure that dropped stdout would say "exited 1" and no more.
     """
     _startable(monkeypatch, tmp_path)
     _stub_child(
@@ -691,7 +693,13 @@ def test_a_failed_holdout_backfill_carries_the_reason_its_child_printed(
         exit_code=1,
     )
     with TestClient(ml_app) as client:
-        response = client.post("/internal/backfill/holdout", json={"fold_id": "F6"})
+        started = client.post("/internal/backfill/holdout", json={"fold_id": "F6"})
+        assert started.status_code == 202
+        for _ in range(200):
+            response = client.get("/internal/backfill/holdout/F6")
+            if response.status_code != 200 or response.json().get("status") != "running":
+                break
+            time.sleep(0.02)
     assert response.status_code == 500
     error = response.json()["error"]
     assert error["code"] == "HOLDOUT_BACKFILL_FAILED"

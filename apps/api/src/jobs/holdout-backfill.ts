@@ -1,5 +1,5 @@
 import type { MlEndpoint } from "../api/ml-proxy.js";
-import { postMl } from "../api/ml-proxy.js";
+import { callMl, postMl } from "../api/ml-proxy.js";
 import { config } from "../config.js";
 import type { Database } from "../database/connection.js";
 import { AppError, CodedError } from "../errors.js";
@@ -73,6 +73,78 @@ export const HOLDOUT_BACKFILL_JOB_ID = "holdout-backfill:newest-frozen-fold";
  */
 export const HOLDOUT_BACKFILL_TIMEOUT_MS = 40 * 60_000;
 
+/**
+ * How long any single call to the modelling service may take.
+ *
+ * Every request in the new shape is a status read or a start — hundreds of
+ * bytes, answered immediately — so this is sized for a slow network rather than
+ * for a slow run, and it is comfortably under the 300 s ceiling the platform
+ * turned out to enforce between the two services. It is `retrain.ts`'s number
+ * because it is the same crossing.
+ */
+export const HOLDOUT_BACKFILL_REQUEST_TIMEOUT_MS = 30_000;
+
+/** The first gap between polls, and the longest one the backoff grows to. */
+export const HOLDOUT_BACKFILL_POLL_MIN_MS = 2000;
+export const HOLDOUT_BACKFILL_POLL_MAX_MS = 30_000;
+
+/**
+ * The path segment a request with no fold runs under.
+ *
+ * `apps/ml` names the same string, because a status URL has to name the run and
+ * "the newest frozen fold" has no id until the child has picked one.
+ */
+export const LATEST_FOLD = "latest";
+
+/**
+ * The status route, spelled out whole.
+ *
+ * `test/reachability.ts` reads every `/internal/` route the modelling service
+ * declares and requires that some non-test TypeScript names it — an
+ * `/internal/` route no TypeScript names is a route nothing can ever call. A
+ * path assembled from fragments would satisfy nothing and name nothing, and
+ * this guard went red on exactly that when the route was first added here.
+ */
+export const HOLDOUT_BACKFILL_STATUS_TEMPLATE = "/internal/backfill/holdout/{fold}";
+
+/** Where that fold's run is polled. */
+export function holdoutBackfillStatusPath(fold: string): string {
+  return HOLDOUT_BACKFILL_STATUS_TEMPLATE.replace("{fold}", encodeURIComponent(fold));
+}
+
+/**
+ * A 409 from the start call is not a failure: this worker, or the one it
+ * replaced, already started this fold and that run is the one we came for.
+ */
+function isAlreadyStarted(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.details?.upstream_code === "HOLDOUT_BACKFILL_IN_PROGRESS"
+  );
+}
+
+/**
+ * The failures a *poll* may report without the run being in trouble.
+ *
+ * A code the modelling service itself named is a verdict about the run —
+ * `HOLDOUT_BACKFILL_FAILED`, `HOLDOUT_BACKFILL_UNKNOWN`, `DATA_UNAVAILABLE` —
+ * and must not be polled through. What may be retried is the ways the *call*
+ * can fail without upstream having said anything.
+ */
+function isTransientPollFailure(error: unknown): boolean {
+  if (!(error instanceof AppError)) {
+    return false;
+  }
+  if (typeof error.details?.upstream_code === "string") {
+    return false;
+  }
+  return (
+    error.code === "OPTIMIZER_TIMEOUT" ||
+    error.code === "OPTIMIZER_UNAVAILABLE" ||
+    error.code === "OPTIMIZER_NOT_READY"
+  );
+}
+
 /** The modelling service's route. Worker-only; no gateway path reaches it. */
 export const HOLDOUT_BACKFILL_PATH = "/internal/backfill/holdout";
 
@@ -115,6 +187,11 @@ export interface HoldoutBackfillerDeps {
   now?: () => Date;
   /** The writer. Only a test replaces it; production is the real append. */
   write?: typeof writeHoldoutBackfill;
+  /** The poll loop's own ceiling. Injected so a test is not a real wait. */
+  deadlineMs?: number;
+  poll?: { minMs?: number; maxMs?: number };
+  /** How the loop waits between polls. Injected so a test is not a real sleep. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -188,25 +265,101 @@ export function createHoldoutBackfiller(
   ): Promise<HoldoutBackfillJobResult> => {
     const endpoint = deps.endpoint ?? {
       baseUrl: config.mlUrl,
-      timeoutMs: HOLDOUT_BACKFILL_TIMEOUT_MS,
+      // A *short* request now — a start or a status read. See the poll loop
+      // below for why the long one had to go.
+      timeoutMs: HOLDOUT_BACKFILL_REQUEST_TIMEOUT_MS,
     };
+    const fold = payload.foldId ?? LATEST_FOLD;
+    const deadlineMs = deps.deadlineMs ?? HOLDOUT_BACKFILL_TIMEOUT_MS;
+    const minMs = deps.poll?.minMs ?? HOLDOUT_BACKFILL_POLL_MIN_MS;
+    const maxMs = deps.poll?.maxMs ?? HOLDOUT_BACKFILL_POLL_MAX_MS;
+    const sleep =
+      deps.sleep ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)));
+    const startedAt = Date.now();
+    const elapsed = () => Date.now() - startedAt;
     report({ done: 0, total: 1 });
-    let response: Response;
-    try {
-      response = await postMl(
-        HOLDOUT_BACKFILL_PATH,
-        JSON.stringify(payload.foldId === undefined ? {} : { fold_id: payload.foldId }),
-        endpoint,
-      );
-    } catch (error) {
-      console.warn(
-        `⚠️  holdout backfill ${payload.foldId ?? "(newest frozen fold)"} — ${describeFailure(error)}`,
-      );
-      // Rethrown as itself so the queue's backoff retries it, and so the
-      // modelling service's own code survives the crossing.
-      throw error;
+
+    /*
+      **Start, then poll — the repair forecaster 45 made to the retrain, made
+      here.** This used to POST the fold and await its report on one connection.
+      Measured on the live deployment on 2026-09-22: the job was enqueued at
+      23:02 and failed at 23:07:48 with "The ML service is unreachable" — about
+      350 s, against the forty-minute ceiling it was configured with — while the
+      child went on scoring for another ninety minutes, refusing every later
+      attempt with `HOLDOUT_BACKFILL_IN_PROGRESS`.
+
+      It cost more here than it did on the retrain. That route's product is an
+      artifact on a volume, so a lost response lost a *report*; this route's
+      product **is** the response body, because `apps/ml` is read-only against
+      Postgres and this function is what appends the rows. So every run scored a
+      fold and threw it away, and `/v1/replay/days` offered only the days the
+      forecaster had served — five, against a window of a hundred and twenty.
+    */
+    let started = false;
+    let wait = minMs;
+    let body: unknown;
+    for (;;) {
+      if (elapsed() >= deadlineMs) {
+        const error = new CodedError(
+          "OPTIMIZER_TIMEOUT",
+          `the backfill did not finish inside ${deadlineMs} ms`,
+          {
+            details: {
+              timeout_source: "poll_deadline",
+              fold,
+              ceiling_ms: deadlineMs,
+              elapsed_ms: elapsed(),
+            },
+          },
+        );
+        console.warn(`⚠️  holdout backfill ${fold} — ${describeFailure(error)}`);
+        throw error;
+      }
+      try {
+        if (started) {
+          const response = await callMl(
+            holdoutBackfillStatusPath(fold),
+            new URLSearchParams(),
+            endpoint,
+          );
+          const status = (await response.json()) as { status?: unknown };
+          if (status.status !== "running") {
+            body = status;
+            break;
+          }
+        } else {
+          await postMl(
+            HOLDOUT_BACKFILL_PATH,
+            JSON.stringify(
+              payload.foldId === undefined ? {} : { fold_id: payload.foldId },
+            ),
+            endpoint,
+          );
+          started = true;
+        }
+      } catch (error) {
+        if (isAlreadyStarted(error)) {
+          // Not a failure: this worker, or the one it replaced, already started
+          // this fold, and that run is what we came for. Attach to it.
+          started = true;
+        } else if (isTransientPollFailure(error)) {
+          // The *call* failed; the run is untouched by that, which is the whole
+          // point of a short request. Said out loud, because a poll loop that
+          // swallows every failure is how an outage stays invisible.
+          console.warn(`⚠️  holdout backfill ${fold} — ${describeFailure(error)}`);
+        } else {
+          console.warn(`⚠️  holdout backfill ${fold} — ${describeFailure(error)}`);
+          // Rethrown as itself so the queue's backoff retries it, and so the
+          // modelling service's own code survives the crossing.
+          throw error;
+        }
+      }
+      // Backoff, never past the ceiling: a sleep that overshot the deadline
+      // would make the ceiling the sleep's rather than the run's.
+      await sleep(Math.max(0, Math.min(wait, deadlineMs - elapsed())));
+      wait = Math.min(maxMs, Math.round(wait * 1.5));
     }
-    const body = await response.json();
+
     if (typeof body !== "object" || body === null) {
       throw new CodedError("UPSTREAM_FAILED", "the backfill returned no report");
     }
