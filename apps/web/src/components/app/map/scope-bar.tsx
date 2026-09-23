@@ -25,6 +25,7 @@
 import { radius, space, type, usePalette } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useCopy, useFormat } from "@/i18n";
+import { addDays } from "@/lib/civil-date";
 import {
   RUN_LABELS,
   type RunLabel,
@@ -309,8 +310,3 @@ export function ScopeBar({
  * `use-network.ts`, and it stays here rather than being shared because two
  * call sites is not a module.
  */
-function addDays(date: string, days: number): string {
-  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
-}

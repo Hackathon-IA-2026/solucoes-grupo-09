@@ -14,6 +14,7 @@
  * screen would be worse on a phone than a scroll.
  */
 
+import { latestTargetDate } from "@wattsteer/core";
 import {
   CalendarDaysIcon,
   focusRing,
@@ -31,6 +32,7 @@ import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
 import { type Copy, useCopy, useFormat, useI18n } from "@/i18n";
 import { localePath } from "@/i18n/locale";
+import { addDays } from "@/lib/civil-date";
 import {
   RUN_LABELS,
   type RunLabel,
@@ -395,36 +397,75 @@ export function AppShell({
                 That bar is gone: the four subsystems and the D−1 run are chips
                 on the map they steer, and repeating them above it was two
                 controls for one thing. The day was the only item left with
-                nowhere else to be, so it sits here — stated rather than
-                selectable, because the forecast horizon is one day and the
-                gateway refuses anything past tomorrow. The Time Machine is
-                where a past day is chosen, and it has its own picker.
+                nowhere else to be, so it sits here.
+
+                **It is selectable now, and this comment used to argue it should
+                not be.** The argument was that the forecast horizon is one day
+                and the Time Machine is where a past day is chosen. Then the
+                map's scope bar grew two arrows over the same `params.date` —
+                and the screen ended up stating one fact twice, once as a
+                control and once as a label, a few hundred pixels apart. A
+                reader who found the arrows below had no reason to think the
+                chip above was the same day, and one who only saw the chip had
+                no reason to think the day could move at all.
+
+                So it carries the same two arrows, over the same parameter, with
+                the same ceiling: `latestTargetDate` is the day being forecast
+                and forward is inert there, because there is no day after
+                tomorrow to show. Backwards has no floor, for the reason the
+                scope bar records — `GET /v1/grid/day` answers a quiet day with
+                zeros rather than a refusal, so walking into the past degrades
+                into honest emptiness instead of an error.
               */}
                 <View
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    gap: 6,
-                    paddingVertical: 5,
-                    paddingHorizontal: 10,
+                    gap: 0,
+                    paddingVertical: 3,
+                    paddingHorizontal: 4,
                     borderRadius: radius.md,
                     borderCurve: "continuous",
                     borderWidth: 1,
                     borderColor: colors.border,
                     backgroundColor: colors.surface,
+                    /*
+                      It gives width back. ADR-0001 makes `flexShrink` 0 here,
+                      so the chip was a floor: at 320 the two arrows pushed the
+                      group past the bar's own box and
+                      `appbar-stays-inside-itself.spec.ts` caught it. The date
+                      inside never wraps, so shrinking trims the padding rather
+                      than the reading.
+                    */
+                    flexShrink: 1,
+                    minWidth: 0,
                   }}
                 >
                   <CalendarDaysIcon size={13} color={colors.inkMuted} />
+                  <DayStep
+                    label="‹"
+                    hint={copy.app.grid.dayPreviousHint}
+                    onPress={() => params.setParams({ date: addDays(params.date, -1) })}
+                  />
                   <Text
+                    testID="app-bar-date"
                     style={{
                       fontSize: 13,
                       fontWeight: "600",
                       color: colors.ink,
                       fontVariant: ["tabular-nums"],
+                      paddingHorizontal: 2,
                     }}
+                    numberOfLines={1}
                   >
                     {f.date(params.date)}
                   </Text>
+                  <DayStep
+                    label="›"
+                    hint={copy.app.grid.dayNextHint}
+                    disabled={params.date >= latestTargetDate(new Date())}
+                    onPress={() => params.setParams({ date: addDays(params.date, 1) })}
+                  />
                 </View>
                 <LanguageSwitch testID="app-language-switch" />
               </View>
@@ -656,6 +697,79 @@ function ChromeBadge() {
         </Text>
       </View>
     </View>
+  );
+}
+
+/**
+ * One day-step arrow in the app bar.
+ *
+ * Its own component rather than `Chip`: the scope bar's chips are sized for a
+ * row of filters and this sits inside a 28 px chip beside an icon and a date.
+ * The two controls are the same *decision* and deliberately not the same
+ * widget — what they must share is the parameter and the ceiling, and they do.
+ *
+ * Inert rather than removed: the press stays bound and does nothing, so the
+ * control keeps its place in the tab order. A `disabled` attribute takes it out
+ * of that order, and a reader who tabbed to the end of the day range would find
+ * focus had jumped somewhere else entirely.
+ *
+ * **The state is announced through `accessibilityState`, and `aria-disabled`
+ * alone did not reach the DOM.** Measured on the export: the arrow rendered at
+ * `opacity: 0.35` with the press correctly doing nothing, and its attributes
+ * were `aria-label, role, tabindex, class, style, type` — react-native-web
+ * dropped the `aria-disabled` this file passes elsewhere. So the inert arrow
+ * looked inert and announced nothing, which is the half-state that is worse
+ * than either. `accessibilityState` is the prop RNW maps, and it is what the
+ * e2e assertion reads.
+ */
+function DayStep({
+  label,
+  hint,
+  disabled = false,
+  onPress,
+}: {
+  label: string;
+  hint: string;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const colors = usePalette();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={hint}
+      accessibilityHint={disabled ? hint : undefined}
+      accessibilityState={{ disabled }}
+      aria-disabled={disabled || undefined}
+      onPress={() => {
+        if (!disabled) {
+          onPress();
+        }
+      }}
+      hitSlop={6}
+      style={(state) => {
+        const { focused = false, hovered = false } = state as {
+          focused?: boolean;
+          hovered?: boolean;
+        };
+        return {
+          paddingHorizontal: 4,
+          paddingVertical: 2,
+          borderRadius: radius.sm,
+          borderCurve: "continuous",
+          backgroundColor: hovered && !disabled ? colors.surfaceSunken : "transparent",
+          opacity: disabled ? 0.35 : 1,
+          ...focusRing(focused, colors.focus),
+          ...(Platform.OS === "web"
+            ? ({ cursor: disabled ? "default" : "pointer" } as object)
+            : null),
+        };
+      }}
+    >
+      <Text style={{ fontSize: 13, fontWeight: "700", color: colors.inkMuted }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
