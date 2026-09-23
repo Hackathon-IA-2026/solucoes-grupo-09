@@ -12,8 +12,10 @@ A high refusal rate with a small corpus is correct behaviour, not failure.
 A case with a `question` is a free question instead of a record, from
 `eval/questions.jsonl`: each one carries the document and page that answer it
 and the numbers the published text states, checked by hand against the official
-file. It scores as correct, refused or wrong, and wrong is the number to drive
-to zero:
+file. It scores as correct, refused, wrong or unavailable (no provider could
+answer, counted apart), and wrong is the number to drive to zero. The summary
+adds accuracy (correct over the cases a provider was up for) and precision
+(correct over the answers given):
 
     python eval/run_eval.py --goldset eval/questions.jsonl --ids B,O
 """
