@@ -372,51 +372,68 @@ export async function readSourceFreshness(
       lastRead.set(row.source, toDate(row.last_success_at));
     }
   }
-  const freshness: SourceFreshness[] = [];
-  for (const spec of SOURCES) {
-    /*
-      The count is its own column rather than its own query because when it is
-      wanted the scan happens anyway; what matters is that it is *absent* when
-      it is not, since `max()` reads an index and `count(*)` cannot.
-    */
-    const [facts] = await db.execute<{
-      rows: number | null;
-      latest_valid: string | null;
-      latest_ingested: string | null;
-    }>(sql`
-      select
-        ${countRows ? sql`count(*)::int` : sql`null::int`} as rows,
-        max(${sql.identifier(spec.validTimeColumn ?? "valid_time")}) as latest_valid,
-        max(ingested_at) as latest_ingested
-      from ${sql.identifier(spec.table)}
-      ${spec.where ? sql`where ${sql.raw(spec.where)}` : sql``}
-    `);
+  /*
+    Concurrently, one query per source rather than one after another.
 
-    const latestValidTime = toDate(facts?.latest_valid);
-    const latestIngestedAt = toDate(facts?.latest_ingested);
-    const basis =
-      spec.basis === "valid_time"
-        ? latestValidTime
-        : spec.basis === "last_read"
-          ? (lastRead.get(spec.source) ?? null)
-          : latestIngestedAt;
-    const lagHours =
-      basis === null
-        ? null
-        : Math.round(((now.getTime() - basis.getTime()) / MS_PER_HOUR) * 10) / 10;
+    They were serial, and on 2026-09-23 that took `/v1/meta` past the database's
+    31 s statement timeout: every request 500'd with `Failed query`, and
+    `/v1/meta` is the read every screen makes before it can name a lane, so the
+    whole app was down. Postgres was idle through all of it — 0.09 CPU of 32 —
+    because the cost is I/O, not computation: `max(ingested_at)` leads no index
+    on these tables (migration 0039's memo says so in as many words), so each
+    source is a scan, and the forced history sweep had just put 28.6M rows under
+    them. Serial, the endpoint pays the *sum*; concurrent, it pays the slowest
+    one. Nothing about any single query changes, so no figure moves.
 
-    freshness.push({
-      source: spec.source,
-      rows: countRows ? Number(facts?.rows ?? 0) : null,
-      latestValidTime,
-      latestIngestedAt,
-      lagHours,
-      toleranceHours: spec.toleranceHours,
-      // Never ingested is stale, not unknown: a source that has produced
-      // nothing is exactly as useless as one that stopped.
-      stale: lagHours === null || lagHours > spec.toleranceHours,
-    });
-  }
+    The index is still the fix and this is not a substitute for it: it buys the
+    endpoint back and stops a growing table taking the app with it again.
+  */
+  const freshness: SourceFreshness[] = await Promise.all(
+    SOURCES.map(async (spec) => {
+      /*
+        The count is its own column rather than its own query because when it is
+        wanted the scan happens anyway; what matters is that it is *absent* when
+        it is not, since `max()` reads an index and `count(*)` cannot.
+      */
+      const [facts] = await db.execute<{
+        rows: number | null;
+        latest_valid: string | null;
+        latest_ingested: string | null;
+      }>(sql`
+        select
+          ${countRows ? sql`count(*)::int` : sql`null::int`} as rows,
+          max(${sql.identifier(spec.validTimeColumn ?? "valid_time")}) as latest_valid,
+          max(ingested_at) as latest_ingested
+        from ${sql.identifier(spec.table)}
+        ${spec.where ? sql`where ${sql.raw(spec.where)}` : sql``}
+      `);
+
+      const latestValidTime = toDate(facts?.latest_valid);
+      const latestIngestedAt = toDate(facts?.latest_ingested);
+      const basis =
+        spec.basis === "valid_time"
+          ? latestValidTime
+          : spec.basis === "last_read"
+            ? (lastRead.get(spec.source) ?? null)
+            : latestIngestedAt;
+      const lagHours =
+        basis === null
+          ? null
+          : Math.round(((now.getTime() - basis.getTime()) / MS_PER_HOUR) * 10) / 10;
+
+      return {
+        source: spec.source,
+        rows: countRows ? Number(facts?.rows ?? 0) : null,
+        latestValidTime,
+        latestIngestedAt,
+        lagHours,
+        toleranceHours: spec.toleranceHours,
+        // Never ingested is stale, not unknown: a source that has produced
+        // nothing is exactly as useless as one that stopped.
+        stale: lagHours === null || lagHours > spec.toleranceHours,
+      };
+    }),
+  );
   return freshness;
 }
 
