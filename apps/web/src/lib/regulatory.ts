@@ -27,3 +27,11 @@ export const GRID_PROCEDURES_URL =
 
 /** Open-Meteo's licence and terms, which the weather inputs are used under. */
 export const OPEN_METEO_LICENCE_URL = "https://open-meteo.com/en/licence";
+
+/**
+ * IBGE's *Malhas Territoriais*, the mesh every map on this product is drawn
+ * from. Listed here since 24/09: the credit used to sit under the map itself,
+ * on every render, and a caveat a reader meets that often stops being read.
+ */
+export const IBGE_MESHES_URL =
+  "https://www.ibge.gov.br/geociencias/organizacao-do-territorio/malhas-territoriais.html";

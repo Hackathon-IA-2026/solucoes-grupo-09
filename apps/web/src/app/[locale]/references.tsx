@@ -12,6 +12,7 @@ import { type LegalContentSection, LegalScreen } from "@/components/legal-screen
 import { useCopy } from "@/i18n";
 import {
   GRID_PROCEDURES_URL,
+  IBGE_MESHES_URL,
   LEI_15269_URL,
   NT_DOP_0022_URL,
   OPEN_METEO_LICENCE_URL,
@@ -39,6 +40,7 @@ export default function References() {
     [LEI_15269_URL, "Lei 15.269/2025"],
     [GRID_PROCEDURES_URL, "Procedimentos de Rede (ONS)"],
     [OPEN_METEO_LICENCE_URL, "Open-Meteo"],
+    [IBGE_MESHES_URL, "IBGE, Malhas Territoriais"],
   ];
 
   const sections: readonly LegalContentSection[] = [

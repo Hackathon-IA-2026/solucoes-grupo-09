@@ -497,10 +497,24 @@ describe("a refused forecast renders no forecast", () => {
     */
     expect(HERO).toContain("<BandCard");
     const heroFlat = HERO.replace(/\s+/g, " ");
-    expect(heroFlat).toContain(
-      "const forecastFigures = forecast === null || selectedRow === null ? null : (",
-    );
-    expect(heroFlat).toContain("const dayFigures = forecast === null ? (");
+    /*
+      Four variables where there were two. The wide layout puts the day's
+      energy under the map and the day's *peak* under the four rows it is the
+      peak of, so a fragment holding both could not be placed — see the
+      overview hero's own comments for the measurement that asked for it.
+
+      The property is unchanged and is still the whole point: every one of the
+      four is behind `forecast === null` or `selectedRow === null`, so a band
+      cannot be built in a state that has none.
+    */
+    for (const gate of [
+      "const forecastEnergyFigure = forecast === null || selectedRow === null ? null : (",
+      "const forecastPeakFigure = forecast === null || selectedRow === null ? null : (",
+      "const dayEnergyFigure = forecast === null ? (",
+      "const dayPeakFigure = forecast === null ? (",
+    ]) {
+      expect(heroFlat).toContain(gate);
+    }
   });
 
   /**

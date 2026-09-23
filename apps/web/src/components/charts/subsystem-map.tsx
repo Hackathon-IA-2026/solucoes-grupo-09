@@ -380,19 +380,16 @@ export function SubsystemMap({
       <MapLegend paint={paint} observedMax={observedMax} />
 
       {/*
-        Attribution, on the figure rather than only in a comment. IBGE's data
-        is open, and open data still has a publisher.
+        **The IBGE credit moved to `/references`, it was not dropped.**
+
+        It was a line under every drawing of this map, and the argument for it
+        stands — open data still has a publisher. What did not stand is the
+        place: it is the same sentence on every render of a figure a reader
+        looks at many times a day, which is the shape `copy.md` calls a caveat
+        read once and then never again. `/references` is where this product
+        already lists ONS's norms and Open-Meteo's licence, each with its link,
+        and the mesh belongs in that list rather than under the picture.
       */}
-      <Text
-        style={{
-          fontSize: 10,
-          color: colors.inkFaint,
-          marginTop: space.sm,
-          textAlign: "center",
-        }}
-      >
-        {copy.app.overview.map.source}
-      </Text>
     </View>
   );
 }

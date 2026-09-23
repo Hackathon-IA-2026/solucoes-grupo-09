@@ -350,37 +350,50 @@ export function OverviewHero({
   const windowDay = fill(copy.app.observed.windowDay, {
     date: f.date(observed.hoursDate),
   });
-  const dayFigures =
+  /*
+    **The pair is two variables rather than one fragment, since 24/09.**
+
+    They are still the same two questions in the same vocabulary and they are
+    still mutually exclusive with the forecast pair. What changed is that the
+    wide layout puts them in *different columns* — the energy under the map with
+    the plan, the peak under the four rows it is the peak of — so a fragment
+    holding both could not be placed. See the grid below for the measurement
+    that asked for it.
+  */
+  const dayEnergyFigure =
     forecast === null ? (
       day.peakHour === null ? (
-        <>
-          <ObservedEmptyCard
-            label={fill(copy.app.observed.dayTotal, { subsystem: meta.onsDisplayName })}
-          />
-          <ObservedEmptyCard
-            label={fill(copy.app.observed.peakHour, { subsystem: meta.onsDisplayName })}
-          />
-        </>
+        <ObservedEmptyCard
+          label={fill(copy.app.observed.dayTotal, { subsystem: meta.onsDisplayName })}
+        />
       ) : (
-        <>
-          <ObservedCard
-            label={fill(copy.app.observed.dayTotal, { subsystem: meta.onsDisplayName })}
-            value={day.totalMwh}
-            unit="MWh"
-            window={windowDay}
-            footnote={copy.app.observed.dayTotalNote}
-          />
-          <ObservedCard
-            label={fill(copy.app.observed.peakHour, { subsystem: meta.onsDisplayName })}
-            value={day.peakHour.constrainedOffMwh}
-            unit="MWh"
-            window={fill(copy.app.observed.peakHourWindow, {
-              hour: f.number(day.peakHour.hourLocal),
-              date: f.date(observed.hoursDate),
-            })}
-            footnote={copy.app.observed.peakHourNote}
-          />
-        </>
+        <ObservedCard
+          label={fill(copy.app.observed.dayTotal, { subsystem: meta.onsDisplayName })}
+          value={day.totalMwh}
+          unit="MWh"
+          window={windowDay}
+          footnote={copy.app.observed.dayTotalNote}
+        />
+      )
+    ) : null;
+
+  const dayPeakFigure =
+    forecast === null ? (
+      day.peakHour === null ? (
+        <ObservedEmptyCard
+          label={fill(copy.app.observed.peakHour, { subsystem: meta.onsDisplayName })}
+        />
+      ) : (
+        <ObservedCard
+          label={fill(copy.app.observed.peakHour, { subsystem: meta.onsDisplayName })}
+          value={day.peakHour.constrainedOffMwh}
+          unit="MWh"
+          window={fill(copy.app.observed.peakHourWindow, {
+            hour: f.number(day.peakHour.hourLocal),
+            date: f.date(observed.hoursDate),
+          })}
+          footnote={copy.app.observed.peakHourNote}
+        />
       )
     ) : null;
 
@@ -403,30 +416,41 @@ export function OverviewHero({
     `lib/network.ts` keeps its two row types apart to prevent — see
     `honesty.md` on the two vocabularies.
   */
-  const forecastFigures =
+  const forecastEnergyFigure =
     forecast === null || selectedRow === null ? null : (
-      <>
-        <BandCard
-          label={fill(copy.app.overview.dailyEnergy, {
-            subsystem: meta.onsDisplayName,
-          })}
-          band={selectedRow.dailyEnergy}
-          unit="MWh"
-          footnote={copy.app.overview.dailyEnergyNote}
-        />
-        <BandCard
-          label={fill(copy.app.overview.peakPower, {
-            subsystem: meta.onsDisplayName,
-          })}
-          band={selectedRow.peakPower}
-          unit="MW"
-          tone="violet"
-          footnote={fill(copy.app.overview.peakPowerNote, {
-            mw: f.number(forecast.forecast.thresholdMw),
-          })}
-        />
-      </>
+      <BandCard
+        label={fill(copy.app.overview.dailyEnergy, {
+          subsystem: meta.onsDisplayName,
+        })}
+        band={selectedRow.dailyEnergy}
+        unit="MWh"
+        footnote={copy.app.overview.dailyEnergyNote}
+      />
     );
+
+  const forecastPeakFigure =
+    forecast === null || selectedRow === null ? null : (
+      <BandCard
+        label={fill(copy.app.overview.peakPower, {
+          subsystem: meta.onsDisplayName,
+        })}
+        band={selectedRow.peakPower}
+        unit="MW"
+        tone="violet"
+        footnote={fill(copy.app.overview.peakPowerNote, {
+          mw: f.number(forecast.forecast.thresholdMw),
+        })}
+      />
+    );
+
+  /*
+    The day's energy and the day's peak, whichever vocabulary answers them.
+    Exactly one of each pair is ever non-null — `selectedRow` is `null` exactly
+    when `forecast` is — so these two carry the question rather than the state,
+    and the layout below places a *question* rather than a branch.
+  */
+  const energyFigure = dayEnergyFigure ?? forecastEnergyFigure;
+  const peakFigure = dayPeakFigure ?? forecastPeakFigure;
 
   const window24h = fill(copy.app.observed.window24h, {
     date: f.date(observed.day.date),
@@ -809,36 +833,35 @@ export function OverviewHero({
                     }}
                   >
                     {/*
-                      The name, small, beside the controls. It is what the live
-                      region announces — "Explicar NORDESTE" carries it too, but
-                      only on one of the two buttons and only as part of a verb.
+                      **The name is the button's, and the pill beside it is
+                      gone.**
+
+                      It was a second copy of the same word a centimetre from
+                      "Explicar NORDESTE", which is the redundancy `copy.md`
+                      calls a caveat read once and then never again — except
+                      this one was a *label*, so it read as two controls where
+                      there is one thing selected.
+
+                      The two properties it carried are kept rather than
+                      dropped. The live region still announces the change,
+                      because the button's own label changes with the selection
+                      and the wrapper above is what speaks; and
+                      `selected-region-name` moves onto this wrapper, whose text
+                      is `Explicar NORDESTE` — which is what the nine
+                      assertions reading it actually check, an unanchored
+                      `/NORDESTE/` against the element that names the selection.
                     */}
-                    <Text
-                      testID="selected-region-name"
-                      style={{
-                        ...type.caption,
-                        fontWeight: "700",
-                        color: colors.ink,
-                        paddingHorizontal: space.sm,
-                        paddingVertical: 4,
-                        borderRadius: radius.pill,
-                        borderCurve: "continuous",
-                        backgroundColor: colors.surface,
-                        opacity: 0.96,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {meta.onsDisplayName}
-                    </Text>
-                    <PillButton
-                      testID="selected-region-explain"
-                      label={fill(copy.app.overview.rowExplainLabel, {
-                        subsystem: meta.onsDisplayName,
-                      })}
-                      onPress={() => onExplain(params.subsystem)}
-                      primary={true}
-                      icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
-                    />
+                    <View testID="selected-region-name">
+                      <PillButton
+                        testID="selected-region-explain"
+                        label={fill(copy.app.overview.rowExplainLabel, {
+                          subsystem: meta.onsDisplayName,
+                        })}
+                        onPress={() => onExplain(params.subsystem)}
+                        primary={true}
+                        icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
+                      />
+                    </View>
                     {onWhatToDo === undefined ? null : (
                       <PillButton
                         testID="selected-region-mitigate"
@@ -957,7 +980,23 @@ export function OverviewHero({
             day the map is painted for. It sat in the right rail, beside the
             regions, where it read as a fourth region.
           */}
-          {wide ? null : planned}
+          {/*
+            **Under the map, at the map's width.**
+
+            The three columns stretch to the tallest and the map's ended 465 px
+            short of it: measured on production at 1246, the map column closed
+            at y≈890 against a rail at 1265 and a left column at 1355, so the
+            middle of the page was a white block with content down both sides.
+
+            The plan is the panel that belongs there on its own terms — the one
+            panel whose two series are both ONS's, about the same day the map is
+            painted for, and a table that wants the map's width rather than a
+            third of it. The day's energy follows it because it is about that
+            day too; the day's *peak* goes to the rail instead, and the comment
+            there says why.
+          */}
+          {planned}
+          {wide ? energyFigure : null}
           {/*
             **And the episodes under it, at the same width.**
 
@@ -990,8 +1029,8 @@ export function OverviewHero({
             nowhere else, and `app-overview-selection.spec.ts` looks for
             "Energia cortada, dia inteiro" on the rendered page.
           */}
-          {wide ? null : dayFigures}
-          {wide ? null : forecastFigures}
+          {wide ? null : energyFigure}
+          {wide ? null : peakFigure}
           {/*
             The settled four, on a phone. They are in the foot band on a wide
             screen and were at the foot of the page before that; leaving them
@@ -1030,6 +1069,17 @@ export function OverviewHero({
               the three columns that actually need it.
             */}
             {rail}
+            {/*
+              **The day's peak, under the four rows it is the peak of.**
+
+              The energy figure went under the map with the plan and this one
+              did not follow it, because putting both there made the map column
+              the tallest instead of the shortest — 1500 px against a rail at
+              1170, which is the same void moved rather than closed. Splitting
+              the pair puts each card in the column it argues with and leaves
+              the three within about a card of each other.
+            */}
+            {peakFigure}
           </View>
         ) : null}
       </View>
@@ -1059,33 +1109,7 @@ export function OverviewHero({
               subsystem={params.subsystem}
             />
           </View>
-          {/*
-            **The day's two figures ride with `Planejado × Realizado`.**
 
-            They were the fourth and fifth cards of the left rail, which made
-            that column half again as tall as the map beside it: measured on the
-            export at 1672, the grid row was the left column's height and the
-            other two ended a screen short of it, so the middle of the page was
-            a void with a rail down one side of it.
-
-            This column was the shortest of the three — the plan panel is a
-            paragraph and a refusal — and these two are figures about the same
-            day the plan is about. Filling it with them costs no height that was
-            not already being spent and takes the void out of the page.
-          */}
-          <View
-            style={{
-              flexGrow: 1,
-              flexShrink: 1,
-              flexBasis: 0,
-              minWidth: 0,
-              gap: space.md,
-            }}
-          >
-            {planned}
-            {dayFigures}
-            {forecastFigures}
-          </View>
           {/*
             The settled four. Absent in the settled state rather than drawn
             twice: `ObservedPanels` already carries these rows there, and this

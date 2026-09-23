@@ -338,13 +338,29 @@ describe("the map's wiring", () => {
     expect(map).not.toMatch(/\["N", "NE", "SE", "S"\]/);
   });
 
-  it("the geometry's publisher is credited on the figure, not only in a comment", () => {
-    // IBGE's mesh is open data, and open data still has a publisher. The
-    // credit is rendered, so it survives a reader who never opens the source.
-    expect(mapSource()).toContain("copy.app.overview.map.source");
-    for (const dict of [PT, EN]) {
-      expect(dict.app.overview.map.source).toContain("IBGE");
-    }
+  it("the geometry's publisher is credited, on the page that lists the sources", () => {
+    /*
+      IBGE's mesh is open data, and open data still has a publisher — the
+      property this guard was written for, and it is unchanged.
+
+      What changed on 24/09 is where the credit is read. It was a line under
+      every drawing of this map, which is the same sentence on every render of
+      a figure a reader looks at many times a day; `copy.md` calls that a
+      caveat read once and then never again. It is on `/references` now,
+      beside ONS's norms and Open-Meteo's licence, each with its link — a
+      stronger credit than the caption was, because it is one a reader can
+      follow.
+
+      So the assertion moved with it rather than being deleted: the guard would
+      have gone green on a credit that had simply been dropped, and that is the
+      one outcome it exists to prevent.
+    */
+    const src = (...parts: string[]) =>
+      readFileSync(join(import.meta.dir, "..", "src", ...parts), "utf8");
+    const references = src("app", "[locale]", "references.tsx");
+    expect(references).toContain("IBGE_MESHES_URL");
+    expect(references).toContain("IBGE, Malhas Territoriais");
+    expect(src("lib", "regulatory.ts")).toContain("ibge.gov.br");
   });
 
   it("the map colours regions with the risk palette, not its own", () => {
