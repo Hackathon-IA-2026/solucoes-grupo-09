@@ -117,11 +117,14 @@ async def _evaluate_question(db: Database, gateway: Gateway, case: dict) -> dict
         question=case["question"],
     )
     generation = document["trace"]["generation"]
+    scored = _score(case, document)
+    if document["verdict"] != "found" and document.get("reason") in UNAVAILABLE:
+        scored["grade"] = "unavailable"
     return {
         "id": case["id"],
         "verdict": document["verdict"],
         "verdict_reason": document.get("reason"),
-        **_score(case, document),
+        **scored,
         "provider": generation.get("provider"),
         "gate_failures": generation.get("gate_failures") or [],
         "claims": len(document["items"]),
@@ -129,6 +132,13 @@ async def _evaluate_question(db: Database, gateway: Gateway, case: dict) -> dict
         "rejected": len(generation.get("rejected") or []),
         "retry_at": document["trace"].get("retry_at"),
     }
+
+
+# No provider could answer: a free tier out for the minute, or a model answering
+# 503. Measured on 22/09/2026, six such refusals were each correct twice when
+# asked again. They say whether a provider was up, not whether the service
+# reads the record right, so they are counted apart from the refusals.
+UNAVAILABLE = {"quota_exhausted_before_answer", "quota_exhausted_partial", "claim_reader_unavailable"}
 
 
 def _score(case: dict, document: dict) -> dict:
@@ -277,10 +287,18 @@ def _question_summary(results: list[dict]) -> dict:
     by_family: dict[str, Counter] = {}
     for row in rows:
         by_family.setdefault(row["id"][0], Counter())[row["grade"]] += 1
+    measured = len(rows) - grades["unavailable"]
+    answered = grades["correct"] + grades["wrong"]
     return {
         "correct": grades["correct"],
         "refused": grades["refused"],
         "wrong": grades["wrong"],
+        "unavailable": grades["unavailable"],
+        # Two numbers, because they answer two questions. Accuracy: of the cases
+        # a provider was up for, how many were right. Precision: of the answers
+        # given, how many were right. Availability is the unavailable count.
+        "accuracy": round(grades["correct"] / measured, 4) if measured else None,
+        "precision": round(grades["correct"] / answered, 4) if answered else None,
         "page_expected": sum(1 for row in rows if row["page_expected"]),
         "by_family": {family: dict(counter) for family, counter in sorted(by_family.items())},
     }
