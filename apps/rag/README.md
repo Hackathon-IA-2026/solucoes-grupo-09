@@ -77,8 +77,8 @@ is why the variables are plural.
 
 NVIDIA's free endpoint answers 503 for hours at a time. These providers take
 over when it does, in the order `docs/rag/gateway.yaml` gives. Each one is
-optional: a variable left unset means that provider is skipped, and nothing
-else changes.
+optional: a variable left unset means that provider is skipped. Kimi K3 is the
+last link either way, because it takes about 100 s a call.
 
 | Provider | Model (licence) | Where | Variable |
 | --- | --- | --- | --- |

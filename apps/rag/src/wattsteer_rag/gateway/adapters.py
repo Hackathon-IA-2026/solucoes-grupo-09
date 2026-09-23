@@ -34,7 +34,10 @@ class Block:
     bbox: dict[str, float] | None = None
 
 
-REASONING_BLOCK = re.compile(r"^.*</(?:thought|think)>", re.S)
+# A reasoning block that opens the answer, and only that one: the tag closing it
+# is the first match of its own name, so a claim quoting "</think>" is untouched.
+REASONING_BLOCK = re.compile(r"\A\s*<(thought|think)>.*?</\1>", re.S)
+REASONING_OPENS = re.compile(r"\A\s*<(?:thought|think)>")
 
 
 def _json_from_text(text: str) -> Any:
@@ -43,10 +46,15 @@ def _json_from_text(text: str) -> Any:
     Reasoning models narrate before they answer, and a refusal to parse that
     would be a refusal to use half the open models.
     """
-    # Gemma 4 on Google writes "<thought>...</thought>" before the answer and
+    # Gemma 4 on Google opens its answer with "<thought>...</thought>" and
     # cannot be told not to; the reasoning quotes the JSON it is about to write,
-    # braces and all, so only what follows the block is the answer.
-    text = REASONING_BLOCK.sub("", text).strip()
+    # braces and all, so only what follows the block is the answer. A block that
+    # never closes ran out of tokens while drafting: the JSON inside it is a
+    # draft, not an answer.
+    stripped = REASONING_BLOCK.sub("", text, count=1)
+    if stripped == text and REASONING_OPENS.match(text):
+        raise ProviderError("model ran out of tokens while reasoning")
+    text = stripped.strip()
     fenced = re.findall(r"```(?:json)?\s*(.+?)```", text, re.S)
     for candidate in reversed(fenced):
         try:

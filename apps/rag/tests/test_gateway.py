@@ -254,10 +254,36 @@ def test_the_answer_after_a_reasoning_block_is_the_json():
     assert _json_from_text('<think>plan {x}</think>\n{"a": 1}') == {"a": 1}
 
 
-def test_payment_required_is_a_refusal_not_a_quota():
+def test_only_a_reasoning_block_that_opens_the_answer_is_removed():
+    """Review of this change: the first rule removed everything up to the last
+    closing tag anywhere, so a claim that quoted "</think>" lost its answer, for
+    every model. And a block that never closes is a draft cut by the token
+    limit; the JSON inside it was never given as the answer."""
+    from wattsteer_rag.gateway.adapters import ProviderError, _json_from_text
+
+    assert _json_from_text('{"claim": "a </think> b"}') == {"claim": "a </think> b"}
+    assert _json_from_text('<think>x</think>{"claim": "tag </think> seen"}') == {"claim": "tag </think> seen"}
+    with pytest.raises(ProviderError):
+        _json_from_text('<thought>draft: {"ok": false, "draft": 1}')
+
+
+def test_payment_required_is_a_refusal_not_a_quota(config, monkeypatch):
     """Measured on 22/09/2026: a Cerebras account without a card answers 402 to
     every request. Read as a spent quota it would be retried on every key every
-    minute and reported as a delay; the configuration is what is wrong."""
-    from wattsteer_rag.gateway.router import NON_RETRYABLE
+    minute and reported as a delay; the configuration is what is wrong, and the
+    run says so."""
+    import asyncio
 
-    assert 402 in NON_RETRYABLE
+    from wattsteer_rag.gateway.adapters import ProviderError
+    from wattsteer_rag.gateway.router import ProviderRefused
+
+    gateway = Gateway(config)
+
+    async def pay_first(*_args, **_kwargs):
+        raise ProviderError("payment required", status=402)
+
+    for provider in gateway.providers.values():
+        monkeypatch.setattr(provider.adapter, "chat", pay_first)
+    with pytest.raises(ProviderRefused, match="402"):
+        asyncio.run(gateway.run("generate_strong", tokens=10, messages=[]))
+    assert all(slot["state"] != "cooling" for slot in gateway.ledger.snapshot())
