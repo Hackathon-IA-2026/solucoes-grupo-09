@@ -80,8 +80,7 @@ async def cmd_crawl(args) -> int:
             for back in range(args.days):
                 report += await crawler.fetch_bdo(client, date.today() - timedelta(days=back + 1))
         if args.what in {"ipdo", "all"}:
-            for back in range(args.days):
-                report.append(await crawler.fetch_ipdo(client, date.today() - timedelta(days=back)))
+            report += await crawler.fetch_live_ipdo(client, date.today(), args.days)
         if args.what == "ipdo-archive":
             report += await crawler.fetch_ipdo_archive(
                 client, limit=args.limit, attempts=args.attempts, sample=args.sample
