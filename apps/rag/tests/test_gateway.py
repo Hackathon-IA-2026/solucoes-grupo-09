@@ -236,3 +236,28 @@ def test_a_page_of_actions_with_their_deadlines_is_not_a_table():
         for n in range(1, 7)
     )
     assert not looks_tabular(actions)
+
+
+def test_the_answer_after_a_reasoning_block_is_the_json():
+    """Measured on 22/09/2026: Gemma 4 on Google AI Studio writes its reasoning
+    as "<thought>...</thought>" before the JSON, and the API refuses both knobs
+    that would turn it off ("Thinking budget is not supported for this model").
+    The reasoning quoted the JSON it was about to write, braces and all, so
+    reading from the first brace to the last parsed nothing."""
+    from wattsteer_rag.gateway.adapters import _json_from_text
+
+    answer = (
+        '<thought>* Word: "Saudade".\n* `{"ok": true, "word": "Saudade"}`\n'
+        '* Valid JSON? Yes.</thought>{"ok": true, "word": "Saudade"}'
+    )
+    assert _json_from_text(answer) == {"ok": True, "word": "Saudade"}
+    assert _json_from_text('<think>plan {x}</think>\n{"a": 1}') == {"a": 1}
+
+
+def test_payment_required_is_a_refusal_not_a_quota():
+    """Measured on 22/09/2026: a Cerebras account without a card answers 402 to
+    every request. Read as a spent quota it would be retried on every key every
+    minute and reported as a delay; the configuration is what is wrong."""
+    from wattsteer_rag.gateway.router import NON_RETRYABLE
+
+    assert 402 in NON_RETRYABLE

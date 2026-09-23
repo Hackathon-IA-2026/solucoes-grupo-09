@@ -25,7 +25,9 @@ log = logging.getLogger("wattsteer_rag.gateway")
 
 DEFAULT_COOLING_S = 60.0
 # A quota answers 429 and recovers; these say the request itself is wrong.
-NON_RETRYABLE = {400, 401, 403, 404, 405, 410, 422}
+# 402 is an account that has to be paid for before it answers at all, which a
+# minute of cooling does not change (Cerebras without a card, 22/09/2026).
+NON_RETRYABLE = {400, 401, 402, 403, 404, 405, 410, 422}
 CALLS_KEPT = 500
 
 

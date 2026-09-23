@@ -73,6 +73,33 @@ GROQ_API_KEYS=gsk_...
 One key is enough. Several keys, separated by commas, add their quotas up, which
 is why the variables are plural.
 
+### Optional: more free fallbacks
+
+NVIDIA's free endpoint answers 503 for hours at a time. These providers take
+over when it does, in the order `docs/rag/gateway.yaml` gives. Each one is
+optional: a variable left unset means that provider is skipped, and nothing
+else changes.
+
+| Provider | Model (licence) | Where | Variable |
+| --- | --- | --- | --- |
+| Google AI Studio | Gemma 4 26B (Apache 2.0) | https://aistudio.google.com/apikey | `GEMINI_API_KEYS` |
+
+Measured alone on all 95 evaluation questions (22/09/2026), Gemma 4 26B answered
+76 correctly, refused 19 and got none wrong, against nemotron's 78 correct.
+
+**Google can charge a project that has billing.** Create the key with "Create
+key in a new project", never in a project that already has a billing account,
+and check that the key list shows the project as **free tier** ("Nível
+gratuito"). A project without billing cannot be charged: past the limit it
+answers 429. What is sent on the free tier may be used by Google to improve its
+models; this service only sends public ONS documents.
+
+Not used, and why (checked on 22/09/2026): Z.ai's free GLM-4.5-Flash answered 5
+of the 95 questions wrong and GLM-4.7-Flash refused most calls with 429; Gemma 4
+31B answered 503 to half of them; Cerebras asks for a card before the API
+answers (402); Hugging Face's free credit is US$ 0.10 a month; OpenRouter's free
+models allow 50 requests a day, SambaNova's 20; GitHub Models was retired.
+
 ### Then, one command
 
 ```bash

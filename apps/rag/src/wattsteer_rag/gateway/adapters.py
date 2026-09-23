@@ -34,13 +34,19 @@ class Block:
     bbox: dict[str, float] | None = None
 
 
+REASONING_BLOCK = re.compile(r"^.*</(?:thought|think)>", re.S)
+
+
 def _json_from_text(text: str) -> Any:
     """Pull the last JSON value out of a model's answer.
 
     Reasoning models narrate before they answer, and a refusal to parse that
     would be a refusal to use half the open models.
     """
-    text = text.strip()
+    # Gemma 4 on Google writes "<thought>...</thought>" before the answer and
+    # cannot be told not to; the reasoning quotes the JSON it is about to write,
+    # braces and all, so only what follows the block is the answer.
+    text = REASONING_BLOCK.sub("", text).strip()
     fenced = re.findall(r"```(?:json)?\s*(.+?)```", text, re.S)
     for candidate in reversed(fenced):
         try:
