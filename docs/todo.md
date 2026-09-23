@@ -157,7 +157,7 @@ from the first `ml` restart until a retrain succeeds.
 
 **The lesson for the next migration**: a migration that redefines `feature_rows`
 is not an out-of-band database step. It is a deploy of the database *and* every
-service that reads it, in one window, and `deploy.md`'s `ml → api → web` order
+service that reads it, in one window, and `deploy.md`'s `rag → ml → api → worker → web` order
 is about exactly this.
 
 ### 3. RAG accuracy above 90%, measured on questions it was not tuned on

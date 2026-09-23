@@ -9,17 +9,17 @@ from the repository, because they were produced by a run on somebody's machine:
 |---|---|---|---|
 | `models.tgz` | the retrain's artifacts — a `.joblib` and a `.card.json` per lane | the `ml-models` volume, mounted at `/data/models` | the Time Machine cannot check a replay's windows, and no lane can be promoted |
 | `forecasts.sql.gz` | the forecast rows a holdout backfill scored | `curtailment_forecast_{hour,day,national_day}` | the Time Machine has no day to replay and says so |
-| `rag.sql.gz` | the evidence corpus: 293 documents, 1,590 pages, 18,063 chunks with their embeddings | the `rag` schema | Explicar answers without a citation, which is the one thing it exists not to do |
+| `rag.sql.gz` | the evidence corpus: 469 documents, 28,340 chunks with their embeddings (BDO to 21/09/2026, IPDO of 21/09, the whole RAP) | the `rag` schema | Explicar answers without a citation, which is the one thing it exists not to do |
 
 ## The short version, if somebody else already trained
 
-The bundle from 20/09/2026 is a release asset on this repository, which is
+The bundle from 23/09/2026 is a release asset on this repository, which is
 private — so it is already scoped to the people who can read the code, and no
 file has to be sent to anyone. Two commands, and the second is the work:
 
 ```sh
 railway link            # the wattsteer project, environment production
-infra/railway/ship-state.sh --from-release state-2026-09-20
+infra/railway/ship-state.sh --from-release state-2026-09-23
 ```
 
 That fetches `models.tgz` and `forecasts.sql.gz` with `gh`, puts the artifacts
@@ -31,13 +31,25 @@ indexed further on its own. Run it when Railway's corpus is empty or behind —
 both scripts end by printing a count, so the next person can tell:
 
 ```sh
-infra/railway/ship-rag.sh --from-release state-2026-09-20
+infra/railway/ship-rag.sh --from-release state-2026-09-23
 ```
 
 **Code is separate and may need nothing**: if the project deploys from GitHub,
 `main` is already live. If it deploys from the CLI, it is
-`railway up --service ml`, then `api`, then `web` — the order and the reasons
-are in `.claude/rules/deploy.md`.
+`railway up --service rag`, then `ml`, `api`, `worker` and `web`: the order and
+the reasons are in `.claude/rules/deploy.md`, and `rag` goes first because the
+gateway and the worker call it.
+
+`state-2026-09-23` carries the same models and forecast rows as 20/09 (nothing
+newer was trained) and a new corpus. Replacing Railway's corpus with it loses
+nothing that matters: its own was about 1,500 chunks, and whatever it fetched
+after 21/09 comes back with the next daily refresh, which fills any missing
+bulletin of the last week.
+
+**Optional: the free Gemma fallback.** Add a `GEMINI_API_KEYS` secret to the
+repository (a Google AI Studio key from a project with **no billing account**,
+so it cannot be charged; see `apps/rag/README.md`) and the workflow sets it on
+the rag service. Without it the service runs as before.
 
 ## Making a bundle yourself
 
@@ -58,10 +70,10 @@ once; after that the whole handover is a form:
 
 | Input | What it is |
 |---|---|
-| `services` | `none` when Railway already builds from GitHub, otherwise `all` — the job pushes `ml`, `api`, `web`, in that order |
+| `services` | `none` when Railway already builds from GitHub, otherwise `all`: the job pushes `rag`, `ml`, `api`, `worker`, `web`, in that order |
 | `ship_state` | the artifacts and the forecast rows |
-| `state_tag` | the release they come from (`state-2026-09-20`) |
-| `with_rag` | the corpus, off by default for the reason above |
+| `state_tag` | the release they come from (`state-2026-09-23`) |
+| `with_rag` | the corpus, on by default since `state-2026-09-23` for the reason above; off for a release older than what Railway holds |
 
 It never runs on a push: a deploy is a decision, and the `railway` environment
 can require a reviewer before the job starts.

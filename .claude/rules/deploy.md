@@ -5,9 +5,10 @@ Railway, project `wattsteer`, environment `production`. Services: `web`, `api`,
 
 ## Order
 
-**`ml` → `api` → `web`**, because the gateway proxies to the modelling service
-and the web app calls the gateway. Deploying the web first means shipping a
-client that asks for routes the gateway does not yet serve.
+**`rag` → `ml` → `api` → `worker` → `web`**, because the gateway proxies to the
+modelling service, the gateway and the worker call the evidence service, and
+the web app calls the gateway. Deploying the web first means shipping a client
+that asks for routes the gateway does not yet serve.
 
 ```
 railway up --service <name> --detach
