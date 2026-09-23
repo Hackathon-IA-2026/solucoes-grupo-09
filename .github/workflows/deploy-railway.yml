@@ -64,24 +64,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    if: inputs.services != 'none'
+  configure:
+    # Its own job, so it runs whatever `services` says (a project that builds
+    # from GitHub runs this workflow with `services: none`), and the key is read
+    # by one step only: the one that writes it to Railway.
     runs-on: ubuntu-latest
     environment: railway
-    env:
-      # At job level so the step's `if` can read it; a step's own env is not
-      # visible to its condition.
-      GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
     steps:
-      - uses: actions/checkout@v4
       - name: Install the Railway CLI
         run: npm install -g @railway/cli
       - name: Give the rag service the optional Gemma key
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        if: ${{ env.GEMINI_API_KEYS != '' }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
         # From stdin, so the key is never an argument a process listing shows.
-        run: printf '%s' "$GEMINI_API_KEYS" | railway variables --service rag --set-from-stdin GEMINI_API_KEYS --skip-deploys
+        run: |
+          set -euo pipefail
+          if [ -z "$GEMINI_API_KEYS" ]; then
+            echo "no GEMINI_API_KEYS secret: the rag service keeps the chain it has"
+            exit 0
+          fi
+          printf '%s' "$GEMINI_API_KEYS" | railway variables --service rag --set-from-stdin GEMINI_API_KEYS --skip-deploys
+
+  deploy:
+    needs: [configure]
+    if: inputs.services != 'none'
+    runs-on: ubuntu-latest
+    environment: railway
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Railway CLI
+        run: npm install -g @railway/cli
       - name: Push the services
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -90,10 +103,14 @@ jobs:
           # rag → ml → api → worker → web: the gateway and the worker call the
           # evidence and modelling services, and the site calls the gateway, so
           # the other order ships a caller asking for routes nothing serves yet.
+          # `--ci` streams the build and returns when it is done, failing the job
+          # on a failed build; `--detach` returned at once, so the order was only
+          # the order the builds were queued in, and the corpus restore could
+          # start while the new rag service was still coming up.
           for service in rag ml api worker web; do
             if [ "${{ inputs.services }}" = "all" ] || [ "${{ inputs.services }}" = "$service" ]; then
               echo "== $service"
-              railway up --service "$service" --detach
+              railway up --service "$service" --ci
             fi
           done
 
@@ -101,7 +118,7 @@ jobs:
     # `always()` so state can be shipped without a deploy — the common case is a
     # project that already builds from GitHub — while still waiting for one when
     # it was asked for.
-    needs: [deploy]
+    needs: [configure, deploy]
     if: ${{ always() && inputs.ship_state && !cancelled() }}
     runs-on: ubuntu-latest
     environment: railway
