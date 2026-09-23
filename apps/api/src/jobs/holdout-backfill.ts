@@ -67,11 +67,22 @@ export const HOLDOUT_BACKFILL_JOB_ID = "holdout-backfill:newest-frozen-fold";
  *
  * A fold is the retrain's work over a *frozen* quarter: six LightGBM fits per
  * lane over two and a half years of hourly rows for four subsystems, twice,
- * plus the composition of ninety days of bands. Forty minutes is an upper bound
- * on a healthy run rather than an expectation of one, and it is the retrain's
- * number because it is the retrain's fit.
+ * plus the composition of ninety days of bands.
+ *
+ * **Three hours, and it was forty minutes.** That number was the retrain's,
+ * taken on the argument that this is the retrain's fit — and it was never an
+ * upper bound on a healthy run, only an untested guess at one. Measured on
+ * production 2026-09-23: two backfills were still `running` on the modelling
+ * service at 2 651 s and 2 572 s when the worker gave up at 2 400, and the
+ * retrain that same night reached a decision at about 3 600. Both were healthy
+ * runs the queue recorded as failures.
+ *
+ * A ceiling this long is only safe because the waiting is a sequence of short
+ * status reads rather than one held-open request — see the poll loop below.
+ * Under the old shape three hours would have been three hours of a connection
+ * this deployment cuts at 300 s.
  */
-export const HOLDOUT_BACKFILL_TIMEOUT_MS = 40 * 60_000;
+export const HOLDOUT_BACKFILL_TIMEOUT_MS = 3 * 60 * 60_000;
 
 /**
  * How long any single call to the modelling service may take.

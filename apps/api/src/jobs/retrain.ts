@@ -70,6 +70,13 @@ export const RETRAIN_JOB_ID = "retrain:serving-lanes";
  * wall-clock the card records is what turns "how long does it actually take"
  * from a guess into a measurement.
  *
+ * **Three hours, and it was forty minutes.** The measurement arrived: on
+ * production 2026-09-23 a two-lane retrain was still `running` when the worker
+ * gave up at 2 400 s and reached its decision at about 3 600 — both lanes
+ * refused on guardrails, which is a verdict the queue recorded as a timeout.
+ * Forty minutes had never been measured; it was the number this comment
+ * already calls a guess.
+ *
  * **Forecaster 45 made this number mean what it says.** It used to be the
  * timeout on *one* HTTP request, and a request that transmits no bytes for
  * twelve minutes is not a shape this deployment's internal networking will
@@ -79,7 +86,7 @@ export const RETRAIN_JOB_ID = "retrain:serving-lanes";
  * that never elapsed. It now bounds a *sequence of short requests*, each of
  * which the network is perfectly willing to carry.
  */
-export const RETRAIN_TIMEOUT_MS = 40 * 60_000;
+export const RETRAIN_TIMEOUT_MS = 3 * 60 * 60_000;
 
 /**
  * How long any single call to the modelling service may take.
