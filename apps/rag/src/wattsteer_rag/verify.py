@@ -84,12 +84,17 @@ and the claim. Work in this order:
    "scheduled" for a programmed or scheduled one, "forecast" for a predicted
    one, "none" if it carries no such label). Report what the passage says, not
    what the question asked for.
-3. Compare your answer with the claim.
+3. Compare your answer with the claim. A question may ask for several things
+   (a figure and when it happened, a normal range and an emergency one); a
+   claim may answer one of them. Judge it on the part it answers: it is
+   supported when the passages state what the claim says about that part, even
+   if they say nothing about the others. A claim that answers no part of the
+   question (a figure of something else, however well quoted) is not supported.
 
 Answer only with JSON:
 {"answer_from_passages": "<your answer, or null>",
  "reading": {"grain": "hour|day|month|period|none", "regime": "verified|scheduled|forecast|none"},
- "supported": <true only if the passages answer the question and the claim says the same>,
+ "supported": <true only if the passages answer the part the claim addresses, as the claim says>,
  "reason": "<one short sentence in Portuguese>"}"""
 
 
@@ -130,6 +135,13 @@ ASKS_VERIFIED = re.compile(
 )
 ASKS_SCHEDULED = re.compile(r"\bprogramad[ao]s?\b|\bprevist[ao]s?\b|\bprevis[ãa]o\b|\bplanejad[ao]s?\b", re.I)
 
+# A question that compares the two regimes: it names one side and asks for both.
+ASKS_COMPARISON = re.compile(
+    r"\b(?:abaixo|acima|desvio|diferen[çc]a|comparad[ao]|em rela[çc][ãa]o|frente a[os]?"
+    r"|entreg\w*|cumpri\w*|superou)\b",
+    re.I,
+)
+
 #: The regimes that are not a verified figure, as the reader may name them.
 _UNSETTLED = frozenset({"scheduled", "forecast"})
 
@@ -149,7 +161,14 @@ def asked_reading(question: str) -> tuple[str | None, str | None]:
     hour cue is tested first.
     """
     grain = None if ASKS_HOUR.search(question) else ("day" if ASKS_DATE.search(question) else None)
-    if ASKS_VERIFIED.search(question):
+    if ASKS_COMPARISON.search(question):
+        # "Entregou o que estava programado?", "ficou quanto abaixo da
+        # previsão?": naming one side, asking for both. Measured on 23/09/2026 in
+        # a set written blind to this code: four answers giving the verified and
+        # the scheduled figure and the deviation, each the expected answer, were
+        # refused as "the question asks for the scheduled value".
+        regime = None
+    elif ASKS_VERIFIED.search(question):
         regime = "verified"
     elif ASKS_SCHEDULED.search(question):
         regime = "scheduled"

@@ -247,6 +247,7 @@ const CHECKS = [
   { codes: ["claim_draws_conclusion"], text: "The answer says what the quote says, not what it would mean" },
   { codes: ["claim_about_another_agent"], text: "The answer is about the agent the question asks, not another one" },
   { codes: ["claim_without_the_figure"], text: "A question for a figure is answered with the figure" },
+  { codes: ["claim_restates_question"], text: "The answer adds something to the question" },
   { codes: ["schema_invalid"], text: "The model answered in the required structure" },
 ];
 

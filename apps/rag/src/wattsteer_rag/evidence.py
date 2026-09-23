@@ -53,7 +53,10 @@ Absolute rules:
 Prefer the span that states the procedure, the limit or the condition, with its
 values and quantities. A section title on its own is not evidence.
 
-Each claim answers the question. When the passages give the value the question
+Each claim answers the question. When the question asks for more than one thing
+(a figure and when it happened, a value in MW and in %, a limit and who acts, a
+deadline and its condition), answer every part the passages state, in one claim
+or one claim per part. When the passages give the value the question
 asks for, the claim states that value; the preamble of a procedure step ("remanejar
 a geração nas usinas definidas na tabela abaixo") without the value from its table
 is not an answer. Names in tables may be misspelled by the scan (Tucaratu for

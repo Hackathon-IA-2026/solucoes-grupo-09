@@ -554,3 +554,79 @@ def test_a_question_for_a_duration_is_answered_with_one():
         assert check_claim(ok, {"c2": _hit(answer)}, intervals)[0] is not None, answer
     both = Record(question="No RAP, o que o agente ARGO V deve esclarecer sobre a SE e em que prazo?")
     assert check_claim(item, by_chunk, both)[0] is not None
+
+
+def test_a_claim_that_restates_an_open_question_is_not_an_answer():
+    """Measured on 23/09/2026, in questions written blind to this code: asked
+    when the Nordeste's instantaneous peak happened and how high it was, the
+    claim was the question itself, and every number in it was the question's
+    own. A yes or no question is answered by restating it as a statement."""
+    from wattsteer_rag.gate import Record, check_claim
+
+    row = "| Demanda máxima instantânea | Nordeste | 16.165 MW | 18:15 |"
+    by_chunk = {"c1": _hit(row)}
+    question = (
+        "Em que horário ocorreu a demanda máxima instantânea do Nordeste "
+        "no dia 19/09/2026, e qual foi o valor?"
+    )
+    echo = {"claim": question, "citations": [{"chunk_id": "c1", "quote": row}]}
+    claim, failures = check_claim(echo, by_chunk, Record(question=question))
+    # Its only figures are the question's, so the figure check refuses it first.
+    assert claim is None and failures[-1].code in {"claim_without_the_figure", "claim_restates_question"}
+
+    answer = {
+        "claim": "A demanda máxima instantânea do Nordeste foi de 16.165 MW, às 18:15.",
+        "citations": [{"chunk_id": "c1", "quote": row}],
+    }
+    assert check_claim(answer, by_chunk, Record(question=question))[0] is not None
+
+    fault = "Houve falha de dados de supervisão para o ONS na SE Tianguá II durante a recomposição."
+    yes = {"claim": fault, "citations": [{"chunk_id": "c2", "quote": fault}]}
+    asks_yes_no = Record(question=f"{fault[:-1]}?")
+    assert check_claim(yes, {"c2": _hit(fault)}, asks_yes_no)[0] is not None
+
+
+def test_the_question_date_is_not_the_figure_asked_for():
+    """Measured on 23/09/2026: asked how much the Nordeste's thermal plants
+    generated against the schedule, the claim said only that they were below
+    it, and its one digit was the question's date."""
+    from wattsteer_rag.gate import Record, check_claim
+
+    row = "| Térmica | Nordeste | Programado 2.521 | Verificado 2.330 | inferior ao programado |"
+    by_chunk = {"c1": _hit(row)}
+    question = "Em 09/10/2025, quanto as térmicas do Nordeste geraram frente ao programado?"
+    vague = {
+        "claim": "Em 09/10/2025, a geração térmica do Nordeste foi inferior ao programado.",
+        "citations": [{"chunk_id": "c1", "quote": row}],
+    }
+    claim, failures = check_claim(vague, by_chunk, Record(question=question))
+    assert claim is None and failures[-1].code == "claim_without_the_figure"
+
+    figure = {
+        "claim": "Em 09/10/2025, as térmicas do Nordeste verificaram 2.330 contra 2.521 programados.",
+        "citations": [{"chunk_id": "c1", "quote": row}],
+    }
+    assert check_claim(figure, by_chunk, Record(question=question))[0] is not None
+
+
+def test_one_bulletin_table_does_not_take_every_passage():
+    """Measured on 23/09/2026: asked for a day's consumption in GWh and MWmed,
+    all eight passages were rows of the hourly load table and the daily table
+    that states it never reached the drafter. A table gives three rows while
+    other documents wait; its other rows fill what is left, and a report's
+    pages are not capped at all."""
+    from dataclasses import replace
+
+    from wattsteer_rag.retrieve import _spread
+
+    def row(n: int, document: str, source: str = "BDO") -> Hit:
+        return replace(_hit(f"row {n}"), chunk_id=f"{document}-{n}", document_id=document, source=source)
+
+    hourly = [row(n, "hourly") for n in range(10)]
+    daily = row(0, "daily")
+    kept = _spread([*hourly, daily], 8)
+    assert len(kept) == 8 and daily in kept
+    assert [hit.chunk_id for hit in kept[:3]] == ["hourly-0", "hourly-1", "hourly-2"]
+    assert _spread(hourly, 8) == hourly[:8]
+    report = [row(n, "rap", source="RAP") for n in range(10)]
+    assert _spread(report, 8) == report[:8]

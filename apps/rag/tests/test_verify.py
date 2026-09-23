@@ -218,3 +218,19 @@ def test_the_prompt_asks_for_the_reading_it_is_checked_on():
     # Whitespace-insensitive: the instruction wraps, and a test pinned to where
     # it wraps would break on a reflow rather than on a changed rule.
     assert "not what the question asked for" in " ".join(VERIFY_PROMPT.split())
+
+
+def test_a_comparison_asks_for_both_regimes():
+    """Measured on 23/09/2026, in questions written blind to this code: "A usina
+    solar Futura entregou o que estava programado?" was answered with 115,37
+    delivered against 155,50 scheduled, -25,81%, the expected answer, and refused
+    as "the question asks for the scheduled value". Naming one side of a
+    comparison asks for both; a question about one side still names it."""
+    from wattsteer_rag.verify import asked_reading
+
+    assert asked_reading("A usina solar Futura entregou o que estava programado em 15/09/2026?")[1] is None
+    assert (
+        asked_reading("Às 10h do dia 13/09/2026, a carga do Sul ficou quanto abaixo da previsão?")[1] is None
+    )
+    assert asked_reading("Qual foi a carga programada do Sul em 13/09/2026?")[1] == "scheduled"
+    assert asked_reading("Qual foi a geração eólica verificada no Nordeste em 12/09/2023?")[1] == "verified"

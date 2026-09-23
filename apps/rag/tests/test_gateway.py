@@ -295,3 +295,60 @@ def test_payment_required_is_a_refusal_not_a_quota(config, monkeypatch):
     unpaid.update({"key-a2", "key-b1"})
     with pytest.raises(ProviderRefused, match="402"):
         asyncio.run(gateway.run("generate_strong", tokens=10, messages=[]))
+
+
+def test_a_link_may_ask_for_more_output_than_its_task(tmp_path, monkeypatch):
+    """Measured on 23/09/2026: Gemma's reasoning counts against max_tokens, and at
+    the verify task's 1,200 it closed its thought with no room left for the JSON.
+    Raising the task's budget would change every other provider's calls too."""
+    import asyncio
+
+    monkeypatch.setenv("TEST_ALPHA_KEYS", "key-a1")
+    monkeypatch.setenv("TEST_BETA_KEY", "key-b1")
+    path = tmp_path / "gateway.yaml"
+    path.write_text(
+        CONFIG.replace(
+            "{ provider: beta, model: m-small }\n      - { provider: gamma",
+            "{ provider: beta, model: m-small, max_output_tokens: 4000 }\n      - { provider: gamma",
+        )
+    )
+    gateway = Gateway(path)
+    budgets = {}
+
+    async def chat(_client, secret, **kwargs):
+        budgets[secret] = kwargs["max_tokens"]
+        if secret == "key-a1":
+            raise ProviderError("overloaded", status=503)
+        return {"ok": True}, {}
+
+    from wattsteer_rag.gateway.adapters import ProviderError
+
+    for provider in gateway.providers.values():
+        monkeypatch.setattr(provider.adapter, "chat", chat)
+    asyncio.run(gateway.run("generate_strong", tokens=10, messages=[]))
+    assert budgets == {"key-a1": 1000, "key-b1": 4000}
+
+
+def test_a_table_read_as_text_for_want_of_quota_is_read_again(monkeypatch, tmp_path):
+    """Measured on 23/09/2026: 71 table pages, the procedures' deadline tables
+    among them, had been kept as text layer since the vision quota ran out at
+    indexing, and nothing came back for them. The text stands in, and the page
+    is owed, so the document is read again."""
+    import asyncio
+
+    from wattsteer_rag import parse
+    from wattsteer_rag.gateway.router import QuotaExhausted
+
+    table = "\n".join(f"Item {n}      Antecedência mínima de      {n} dias úteis" for n in range(8))
+    prose = "\n".join("Texto corrido de um procedimento sem colunas, só frases." for _ in range(8))
+
+    async def no_quota(*_args, **_kwargs):
+        raise QuotaExhausted("parse", 0.0)
+
+    monkeypatch.setattr(parse, "_vision_page", no_quota)
+    for text, owed in ((table, [1]), (prose, [])):
+        monkeypatch.setattr(parse, "pdf_text", lambda *_a, text=text: text)
+        unread: list[int] = []
+        page = asyncio.run(parse._read_page(None, tmp_path / "x.pdf", 1, False, unread))
+        assert page is not None and page.parser == parse.TEXT_LAYER_PARSER
+        assert unread == owed

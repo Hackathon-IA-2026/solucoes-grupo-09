@@ -68,6 +68,9 @@ class Link:
     provider: str
     model: str
     max_input_tokens: int | None = None
+    # A model that reasons before it answers spends its output budget thinking;
+    # the task's budget suits the others, so a link can ask for more.
+    max_output_tokens: int | None = None
 
 
 @dataclass
@@ -140,7 +143,12 @@ class Gateway:
         return Task(
             name=name,
             chain=[
-                Link(link["provider"], link.get("model", ""), link.get("max_input_tokens"))
+                Link(
+                    link["provider"],
+                    link.get("model", ""),
+                    link.get("max_input_tokens"),
+                    link.get("max_output_tokens"),
+                )
                 for link in spec.get("chain", [])
             ],
             model=spec.get("model"),
@@ -221,7 +229,7 @@ class Gateway:
             walk.attempts += 1
             started = time.perf_counter()
             try:
-                value, usage = await self._invoke(task, provider, model, slot, kwargs)
+                value, usage = await self._invoke(task, link, provider, model, slot, kwargs)
             except ProviderError as exc:
                 self._record(task.name, provider.name, slot.id, model, walk.attempts, 0, 0, str(exc))
                 log.warning("gateway %s %s key=%s: %s", task.name, model, slot.id, exc)
@@ -258,7 +266,9 @@ class Gateway:
             walk.soonest = min(walk.soonest, self.ledger.slot(provider.name, key.id, model).next_free(now))
         return None
 
-    async def _invoke(self, task: Task, provider: Provider, model: str, slot: KeySlot, kwargs: dict):
+    async def _invoke(
+        self, task: Task, link: Link, provider: Provider, model: str, slot: KeySlot, kwargs: dict
+    ):
         """Three verbs, chosen by the task: `embed`, `parse`, and everything else chats."""
         client = await self.client()
         adapter = provider.adapter
@@ -277,7 +287,7 @@ class Gateway:
             slot.secret,
             model=model,
             messages=kwargs["messages"],
-            max_tokens=kwargs.get("max_tokens", task.max_output_tokens),
+            max_tokens=kwargs.get("max_tokens", link.max_output_tokens or task.max_output_tokens),
             temperature=kwargs.get("temperature", task.temperature),
             want_json=kwargs.get("want_json", task.want_json),
         )

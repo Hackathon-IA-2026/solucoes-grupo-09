@@ -245,10 +245,36 @@ async def search(
     # and reordering what already survived the cut could never reach it. The
     # filters above are correctness rules and have already run, so this reorders
     # strictly inside what they allowed.
-    reranking = rerank(question, ranked, limit, model=settings().rerank_model)
+    reranking = rerank(question, ranked, len(ranked), model=settings().rerank_model)
     if report is not None:
         report["rerank_provider"] = reranking.provider
-    return reranking.hits
+    return _spread(reranking.hits, limit)
+
+
+# A bulletin table is one document split into one chunk per row, and its rows
+# are near copies of each other. Measured on 23/09/2026: asked for the
+# Nordeste's consumption of a day in GWh and MWmed, all eight passages were rows
+# of the hourly load table, and the daily table that states it never reached
+# the drafter. Other documents are sections of one text, where several chunks of
+# the same document are often the answer, so only bulletin tables are capped.
+ROWS_PER_TABLE = 3
+
+
+def _spread(hits: list[Hit], limit: int) -> list[Hit]:
+    """The best `limit` hits, with no bulletin table taking more than its share
+    while other documents are waiting; rows set aside fill what is left."""
+    kept: list[Hit] = []
+    set_aside: list[Hit] = []
+    per_table: dict[str, int] = {}
+    for hit in hits:
+        if len(kept) == limit:
+            break
+        if hit.source == "BDO" and per_table.get(hit.document_id, 0) >= ROWS_PER_TABLE:
+            set_aside.append(hit)
+            continue
+        per_table[hit.document_id] = per_table.get(hit.document_id, 0) + 1
+        kept.append(hit)
+    return kept + set_aside[: limit - len(kept)]
 
 
 def _to_hit(row, k: int, rank: int) -> Hit:
