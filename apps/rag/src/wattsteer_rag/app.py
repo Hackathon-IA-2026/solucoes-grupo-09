@@ -15,7 +15,7 @@ import asyncio
 import logging
 import secrets
 from contextlib import asynccontextmanager
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from typing import Any
 
 import httpx
@@ -132,7 +132,11 @@ async def status() -> dict:
 
 @app.post("/internal/rag/refresh", status_code=202)
 async def refresh(days: int = Query(1, ge=1, le=7)) -> dict:
-    """Fetch yesterday's daily record, index it, and say so.
+    """Fetch the recent daily record, fill what the last week is missing, index it.
+
+    The last `days` bulletins, any BDO of the week before them that is missing or
+    incomplete, and whichever IPDO editions the portal still serves (see
+    `Crawler.fetch_missing_bdo` and `Crawler.fetch_live_ipdo`).
 
     **Why this exists at all.** The normative corpus — the operating
     instructions and the network procedures — changes a few times a year, and a
@@ -175,8 +179,7 @@ async def _refresh(days: int) -> None:
     try:
         crawler = Crawler(db)
         async with httpx.AsyncClient() as client:
-            for back in range(days):
-                await crawler.fetch_bdo(client, date.today() - timedelta(days=back + 1))
+            await crawler.fetch_missing_bdo(client, date.today(), days)
             await crawler.fetch_live_ipdo(client, date.today(), days)
         for row in await pending_documents(db, limit=60):
             await ingest_document(db, gateway, row)
