@@ -583,3 +583,26 @@ def test_a_claim_that_restates_an_open_question_is_not_an_answer():
     yes = {"claim": fault, "citations": [{"chunk_id": "c2", "quote": fault}]}
     asks_yes_no = Record(question=f"{fault[:-1]}?")
     assert check_claim(yes, {"c2": _hit(fault)}, asks_yes_no)[0] is not None
+
+
+def test_one_bulletin_table_does_not_take_every_passage():
+    """Measured on 23/09/2026: asked for a day's consumption in GWh and MWmed,
+    all eight passages were rows of the hourly load table and the daily table
+    that states it never reached the drafter. A table gives three rows while
+    other documents wait; its other rows fill what is left, and a report's
+    pages are not capped at all."""
+    from dataclasses import replace
+
+    from wattsteer_rag.retrieve import _spread
+
+    def row(n: int, document: str, source: str = "BDO") -> Hit:
+        return replace(_hit(f"row {n}"), chunk_id=f"{document}-{n}", document_id=document, source=source)
+
+    hourly = [row(n, "hourly") for n in range(10)]
+    daily = row(0, "daily")
+    kept = _spread([*hourly, daily], 8)
+    assert len(kept) == 8 and daily in kept
+    assert [hit.chunk_id for hit in kept[:3]] == ["hourly-0", "hourly-1", "hourly-2"]
+    assert _spread(hourly, 8) == hourly[:8]
+    report = [row(n, "rap", source="RAP") for n in range(10)]
+    assert _spread(report, 8) == report[:8]
