@@ -197,10 +197,15 @@ python eval/run_eval.py --goldset eval/questions.jsonl          # all of it
 python eval/run_eval.py --goldset eval/questions.jsonl --ids B,O  # one family
 ```
 
-A question scores `correct`, `refused` or `wrong`. Correct means the answer
-cites the expected document and states every expected number; for an `R`
-question, correct is a refusal. **Wrong is the number to drive to zero**: a
-refusal is an honest gap in the corpus, a wrong answer is a reader misled. To
+A question scores `correct`, `refused`, `wrong` or `unavailable`. Correct means
+the answer cites the expected document and states every expected number; for an
+`R` question, correct is a refusal. **Wrong is the number to drive to zero**: a
+refusal is an honest gap in the corpus, a wrong answer is a reader misled.
+`unavailable` is a case no provider could answer (quota spent, a 503, no claim
+reader): it says whether a free tier was up, not whether the service reads the
+record right, so it is counted apart. The summary reports `accuracy`, correct
+over the cases a provider was up for, and `precision`, correct over the answers
+given. To
 add a case, read the value in the published file, not in the index: a question
 written from an indexed chunk inherits whatever the parser got wrong.
 
