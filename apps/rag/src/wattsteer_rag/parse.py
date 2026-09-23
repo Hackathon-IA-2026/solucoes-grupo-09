@@ -237,7 +237,14 @@ async def _read_page(
         page = await _vision_page(gateway, pdf, page_no)
     except QuotaExhausted:
         page = None
-        if not text and unread is not None:
+        # A table read from the text layer is a stand-in, not a reading: its
+        # cells wrap across lines between the other columns, so a sentence of one
+        # cell is not contiguous and no literal quote of it can pass the gate.
+        # Measured on 23/09/2026: 71 table pages had been kept that way since
+        # the vision quota ran out at indexing, the procedures' deadline tables
+        # among them, and nothing ever came back for them. The text stands in
+        # until the document is read again, as a page with no text layer does.
+        if unread is not None and (not text or looks_tabular(text)):
             unread.append(page_no)
     if page is None:
         text = text or pdf_text(pdf, page_no, page_no)

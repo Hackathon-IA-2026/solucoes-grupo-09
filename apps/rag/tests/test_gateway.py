@@ -295,3 +295,28 @@ def test_payment_required_is_a_refusal_not_a_quota(config, monkeypatch):
     unpaid.update({"key-a2", "key-b1"})
     with pytest.raises(ProviderRefused, match="402"):
         asyncio.run(gateway.run("generate_strong", tokens=10, messages=[]))
+
+
+def test_a_table_read_as_text_for_want_of_quota_is_read_again(monkeypatch, tmp_path):
+    """Measured on 23/09/2026: 71 table pages, the procedures' deadline tables
+    among them, had been kept as text layer since the vision quota ran out at
+    indexing, and nothing came back for them. The text stands in, and the page
+    is owed, so the document is read again."""
+    import asyncio
+
+    from wattsteer_rag import parse
+    from wattsteer_rag.gateway.router import QuotaExhausted
+
+    table = "\n".join(f"Item {n}      Antecedência mínima de      {n} dias úteis" for n in range(8))
+    prose = "\n".join("Texto corrido de um procedimento sem colunas, só frases." for _ in range(8))
+
+    async def no_quota(*_args, **_kwargs):
+        raise QuotaExhausted("parse", 0.0)
+
+    monkeypatch.setattr(parse, "_vision_page", no_quota)
+    for text, owed in ((table, [1]), (prose, [])):
+        monkeypatch.setattr(parse, "pdf_text", lambda *_a, text=text: text)
+        unread: list[int] = []
+        page = asyncio.run(parse._read_page(None, tmp_path / "x.pdf", 1, False, unread))
+        assert page is not None and page.parser == parse.TEXT_LAYER_PARSER
+        assert unread == owed

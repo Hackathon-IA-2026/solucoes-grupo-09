@@ -325,6 +325,7 @@
                   "claim_draws_conclusion",
                   "claim_about_another_agent",
                   "claim_without_the_figure",
+                  "claim_restates_question",
                   "quote_points_to_table",
                   "quote_does_not_state_claim"
                 ]

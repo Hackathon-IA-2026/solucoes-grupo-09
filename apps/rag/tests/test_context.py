@@ -554,3 +554,32 @@ def test_a_question_for_a_duration_is_answered_with_one():
         assert check_claim(ok, {"c2": _hit(answer)}, intervals)[0] is not None, answer
     both = Record(question="No RAP, o que o agente ARGO V deve esclarecer sobre a SE e em que prazo?")
     assert check_claim(item, by_chunk, both)[0] is not None
+
+
+def test_a_claim_that_restates_an_open_question_is_not_an_answer():
+    """Measured on 23/09/2026, in questions written blind to this code: asked
+    when the Nordeste's instantaneous peak happened and how high it was, the
+    claim was the question itself, and every number in it was the question's
+    own. A yes or no question is answered by restating it as a statement."""
+    from wattsteer_rag.gate import Record, check_claim
+
+    row = "| Demanda máxima instantânea | Nordeste | 16.165 MW | 18:15 |"
+    by_chunk = {"c1": _hit(row)}
+    question = (
+        "Em que horário ocorreu a demanda máxima instantânea do Nordeste "
+        "no dia 19/09/2026, e qual foi o valor?"
+    )
+    echo = {"claim": question, "citations": [{"chunk_id": "c1", "quote": row}]}
+    claim, failures = check_claim(echo, by_chunk, Record(question=question))
+    assert claim is None and failures[-1].code == "claim_restates_question"
+
+    answer = {
+        "claim": "A demanda máxima instantânea do Nordeste foi de 16.165 MW, às 18:15.",
+        "citations": [{"chunk_id": "c1", "quote": row}],
+    }
+    assert check_claim(answer, by_chunk, Record(question=question))[0] is not None
+
+    fault = "Houve falha de dados de supervisão para o ONS na SE Tianguá II durante a recomposição."
+    yes = {"claim": fault, "citations": [{"chunk_id": "c2", "quote": fault}]}
+    asks_yes_no = Record(question=f"{fault[:-1]}?")
+    assert check_claim(yes, {"c2": _hit(fault)}, asks_yes_no)[0] is not None
