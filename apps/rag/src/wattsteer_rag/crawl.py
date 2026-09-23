@@ -292,7 +292,23 @@ class Crawler:
 
     # The daily record --------------------------------------------------
 
-    async def fetch_bdo(self, client: httpx.AsyncClient, day: date) -> list[dict]:
+    async def bdo_tables(self, client: httpx.AsyncClient, day: date) -> list[str] | None:
+        """The tables a day's bulletin publishes, read from its index page.
+
+        Not the schematic diagram (`22_DiagramaEsquematico_SVG.html`): it has no
+        text, indexed to zero chunks, and is the same file every day, so the hash
+        filed each day's copy under 14/09's and every later day read as one table
+        short, which the catch-up would have fetched again every day.
+        """
+        index = await self._get(client, f"{BDO_BASE}/{day.strftime('%Y_%m_%d')}/index.htm", suffix=".html")
+        if index is None:
+            return None
+        names = set(re.findall(r'href="HTML/([0-9]{2}_[A-Za-z_]+\.html)"', index.path.read_text("latin-1")))
+        return sorted(name for name in names if not name.endswith("_SVG.html"))
+
+    async def fetch_bdo(
+        self, client: httpx.AsyncClient, day: date, names: list[str] | None = None
+    ) -> list[dict]:
         """The Boletim Diario da Operacao, as HTML tables.
 
         The PDF of a single day is 18 MB of images with no text layer, and the
@@ -300,14 +316,10 @@ class Crawler:
         folder. Taking the HTML costs nothing, needs no vision model, and keeps
         the numbers exact.
         """
-        stamp = day.strftime("%Y_%m_%d")
-        base = f"{BDO_BASE}/{stamp}"
-        index = await self._get(client, f"{base}/index.htm", suffix=".html")
-        if index is None:
+        base = f"{BDO_BASE}/{day.strftime('%Y_%m_%d')}"
+        names = names if names is not None else await self.bdo_tables(client, day)
+        if names is None:
             return [{"source": "BDO", "day": day.isoformat(), "ok": False, "error": "no folder for that day"}]
-        names = sorted(
-            set(re.findall(r'href="HTML/([0-9]{2}_[A-Za-z_]+\.html)"', index.path.read_text("latin-1")))
-        )
         out = []
         # The folder is published from about 15:00 in Brasilia. Recording midnight
         # would let a same-day gate admit a document that did not exist yet.
@@ -376,19 +388,29 @@ class Crawler:
         out: list[dict] = []
         for back in range(1, max(days, BDO_CATCH_UP_DAYS) + 1):
             day = today - timedelta(days=back)
-            if back > days and day.isoformat() in held:
+            if back <= days:
+                out += await self.fetch_bdo(client, day)
                 continue
-            out += await self.fetch_bdo(client, day)
+            # A day with some tables is not a day with all of them: a table whose
+            # fetch failed would never be asked for again. The index says how
+            # many the bulletin has, for one request.
+            if not held.get(day.isoformat()):
+                out += await self.fetch_bdo(client, day)
+                continue
+            names = await self.bdo_tables(client, day)
+            if names is not None and held[day.isoformat()] < len(names):
+                out += await self.fetch_bdo(client, day, names)
         return out
 
-    async def bdo_days(self) -> set[str]:
+    async def bdo_days(self) -> dict[str, int]:
+        """How many of each day's bulletin tables the corpus holds."""
         pool = await self.db.connect()
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT DISTINCT split_part(external_id, ' ', 2) AS day"
-                " FROM rag.document WHERE source = 'BDO'"
+                "SELECT split_part(external_id, ' ', 2) AS day, count(*) AS tables"
+                " FROM rag.document WHERE source = 'BDO' GROUP BY 1"
             )
-        return {row["day"] for row in rows}
+        return {row["day"]: row["tables"] for row in rows}
 
     async def fetch_live_ipdo(self, client: httpx.AsyncClient, today: date, days: int = 1) -> list[dict]:
         """Whichever editions are on the portal now, looking back far enough.

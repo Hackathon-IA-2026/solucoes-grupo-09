@@ -132,7 +132,11 @@ async def status() -> dict:
 
 @app.post("/internal/rag/refresh", status_code=202)
 async def refresh(days: int = Query(1, ge=1, le=7)) -> dict:
-    """Fetch yesterday's daily record, index it, and say so.
+    """Fetch the recent daily record, fill what the last week is missing, index it.
+
+    The last `days` bulletins, any BDO of the week before them that is missing or
+    incomplete, and whichever IPDO editions the portal still serves (see
+    `Crawler.fetch_missing_bdo` and `Crawler.fetch_live_ipdo`).
 
     **Why this exists at all.** The normative corpus — the operating
     instructions and the network procedures — changes a few times a year, and a
