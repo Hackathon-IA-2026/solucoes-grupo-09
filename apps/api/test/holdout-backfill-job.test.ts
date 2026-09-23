@@ -55,6 +55,35 @@ const serving = (
   };
 };
 
+/**
+ * The two-step shape the route has now: a start that answers 202 and a status
+ * read that carries the report.
+ *
+ * The route used to run the child inside the POST and answer with its report.
+ * That did not survive the deployment's internal networking — measured
+ * 2026-09-22, the call was cut at about 350 s while the child scored for
+ * another ninety minutes — and because this route's product *is* its body, a
+ * cut connection threw the rows away rather than merely losing a report. These
+ * tests follow the handler into the new shape; what each one asserts is
+ * unchanged.
+ */
+const twoStep =
+  (
+    answer: () => Response,
+    onStart?: (body: unknown, path: string) => void,
+  ): ((request: Request) => Promise<Response>) =>
+  async (request: Request): Promise<Response> => {
+    const path = new URL(request.url).pathname;
+    if (request.method === "POST") {
+      onStart?.(await request.json(), path);
+      return Response.json({ fold: "latest", status: "running" }, { status: 202 });
+    }
+    return answer();
+  };
+
+/** No real waiting: the loop's first sleep is otherwise two seconds per test. */
+const promptly = { poll: { minMs: 0, maxMs: 0 }, sleep: async (): Promise<void> => {} };
+
 /** The real payload the modelling service's own shared fit emits. */
 const RUN = JSON.parse(
   readFileSync(
@@ -110,16 +139,21 @@ describe("the fold's held-out days reach Postgres", () => {
   it("asks the modelling service for a fold and writes what comes back", async () => {
     let asked: unknown = null;
     let path = "";
-    const service = serving(async (request) => {
-      path = new URL(request.url).pathname;
-      asked = await request.json();
-      return json(report([RUN]));
-    });
+    const service = serving(
+      twoStep(
+        () => json(report([RUN])),
+        (body, at) => {
+          path = at;
+          asked = body;
+        },
+      ),
+    );
     const writer = spy();
     try {
       const backfill = createHoldoutBackfiller({
         db,
         endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+        ...promptly,
         write: writer.write,
         now: () => new Date("2026-09-04T03:41:00.000Z"),
       });
@@ -142,12 +176,13 @@ describe("the fold's held-out days reach Postgres", () => {
     // The vintage axis. Two days of one backfill written at two instants would
     // make an `AsOf` between them see half a run, and a replay pinned there
     // would reconstruct a fold that never existed.
-    const service = serving(() => json(report([RUN, RUN])));
+    const service = serving(twoStep(() => json(report([RUN, RUN]))));
     const writer = spy();
     try {
       const backfill = createHoldoutBackfiller({
         db,
         endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+        ...promptly,
         write: writer.write,
         now: () => new Date("2026-09-04T03:41:00.000Z"),
       });
@@ -167,18 +202,97 @@ describe("the fold's held-out days reach Postgres", () => {
     // is depends on the calendar — which lives on the modelling service. A
     // gateway that computed it would be a second fold calendar.
     let asked: unknown = null;
-    const service = serving(async (request) => {
-      asked = await request.json();
-      return json(report([RUN]));
-    });
+    const service = serving(
+      twoStep(
+        () => json(report([RUN])),
+        (body) => {
+          asked = body;
+        },
+      ),
+    );
     try {
       const backfill = createHoldoutBackfiller({
         db,
         endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+        ...promptly,
         write: spy().write,
       });
       await backfill({}, () => {});
       expect(asked).toEqual({});
+    } finally {
+      service.stop();
+    }
+  });
+
+  it("attaches to a run already in flight rather than failing on its 409", async () => {
+    // The defect this shape exists to remove, from the queue's side. A worker
+    // that was replaced — or a job redelivered — meets a child that is already
+    // scoring the fold, and `HOLDOUT_BACKFILL_IN_PROGRESS` is the service
+    // saying "it is started, go and poll it". Read as a failure, the queue
+    // retried into the same 409 for as long as the child ran, and the rows it
+    // was computing were never collected by anyone.
+    let polled = 0;
+    const service = serving(async (request: Request): Promise<Response> => {
+      if (request.method === "POST") {
+        return Response.json(
+          {
+            error: {
+              code: "HOLDOUT_BACKFILL_IN_PROGRESS",
+              message: "already being backfilled",
+            },
+          },
+          { status: 409 },
+        );
+      }
+      polled += 1;
+      return json(report([RUN]));
+    });
+    const writer = spy();
+    try {
+      const backfill = createHoldoutBackfiller({
+        db,
+        endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+        ...promptly,
+        write: writer.write,
+      });
+
+      const result = await backfill({ foldId: "F3" }, () => {});
+
+      expect(polled).toBeGreaterThan(0);
+      expect(result.runs).toHaveLength(1);
+      expect(writer.written).toHaveLength(1);
+    } finally {
+      service.stop();
+    }
+  });
+
+  it("polls the status route until the run stops running", async () => {
+    // A long single request is what this replaced, so the property worth
+    // holding is that the handler *waits by asking*: the first status read says
+    // `running` and carries no rows, and the job must not treat that as an
+    // empty fold.
+    let reads = 0;
+    const service = serving(
+      twoStep(() => {
+        reads += 1;
+        return reads < 3
+          ? Response.json({ fold: "F3", status: "running", elapsed_seconds: 1 })
+          : json(report([RUN]));
+      }),
+    );
+    const writer = spy();
+    try {
+      const backfill = createHoldoutBackfiller({
+        db,
+        endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+        ...promptly,
+        write: writer.write,
+      });
+
+      const result = await backfill({ foldId: "F3" }, () => {});
+
+      expect(reads).toBe(3);
+      expect(result.runs).toHaveLength(1);
     } finally {
       service.stop();
     }
@@ -190,12 +304,13 @@ describe("the fold's held-out days reach Postgres", () => {
     // under the served discriminator is the one row this whole ticket exists to
     // make unwritable.
     const forged = { ...structuredClone(RUN), origin_kind: "served" };
-    const service = serving(() => json(report([forged])));
+    const service = serving(twoStep(() => json(report([forged]))));
     const writer = spy();
     try {
       const backfill = createHoldoutBackfiller({
         db,
         endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+        ...promptly,
         write: writer.write,
       });
 
@@ -211,15 +326,21 @@ describe("the fold's held-out days reach Postgres", () => {
     // One lane's fault is a line, not the run. The morning view is the fallback
     // that makes a wrong evening call recoverable, and a backfill that dropped
     // the whole fold because one lane had no rows would take it away.
-    const service = serving(() =>
-      json(
-        report([RUN], [{ lane: "dessem_free_v1__gate_early__thr5", reason: "no rows" }]),
+    const service = serving(
+      twoStep(() =>
+        json(
+          report(
+            [RUN],
+            [{ lane: "dessem_free_v1__gate_early__thr5", reason: "no rows" }],
+          ),
+        ),
       ),
     );
     try {
       const backfill = createHoldoutBackfiller({
         db,
         endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+        ...promptly,
         write: spy().write,
       });
 
@@ -267,6 +388,7 @@ describe("the schedule", () => {
         db,
         holdoutBackfill: {
           endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+          ...promptly,
           write: spy().write,
         },
       } as Parameters<typeof createWorkerDispatch>[0]);

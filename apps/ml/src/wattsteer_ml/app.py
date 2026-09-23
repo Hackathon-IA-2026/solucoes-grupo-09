@@ -23,7 +23,8 @@ Routes:
   GET /v1/model/card          the promoted artifact's card, verbatim, off the volume
   POST /internal/retrain      worker-only; starts the weekly retrain, returns 202
   GET  /internal/retrain/{run_id}  worker-only; that run's progress, then its report
-  POST /internal/backfill/holdout  worker-only; one fold's out-of-fold forecasts
+  POST /internal/backfill/holdout  worker-only; starts one fold's reconstruction
+  GET  /internal/backfill/holdout/{fold}  worker-only; that run's progress, then its rows
 
 There is deliberately **no day-ahead read here**. This service carried a
 `GET /v1/forecast/day-ahead` stub for the gateway to proxy — a typed shape with
@@ -38,8 +39,6 @@ answer.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import sys
 import time
@@ -53,7 +52,7 @@ from fastapi import Body, Depends, FastAPI, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from . import __version__, artifacts
+from . import __version__, artifacts, backfill_supervisor
 from . import retrain_supervisor as supervisor
 from .artifacts import CARD_SUFFIX, inspect
 from .canonical_reads import ReadAxes, apply_axes
@@ -1036,12 +1035,11 @@ async def retrain_status(run_id: str) -> JSONResponse:
     )
 
 
-#: Which folds are being backfilled by *this* instance, for the same reason
-#: :func:`~wattsteer_ml.retrain_supervisor.is_running` exists: two passes over
-#: one fold would race each other
-#: over one artifact id, and that id is now the fold's rather than a clock's, so
-#: the collision is certain rather than unlikely.
-_BACKFILLING: set[str] = set()
+# The set of folds in flight moved to
+# :data:`wattsteer_ml.backfill_supervisor._BACKFILLING` when the run stopped
+# living inside the request. It guards the same thing it always guarded — two
+# passes racing each other over one artifact id — and is now taken and released
+# by the supervising task, because the run outlives the request that started it.
 
 
 class HoldoutBackfillRequestBody(BaseModel):
@@ -1057,37 +1055,39 @@ class HoldoutBackfillRequestBody(BaseModel):
 async def backfill_holdout(
     request: Annotated[HoldoutBackfillRequestBody, Body()],
 ) -> JSONResponse:
-    """Score one fold in a child interpreter and return its held-out days.
+    """Start one fold's reconstruction in a child interpreter. **202, immediately.**
 
-    `docs/specs/replay.md`'s one storage requirement, as a route. It returns the
-    rows and **writes nothing**: this service is read-only against Postgres, so
-    the gateway's worker appends them — the same direction
-    ``/internal/publish/forecast`` already goes, through the same parser.
+    It does not wait for the run. See
+    :class:`~wattsteer_ml.backfill_supervisor.BackfillRun` for the measurement
+    that made waiting untenable — and for why it mattered more here than it did
+    on the retrain: this route's product *is* its response body, because the
+    service is read-only against Postgres and the worker is what appends the
+    rows. A cut connection did not merely report a failure that had not
+    happened; it threw the rows away.
 
-    ``/internal`` for the reason the retrain is: nothing a user does reaches it,
-    and a multi-minute LightGBM fit on this event loop would stall every read
-    this instance is also serving. The child process is what keeps that true.
-
-    Three refusals, and none of them is a half-run backfill:
+    Two refusals are still decided before a process exists:
 
     - the same fold already in flight here — ``HOLDOUT_BACKFILL_IN_PROGRESS``,
-      409, checked before the database because it is a fact about this instance;
-    - no database — ``DATA_UNAVAILABLE``, 503;
-    - a child that failed — ``HOLDOUT_BACKFILL_FAILED``, 500, carrying its exit
-      code and the tails of its stderr and its stdout (each lane's reason is in
-      the report, on stdout). A run that reconstructed no lane at all
-      is a failed run; a run whose second lane failed is not, and comes back 200
-      with that lane named in ``failures``.
+      409, checked before the database because it is a fact about this instance.
+      The worker reads it as "already started, go and poll it" rather than as a
+      failure, which is what makes a worker restart cost nothing;
+    - no database — ``DATA_UNAVAILABLE``, 503.
+
+    A child that fails is reported by the status route, which is the only place
+    a verdict about the run can now come from.
     """
-    key = request.fold_id or ""
-    if key in _BACKFILLING:
+    fold = backfill_supervisor.key_for(request.fold_id)
+    if backfill_supervisor.is_running(fold):
         return _refusal(
             409,
             "HOLDOUT_BACKFILL_IN_PROGRESS",
-            f"{request.fold_id or 'the newest frozen fold'} is already being "
-            "backfilled by this instance; a second pass would race the first "
-            "over one artifact id",
-            {"fold_id": request.fold_id},
+            f"{fold} is already being backfilled by this instance; a second "
+            "pass would race the first over one artifact id. Poll "
+            f"{backfill_supervisor.STATUS_PATH.format(fold=fold)} for it",
+            {
+                "fold_id": request.fold_id,
+                "status": backfill_supervisor.STATUS_PATH.format(fold=fold),
+            },
         )
     if settings.database_url is None:
         return _refusal(
@@ -1105,51 +1105,64 @@ async def backfill_holdout(
     ]
     if request.fold_id is not None:
         argv += ["--fold", request.fold_id]
-    _BACKFILLING.add(key)
-    try:
-        child = await asyncio.create_subprocess_exec(
-            *argv,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            # A fold is ninety days of four subsystems' hours. The default pipe
-            # limit is 64 KiB and the payload is megabytes, so the reader is
-            # sized for the answer rather than for a typical one.
-            limit=64 * 1024 * 1024,
-        )
-        out, err = await child.communicate()
-    finally:
-        _BACKFILLING.discard(key)
-    if child.returncode != 0:
-        logger.error(
-            "holdout backfill %s exited %s: %s | stdout: %s",
-            key or "latest",
-            child.returncode,
-            err,
-            out[-2_000:],
-        )
+    backfill_supervisor.begin(fold, argv)
+    return JSONResponse(
+        {
+            "fold": fold,
+            "status": "running",
+            "poll": backfill_supervisor.STATUS_PATH.format(fold=fold),
+        },
+        status_code=202,
+    )
+
+
+@app.get("/internal/backfill/holdout/{fold}", tags=["replay"])
+async def backfill_holdout_status(fold: str) -> JSONResponse:
+    """What that backfill is doing, and — once it is over — its rows.
+
+    Three answers, and the worker's poll loop turns on them:
+
+    - **running**: 200 with the elapsed seconds, measured here rather than
+      asserted from a ceiling.
+    - **done**: 200 carrying the child's report verbatim — the body the POST
+      used to return, so nothing downstream had to learn a second shape.
+    - **failed**: 500 ``HOLDOUT_BACKFILL_FAILED`` with the child's exit code and
+      the tails of its stderr and its stdout. Both, because the report is on
+      stdout: a run that reconstructed no lane exits 1 with every lane's reason
+      there and an empty stderr.
+
+    A fold this instance has never started, or has forgotten, is a 404
+    ``HOLDOUT_BACKFILL_UNKNOWN`` — which is what the worker sees when this
+    service was replaced mid-run. It is a real failure of *that* run: the child
+    went with the container. Starting it again is safe, because the rows carry
+    the fold's own artifact id and a later pass supersedes rather than
+    duplicates.
+    """
+    run = backfill_supervisor.find(fold)
+    if run is None:
         return _refusal(
-            500,
-            "HOLDOUT_BACKFILL_FAILED",
-            f"the holdout backfill process exited {child.returncode}",
+            404,
+            "HOLDOUT_BACKFILL_UNKNOWN",
+            f"this instance has not started a backfill for {fold}; either it "
+            "never did, or it was replaced while the run was in flight and the "
+            "child went with it. Starting the run again is safe — the rows "
+            "carry the fold's own artifact id",
+            {"fold": fold},
+        )
+    if run.status == "running":
+        return JSONResponse(
             {
-                "fold_id": request.fold_id,
-                "stderr": err.decode("utf-8", "replace")[-2_000:],
-                # Each lane's reason is in the report, which is on stdout: a
-                # run that reconstructed no lane exits 1 with stderr empty.
-                "stdout": out.decode("utf-8", "replace")[-2_000:],
-            },
+                "fold": fold,
+                "status": "running",
+                "elapsed_seconds": run.elapsed_seconds,
+            }
         )
-    try:
-        report = json.loads(out.decode("utf-8"))
-    except ValueError:
-        logger.error("holdout backfill %s printed no report", key or "latest")
-        return _refusal(
-            500,
-            "HOLDOUT_BACKFILL_FAILED",
-            "the holdout backfill process exited cleanly and printed no report",
-            {"fold_id": request.fold_id},
-        )
-    return JSONResponse(report)
+    if run.status == "failed":
+        assert run.failure is not None
+        code, message, details = run.failure
+        return _refusal(500, code, message, details)
+    assert run.report is not None
+    return JSONResponse(run.report)
 
 
 def _refused_scenario(

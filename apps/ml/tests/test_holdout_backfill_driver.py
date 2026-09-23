@@ -253,15 +253,23 @@ def test_a_fold_already_in_flight_here_is_refused_rather_than_raced() -> None:
     from fastapi.testclient import TestClient
 
     from wattsteer_ml import app as app_module
+    from wattsteer_ml import backfill_supervisor
 
     client = TestClient(app_module.app)
-    app_module._BACKFILLING.add("F3")
+    # The set moved to the supervisor when the run stopped living inside the
+    # request: it is taken by the POST and released by the supervising task,
+    # because the run now outlives the request that started it.
+    backfill_supervisor._BACKFILLING.add("F3")
     try:
         response = client.post("/internal/backfill/holdout", json={"fold_id": "F3"})
     finally:
-        app_module._BACKFILLING.discard("F3")
+        backfill_supervisor._BACKFILLING.discard("F3")
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "HOLDOUT_BACKFILL_IN_PROGRESS"
+    body = response.json()["error"]
+    assert body["code"] == "HOLDOUT_BACKFILL_IN_PROGRESS"
+    # The worker reads this as "go and poll it" rather than as a failure, so
+    # the refusal has to say where.
+    assert body["details"]["status"] == "/internal/backfill/holdout/F3"
 
 
 def test_the_route_is_worker_only_and_spawns_a_child_interpreter() -> None:
@@ -273,10 +281,57 @@ def test_the_route_is_worker_only_and_spawns_a_child_interpreter() -> None:
     forty-minute job behind an unauthenticated request.
     """
     from wattsteer_ml import app as app_module
+    from wattsteer_ml import backfill_supervisor
 
     source = inspect.getsource(app_module.backfill_holdout)
     assert "wattsteer_ml.holdout_backfill" in source
-    assert "create_subprocess_exec" in source
+    # The spawn moved to the supervising task with the run. Asserted there
+    # rather than dropped: "the fit is never on this instance's event loop" is
+    # the property, and the route handing the argv to `begin` is how it holds.
+    assert "backfill_supervisor.begin" in source
+    assert "create_subprocess_exec" in inspect.getsource(backfill_supervisor)
     routes = [getattr(route, "path", "") for route in app_module.app.routes]
     assert "/internal/backfill/holdout" in routes
+    assert "/internal/backfill/holdout/{fold}" in routes
     assert not any(path.startswith("/v1") and "backfill" in path for path in routes)
+
+
+def test_the_start_answers_202_without_waiting_for_the_child() -> None:
+    """The repair, asserted where it can fail.
+
+    Measured on the live deployment on 2026-09-22: the worker's call was cut at
+    about 350 s — not the forty-minute ceiling it carried — while the child went
+    on scoring for another ninety minutes. This route's product *is* its
+    response body, because the service is read-only against Postgres and the
+    worker appends the rows, so a cut connection threw a scored fold away. A
+    POST that waits for the child is therefore not a slower version of this: it
+    is the defect.
+    """
+    import asyncio
+    import inspect as _inspect
+
+    from wattsteer_ml import app as app_module
+
+    source = _inspect.getsource(app_module.backfill_holdout)
+    assert "202" in source
+    # Nothing in the handler awaits the child: `communicate` is the call that
+    # made the POST as long as the run.
+    assert "communicate" not in source
+    assert asyncio.iscoroutinefunction(app_module.backfill_holdout_status)
+
+
+def test_a_fold_this_instance_never_started_is_a_404_and_says_so() -> None:
+    """Which is what the worker sees when this service was replaced mid-run.
+
+    A real failure of *that* run — the child went with the container — and it
+    has to be distinguishable from a run that is still going, or the queue
+    would poll a dead id until its ceiling.
+    """
+    from fastapi.testclient import TestClient
+
+    from wattsteer_ml import app as app_module
+
+    client = TestClient(app_module.app)
+    response = client.get("/internal/backfill/holdout/F9")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "HOLDOUT_BACKFILL_UNKNOWN"
