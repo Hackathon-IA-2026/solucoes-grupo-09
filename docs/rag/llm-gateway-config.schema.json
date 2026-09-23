@@ -85,6 +85,10 @@
                 "max_input_tokens": {
                   "type": "integer",
                   "minimum": 256
+                },
+                "max_output_tokens": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }

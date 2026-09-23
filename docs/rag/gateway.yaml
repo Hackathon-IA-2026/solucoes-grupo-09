@@ -68,7 +68,10 @@ tasks:
       # over four and leaves out the system prompt. Gemma 4 31B was answering 503 to half the calls that
       # night, and Z.ai's free GLM-4.5-Flash answered 5 of 95 wrong (a load
       # read as generation, another line's limit), so neither is here.
-      - { provider: google, model: gemma-4-26b-a4b-it, max_input_tokens: 12000 }
+      # Gemma's reasoning counts against max_tokens: at the task's budget it
+      # closed its thought and had no room left for the JSON (2 verify calls in 15
+      # questions, 23/09/2026), so it gets its own.
+      - { provider: google, model: gemma-4-26b-a4b-it, max_input_tokens: 12000, max_output_tokens: 4000 }
       - { provider: groq, model: openai/gpt-oss-120b, max_input_tokens: 6000 } # TPM 8k
       # Last: it answers, but in 95 to 115 s a call (22/09/2026), so it only
       # runs when every other provider is out.
@@ -104,7 +107,7 @@ tasks:
       # takes its place, measured; kimi-k3 stays, last.
       - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
       # The same measurement: Gemma read every claim of its 95-question run.
-      - { provider: google, model: gemma-4-26b-a4b-it, max_input_tokens: 12000 }
+      - { provider: google, model: gemma-4-26b-a4b-it, max_input_tokens: 12000, max_output_tokens: 4000 }
       # A call is about 1,000 tokens with the reasoning, so the 8k TPM holds
       # some 7 claims a minute when it is reached.
       - { provider: groq, model: openai/gpt-oss-20b, max_input_tokens: 6000 }
