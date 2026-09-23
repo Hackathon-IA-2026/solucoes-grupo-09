@@ -463,7 +463,7 @@ def out_of_fold_occurrence(
     function_definition: str,
     config: ModelConfig = MODEL_CONFIG_V1,
 ) -> tuple[OutOfFoldPrediction, ...]:
-    """This fold's *uncalibrated* occurrence probabilities on its own test days.
+    """This fold's **calibrated** occurrence probabilities on its own test days.
 
     **The bootstrap for the pooled reliability curve, and only that.**
     :func:`train_fold` requires an :class:`OutOfFoldPool`, and the pool is
@@ -473,21 +473,50 @@ def out_of_fold_occurrence(
     a pool to get a pool. This function is the way out, and it is a small one on
     purpose.
 
-    The pool carries exactly two numbers per row — a raw occurrence probability
-    and the settled label — so the only estimator it can possibly need is the
-    occurrence booster. Fitting the five magnitude learners for a prior fold
-    would be minutes of work whose output is thrown away. What is *not* cut is
-    the fit itself: this is :func:`train_fold`'s occurrence stage, reached
-    through the same :func:`_fit`, the same params and the same blocks, so the
-    predictions pooled here are the predictions that model made and not a
-    cheaper model's approximation of them.
+    The pool carries exactly two numbers per row — an occurrence probability and
+    the settled label — so the only estimator it can possibly need is the
+    occurrence booster and the isotonic map over it. Fitting the five magnitude
+    learners for a prior fold would be minutes of work whose output is thrown
+    away. What is *not* cut is the fit itself: this is :func:`train_fold`'s
+    occurrence stage, reached through the same :func:`_fit`, the same params and
+    the same blocks, so the predictions pooled here are the predictions that
+    model made and not a cheaper model's approximation of them.
 
-    ``raw``, not calibrated, because the reliability curve exists to measure how
-    far the raw probability is from the truth; feeding it a calibrated number
-    would produce a curve of the calibrator instead of a curve of the model.
-    :func:`~wattsteer_ml.training.calibration.calibrate` drops whatever falls
-    inside the artifact's own calibration window, so a prior fold that overlaps
-    it does not become a self-portrait.
+    **Calibrated, by each fold's own map, and it used to be raw.** This returned
+    ``p_raw`` on the argument that "the reliability curve exists to measure how
+    far the raw probability is from the truth". That is a fair description of a
+    *diagnostic*, and it is not what this pool is used for. Two things read it,
+    and both are about the number the product publishes:
+
+    - `docs/specs/forecaster.md` derives the risk-class edges from it, in its
+      own words "choose edges from the **calibrated** reliability curve", and
+      those edges are applied by :meth:`RiskBins.classify` to the served
+      probability — which this file's header says is the calibrated one, reached
+      "through :attr:`Calibration.isotonic` and through nothing else". Edges
+      chosen against ``p_raw`` and applied to ``p`` are chosen against a
+      quantity they never meet.
+    - the card's own metric table types `ece`, `mce` and `top_bin_gap` as
+      *occurrence, calibrated*, and Explain draws the curve and the class edges
+      **on one axis**, which is incoherent if the two are on different scales.
+
+    Measured, on production data, 2026-09-23: with the raw pool, no split of any
+    fold satisfied clause (a) — F5's closest was "low predicts 0.065 against an
+    observed 0.119", and F2, F3 and F4 failed the same way and in the same
+    direction. A booster whose probabilities are compressed toward the base rate
+    under-predicts in the low bin by construction; that is the distortion the
+    isotonic map exists to remove, and clause (a) was being asked to pass
+    *before* it was removed.
+
+    Each fold calibrates with **its own** map rather than the fitting fold's:
+    the pool is what those models would have published, and a later fold's
+    calibrator was fitted on a window those models never saw. The map is fitted
+    here on the fold's calibration block — the same block :func:`_fit_calibration`
+    uses, the same one the booster was early-stopped against — and applied to
+    the test block, which is the out-of-fold half.
+
+    :func:`~wattsteer_ml.training.calibration.calibrate` still drops whatever
+    falls inside the *artifact's* own calibration window, so a prior fold that
+    overlaps it does not become a self-portrait.
 
     Only rows with a **settled label** are pooled: an hour ONS has not yet
     restated is not an observation, and ``observed=False`` for it would be an
@@ -520,11 +549,19 @@ def out_of_fold_occurrence(
     if not len(settled):
         return ()
     raw = np.clip(_predict(occurrence, settled.matrix), 0.0, 1.0)
+    # This fold's own map, fitted on the block the booster was early-stopped
+    # against — `_fit_calibration`'s block, reached the same way. It is what
+    # this fold's model would have published; see the argument above.
+    monitor_raw = np.clip(_predict(occurrence, monitor.matrix), 0.0, 1.0)
+    isotonic = IsotonicCalibrator.fit(
+        [float(value) for value in monitor_raw],
+        [bool(value) for value in monitor.positive],
+    )
     return tuple(
         OutOfFoldPrediction(
             fold_id=fold.id,
             key=key,
-            probability=float(probability),
+            probability=float(isotonic(float(probability))),
             observed=bool(positive),
         )
         for key, probability, positive in zip(

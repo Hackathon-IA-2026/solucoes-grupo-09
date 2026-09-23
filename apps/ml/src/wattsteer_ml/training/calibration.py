@@ -306,8 +306,14 @@ class OutOfFoldPrediction:
     ``probability`` is the **calibrated** probability that fold's model actually
     published for this row — the curve is a statement about the product, not
     about a classifier's raw output — and ``observed`` is whether that hour was
-    above ``τ``. ``fold_id`` travels so that a curve can say which folds it
-    pooled, and so that a row can never be pooled without one.
+    above ``τ``. It said so before it was true:
+    :func:`~wattsteer_ml.training.hurdle.out_of_fold_occurrence` returned
+    ``p_raw`` until 2026-09-23, which made every risk-bin derivation test a
+    calibration clause against the number the calibrator had not fixed yet.
+    That function's docstring carries the measurement.
+
+    ``fold_id`` travels so that a curve can say which folds it pooled, and so
+    that a row can never be pooled without one.
     """
 
     fold_id: str

@@ -29,6 +29,7 @@ from __future__ import annotations
 import inspect
 import math
 import random
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import date
 from itertools import pairwise
@@ -73,12 +74,16 @@ from wattsteer_ml.training import (
     derive_risk_bins,
     forecast_rows,
     load_artifact,
+    out_of_fold_occurrence,
     outside_calibration_window,
     save_artifact,
     train_fold,
     wilson_half_width,
 )
 from wattsteer_ml.training import calibration as calibration_module
+from wattsteer_ml.training.contract import FeatureContract
+from wattsteer_ml.training.design import FeatureBlock, RowStamp
+from wattsteer_ml.training.hurdle import _fit, _predict, partition_rows
 
 
 @pytest.fixture
@@ -834,3 +839,66 @@ def test_the_calibration_module_names_no_fold_and_materialises_no_calendar() -> 
         assert forbidden not in source
     assert "SEGMENTS" not in source
     assert len(SEGMENTS) == 3
+
+
+def test_the_pooled_predictions_are_calibrated_not_raw(
+    fold: Fold, blocks: FoldBlocks, rows: Sequence[dict[str, Any]]
+) -> None:
+    """The defect that made every risk-bin derivation fail, from the data side.
+
+    `docs/specs/forecaster.md` derives the class edges from "the **calibrated**
+    reliability curve", and `RiskBins.classify` is applied to the served
+    probability — which `hurdle.py`'s header says reaches the composition
+    "through `Calibration.isotonic` and through nothing else". So the pool those
+    edges are chosen against has to be the calibrated number. It was `p_raw`,
+    which meant clause (a) — a *calibration* clause — was tested before the
+    calibrator had done its work.
+
+    Measured on production the day this was found: no split of any fold
+    satisfied (a), always in the same direction. F5's closest was "low predicts
+    0.065 against an observed 0.119"; F2, F3 and F4 failed the same way.
+
+    This asserts the fix where it can fail rather than by reading the source:
+    the pooled probability is the fold's own isotonic map applied to its own
+    booster's output, so it differs from the raw output and matches the map.
+    """
+    pooled = out_of_fold_occurrence(
+        rows, fold=fold, blocks=blocks, function_definition=FUNCTION_DEFINITION
+    )
+    assert pooled, "the fixture fold must produce a pool at all"
+
+    # The same fit, reached the same way, so the comparison is against the
+    # booster these predictions came from rather than a second model.
+    stamp = RowStamp.of(rows)
+    base_fit_rows, calibration_rows, test_rows_ = partition_rows(rows, blocks)
+    contract = FeatureContract.of(base_fit_rows, function_definition=FUNCTION_DEFINITION)
+    base_fit = FeatureBlock.of(base_fit_rows, contract, threshold_mw=stamp.threshold_mw)
+    calibration = FeatureBlock.of(
+        calibration_rows, contract, threshold_mw=stamp.threshold_mw
+    )
+    test_block = FeatureBlock.of(test_rows_, contract, threshold_mw=stamp.threshold_mw)
+    settled = test_block.select(test_block.labelled)
+    monitor = calibration.select(calibration.labelled)
+    occurrence = _fit(
+        config=MODEL_CONFIG_V1,
+        params=MODEL_CONFIG_V1.params(objective="binary", role="occurrence"),
+        train=base_fit.select(base_fit.labelled),
+        label=base_fit.select(base_fit.labelled).positive.astype(np.float64),
+        monitor=monitor,
+        monitor_label=monitor.positive.astype(np.float64),
+    )
+    raw = np.clip(_predict(occurrence, settled.matrix), 0.0, 1.0)
+    monitor_raw = np.clip(_predict(occurrence, monitor.matrix), 0.0, 1.0)
+    isotonic = IsotonicCalibrator.fit(
+        [float(value) for value in monitor_raw],
+        [bool(value) for value in monitor.positive],
+    )
+
+    pooled_probabilities = [row.probability for row in pooled]
+    expected = [float(isotonic(float(value))) for value in raw]
+    assert pooled_probabilities == pytest.approx(expected)
+
+    # And it is not the raw output: a pool that happened to equal it would mean
+    # the map is the identity, which would make this test vacuous rather than
+    # passing. The fixture's booster is distorted enough for the two to differ.
+    assert pooled_probabilities != pytest.approx([float(value) for value in raw])

@@ -378,6 +378,70 @@ about ONS's own field definitions rather than about this code.
       service, deleted afterwards.
 - [ ] When AWS reopens on site: `infra/aws/event/deploy.sh`, keeping the
       memory ceilings in `compose.aws.yml`. The CloudFront address will change.
+- [x] **The Time Machine offered 5 replayable days out of 120, and the cause was
+      a calibration clause tested against the wrong number.** Closed 23/09.
+
+      *Three defects, and the first two were plumbing.* The screens pinned
+      `REPLAY_LANE`, the literal `dessem_free_v1__gate_late__thr5` out of
+      `lib/fixtures` — the lane the gate had refused. Measured against
+      production on one window: `gate_early` 5 replayable days, `gate_late` 0.
+      And `/internal/backfill/holdout` ran its child inside the POST, which this
+      deployment cuts at 300 s: the job was enqueued 23:02 and failed 23:07:48
+      "ML service is unreachable" while the child scored for another ninety
+      minutes. That route's product *is* its response body, so every backfill
+      ever run scored a fold and threw it away. Both fixed; the second now
+      starts and polls, like the retrain since forecaster 45.
+
+      *The third was the real one.* With the plumbing fixed every fold refused
+      on `RiskBinsUndeterminedError`, always in the same direction:
+
+      | fold | refusal |
+      |---|---|
+      | F5 | low predicts 0.065, observed 0.119 |
+      | F4 | 0.098 against 0.163 |
+      | F3 | 0.122 against 0.192 |
+      | F2 | elevated 0.863 against 1.000 |
+      | F1 | no frozen predecessor — no pool at all, and no retrain fixes that |
+
+      An earlier version of this note said the fix was a judgement call between
+      two defensible readings. It was not; that note was wrong, and it is worth
+      saying why it was wrong so the next person does not repeat the mistake.
+      It treated "the pool is prior folds' output, and the only isotonic in
+      scope belongs to this fold" as an argument for leaving the pool raw. That
+      objection is real but it argues for the *opposite* conclusion: each fold
+      should calibrate with **its own** map, which is what it would have
+      published.
+
+      The decisive fact is what the edges are applied to. `RiskBins.classify`
+      runs on the served probability, and `hurdle.py`'s header says that number
+      reaches the composition "through `Calibration.isotonic` and through
+      nothing else". So the edges are applied to the calibrated probability
+      while clause (a) — `|mean predicted − observed| ≤ 0.05`, a *calibration*
+      clause — was being tested against the raw one. A booster whose
+      probabilities are compressed toward the base rate under-predicts in the
+      low bin by construction; that is exactly the distortion the isotonic map
+      exists to remove, and clause (a) was being asked to pass before it was
+      removed. Hence the same failure, in the same direction, in every fold.
+
+      The spec agrees in three independent places: the rule says "choose edges
+      from the **calibrated** reliability curve"; the card's metric table types
+      `ece`, `mce` and `top_bin_gap` as *occurrence, calibrated*; and Explain
+      draws the curve and the class edges on one axis, which is incoherent if
+      they are on different scales. `OutOfFoldPrediction.probability` already
+      documented itself as the calibrated number. The only text that said "raw"
+      was `out_of_fold_occurrence`'s, and that is the one that was wrong.
+
+      `out_of_fold_occurrence` now fits the fold's own isotonic on the block the
+      booster was early-stopped against and applies it to the test block.
+      `test_the_pooled_predictions_are_calibrated_not_raw` holds it, and asserts
+      the pool differs from the raw output so the check cannot go vacuous.
+
+      **F1 is still unreachable and always will be**: it has no frozen
+      predecessor, so there is no out-of-fold pool to calibrate on. That is a
+      property of the walk-forward, not a defect.
+
+- [ ] When AWS reopens on site: `infra/aws/event/deploy.sh`, keeping the
+      memory ceilings in `compose.aws.yml`. The CloudFront address will change.
 - [ ] **The Time Machine offers 5 replayable days out of a 120-day window, and
       the last 115 are a calibration question.** Investigated 22–23/09; two
       defects found and fixed, one question left that needs the author of
