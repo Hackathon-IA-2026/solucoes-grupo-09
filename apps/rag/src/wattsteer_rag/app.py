@@ -15,7 +15,7 @@ import asyncio
 import logging
 import secrets
 from contextlib import asynccontextmanager
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from typing import Any
 
 import httpx
@@ -175,8 +175,7 @@ async def _refresh(days: int) -> None:
     try:
         crawler = Crawler(db)
         async with httpx.AsyncClient() as client:
-            for back in range(days):
-                await crawler.fetch_bdo(client, date.today() - timedelta(days=back + 1))
+            await crawler.fetch_missing_bdo(client, date.today(), days)
             await crawler.fetch_live_ipdo(client, date.today(), days)
         for row in await pending_documents(db, limit=60):
             await ingest_document(db, gateway, row)

@@ -65,3 +65,24 @@ def test_a_new_edition_gets_a_public_copy_and_a_failed_copy_costs_nothing(tmp_pa
     new["value"] = False
     asyncio.run(fetch())
     assert len(saved) == 1
+
+
+def test_the_refresh_fills_a_missing_bulletin_of_the_week():
+    """The refresh fetched yesterday's BDO only, so a day it did not run was a
+    hole for good, though the ONS keeps every bulletin. A corpus packed on one
+    machine and restored on Railway leaves exactly such a gap."""
+    crawler = Crawler(Database())
+    asked: list[date] = []
+
+    async def bdo_days():
+        return {"2026-09-20", "2026-09-19", "2026-09-17", "2026-09-16"}
+
+    async def fetch_bdo(_client, day):
+        asked.append(day)
+        return []
+
+    crawler.bdo_days = bdo_days  # type: ignore[method-assign]
+    crawler.fetch_bdo = fetch_bdo  # type: ignore[method-assign]
+    asyncio.run(crawler.fetch_missing_bdo(None, date(2026, 9, 23), days=2))  # type: ignore[arg-type]
+    assert asked == [date(2026, 9, 22), date(2026, 9, 21), date(2026, 9, 18)]
+    assert "fetch_missing_bdo" in inspect.getsource(app._refresh)

@@ -54,6 +54,7 @@ WAYBACK_CDX = (
 )
 WAYBACK_SAVE = "https://web.archive.org/save"
 IPDO_LOOKBACK_DAYS = 4
+BDO_CATCH_UP_DAYS = 7
 RAP_2023_08_15 = f"{ACERVO}/RAP%202023.08.15%2008h030min%20vers%C3%A3o%20final.pdf"
 
 # The instructions the curtailment records actually cite, with the revision that
@@ -362,6 +363,32 @@ class Crawler:
             "document_id": document_id,
             "new": is_new,
         }
+
+    async def fetch_missing_bdo(self, client: httpx.AsyncClient, today: date, days: int = 1) -> list[dict]:
+        """The last `days` bulletins, and any of the week before that is missing.
+
+        The refresh fetched yesterday's bulletin and nothing else, so a day it
+        did not run (a deploy, a restore of a corpus packed on another machine,
+        a Railway restart) was a hole nobody came back for. The ONS keeps every
+        BDO, so a missing day can always be fetched: it only has to be noticed.
+        """
+        held = await self.bdo_days()
+        out: list[dict] = []
+        for back in range(1, max(days, BDO_CATCH_UP_DAYS) + 1):
+            day = today - timedelta(days=back)
+            if back > days and day.isoformat() in held:
+                continue
+            out += await self.fetch_bdo(client, day)
+        return out
+
+    async def bdo_days(self) -> set[str]:
+        pool = await self.db.connect()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT DISTINCT split_part(external_id, ' ', 2) AS day"
+                " FROM rag.document WHERE source = 'BDO'"
+            )
+        return {row["day"] for row in rows}
 
     async def fetch_live_ipdo(self, client: httpx.AsyncClient, today: date, days: int = 1) -> list[dict]:
         """Whichever editions are on the portal now, looking back far enough.
