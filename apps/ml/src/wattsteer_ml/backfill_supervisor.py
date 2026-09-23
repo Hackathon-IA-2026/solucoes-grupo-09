@@ -95,6 +95,16 @@ class BackfillRun:
     started_at: float
     #: ``running`` until the child exits, then ``done`` or ``failed``.
     status: Literal["running", "done", "failed"] = "running"
+    #: The child's last line of stderr, as it arrives.
+    #:
+    #: A fold that clears the risk-bin rule goes on to mint a publication and a
+    #: Shapley attribution for every held-out day, which is hours of work — and
+    #: with stderr read only at exit, all of it was invisible. Measured
+    #: 2026-09-24: two children at 20 CPU-hours each, four hours in, with
+    #: nothing on the status route but ``running`` and a clock. An operator
+    #: cannot tell that from a hang, and the first thing they reach for is a
+    #: bigger ceiling.
+    note: str | None = None
     #: The report the POST used to return, once there is one.
     report: dict[str, Any] | None = None
     #: ``(code, message, details)`` — the refusal the status route answers with.
@@ -126,6 +136,33 @@ def _forget_old_runs() -> None:
         del _BACKFILL_RUNS[fold]
 
 
+async def _pump_stderr(stream: asyncio.StreamReader, run: BackfillRun) -> bytes:
+    """Read the child's stderr as it arrives, keeping the tail and the last line.
+
+    Read in chunks and split by hand rather than with ``readline``, which raises
+    on a line longer than its buffer — a traceback is not a thing to lose the
+    run's last word over. This is `retrain_supervisor._pump_stderr` with the
+    lane-progress parsing removed: the backfill's child prints prose rather than
+    a lane count, so what is worth carrying is the latest line.
+    """
+    tail = b""
+    buffered = b""
+    while True:
+        chunk = await stream.read(65_536)
+        if not chunk:
+            break
+        tail = (tail + chunk)[-_STDERR_TAIL:]
+        buffered += chunk
+        *lines, buffered = buffered.split(b"\n")
+        for line in lines:
+            text = line.decode("utf-8", "replace").strip()
+            if text:
+                run.note = text[:300]
+        if len(buffered) > _STDERR_TAIL:
+            buffered = buffered[-_STDERR_TAIL:]
+    return tail
+
+
 async def _supervise_backfill(run: BackfillRun, argv: list[str]) -> None:
     """Run the child to completion and record what it did on ``run``.
 
@@ -143,7 +180,9 @@ async def _supervise_backfill(run: BackfillRun, argv: list[str]) -> None:
         # Both pipes drained concurrently: a child that fills one while nobody
         # reads it blocks on the write, and a backfill blocked on its own stderr
         # would look exactly like a backfill that is still scoring.
-        err, out = await asyncio.gather(child.stderr.read(), child.stdout.read())
+        err, out = await asyncio.gather(
+            _pump_stderr(child.stderr, run), child.stdout.read()
+        )
         returncode = await child.wait()
         if returncode != 0:
             logger.error(

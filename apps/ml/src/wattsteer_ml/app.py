@@ -1155,6 +1155,9 @@ async def backfill_holdout_status(fold: str) -> JSONResponse:
                 "fold": fold,
                 "status": "running",
                 "elapsed_seconds": run.elapsed_seconds,
+                # The child's last word, so a four-hour run is distinguishable
+                # from a hang without reading the container's log.
+                "note": run.note,
             }
         )
     if run.status == "failed":
