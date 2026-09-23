@@ -90,7 +90,6 @@ import type { Scope } from "@/components/app/map/scope-bar";
 import { ForecastPanels } from "@/components/app/overview/forecast-panels";
 import { ObservedPanels } from "@/components/app/overview/observed-panels";
 import { OverviewHero } from "@/components/app/overview/overview-hero";
-import { SettledPanels } from "@/components/app/overview/settled-panels";
 import { onSectionRequest } from "@/components/app/section-request";
 import { ReadingState, ThinkingOrb } from "@/components/app/thinking-orb";
 import {
@@ -576,19 +575,19 @@ export default function GridOverviewScreen() {
           heroElsewhere={true}
         />
       ) : (
-        <>
-          <ForecastPanels
-            forecast={forecast}
-            onSelect={select}
-            onExplain={explain}
-            heroElsewhere={true}
-          />
-          <SettledPanels
-            observed={observed}
-            subsystem={params.subsystem}
-            onSelect={select}
-          />
-        </>
+        /*
+          `SettledPanels` moved into the hero's foot band — see
+          `overview-hero.tsx`. It was drawn here, a screen below the map that
+          names the regions it is about, and it is the observed half of the four
+          the rail forecasts; a reader comparing them had to remember one while
+          scrolling to the other.
+        */
+        <ForecastPanels
+          forecast={forecast}
+          onSelect={select}
+          onExplain={explain}
+          heroElsewhere={true}
+        />
       )}
 
       {/*

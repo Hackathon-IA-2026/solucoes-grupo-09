@@ -110,6 +110,7 @@ export function RegionMap({
   /** `true` on the console, where the map is the screen rather than a figure. */
   stage = false,
   overlay,
+  legend,
   controls,
 }: {
   paint: MapPaint;
@@ -155,6 +156,16 @@ export function RegionMap({
    * which shares its corner and is the reason it lifts in 3D.
    */
   controls?: ReactNode;
+  /**
+   * The top-right corner: what the region colours mean.
+   *
+   * A third slot rather than more children in `overlay`, for the reason
+   * `controls` is a second one — three different things in three corners, each
+   * with its own reason to be where it is. This one is top-right because the
+   * other two corners are taken and because a key belongs where the eye enters
+   * the picture, not where it leaves.
+   */
+  legend?: ReactNode;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -279,6 +290,13 @@ export function RegionMap({
         explicit height, and `overflow: hidden` so the canvas cannot escape it.
       */}
       <View
+        /*
+          Named, so a test can ask about *this* map rather than about every SVG
+          on the page drawn at the country's viewBox. The summary rail draws the
+          same geometry four times at thumbnail size on purpose — see
+          `mini-map.tsx` — and an unscoped selector counts five.
+        */
+        testID="region-map"
         style={{
           flex: stage ? 1 : undefined,
           minHeight: stage ? 0 : undefined,
@@ -359,6 +377,23 @@ export function RegionMap({
             {copy.app.grid.layer3dFailed}
           </Text>
         ) : null}
+        {legend === undefined ? null : (
+          <View
+            // `box-none`, exactly as the other two corners: the key covers a
+            // corner of the map and must not take the pointer off the regions
+            // around it.
+            pointerEvents="box-none"
+            style={{
+              ...(Platform.OS === "web" ? ({ position: "absolute" } as object) : null),
+              right: space.md,
+              top: space.md,
+              zIndex: 3,
+            }}
+          >
+            {legend}
+          </View>
+        )}
+
         {overlay === undefined ? null : (
           <View
             // `box-none` so the map keeps every pixel the card does not cover:

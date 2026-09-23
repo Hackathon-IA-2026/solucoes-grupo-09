@@ -220,8 +220,19 @@ test.describe("the 3D globe, when it cannot load", () => {
     await page.route("**/cesium/Cesium.js", (route) => route.abort());
     await open(page, { forecast: true });
 
-    // The flat map is drawn — the four regions are there to be clicked.
-    await expect(page.locator("svg[viewBox='0 0 1000 972']")).toHaveCount(1);
+    /*
+      The flat map is drawn — the four regions are there to be clicked.
+
+      Scoped to the map, because the summary rail draws the same geometry four
+      times at thumbnail size: `mini-map.tsx` reuses `SUBSYSTEM_PATH_D` and the
+      country's viewBox deliberately, so that a shape in the rail cannot drift
+      from the shape beside it. An unscoped count of that viewBox is therefore
+      five on this screen, and counting it was never the point — what this
+      asserts is that the *map* fell back to flat.
+    */
+    await expect(
+      page.locator("[data-testid='region-map'] svg[viewBox='0 0 1000 972']"),
+    ).toHaveCount(1);
     // And the swap is explained rather than silent.
     await expect(page.getByText(/não carregou|did not load/)).toBeVisible();
     // The control agrees with what is drawn.

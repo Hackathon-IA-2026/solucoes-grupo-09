@@ -1042,7 +1042,7 @@ export const pt: Copy = {
         totalLabel: "Energia cortada no dia",
         totalNoteForecast: "Banda conjunta do dia seguinte.",
         totalNoteObserved: "Dia liquidado, somando as horas publicadas.",
-        regionsLabel: "Os quatro subsistemas",
+        regionsLabel: "Resumo dos 4 subsistemas",
         profileLabel: "Hora a hora",
         peakLabel: "Maior hora",
         refusedTitle: "A rede não respondeu",
@@ -1185,6 +1185,10 @@ export const pt: Copy = {
         "Nenhum número de previsão para esta região hoje — nada foi publicado para este dia. O que vem abaixo é observado e vale igual.",
       rowEnergy: "Energia cortada esperada",
       rowPeak: "pico {low}–{high} MW",
+      /** The map's colour key. Three classes, because `RiskClass` has three. */
+      /** Says `previsto` on purpose — see `rail-summary.tsx`. */
+      railSumLabel: "Soma dos quatro subsistemas · previsto",
+      riskLegendLabel: "Nível de risco",
       profileSubtitle: "Perfil de 24 horas, P10–P90",
       nationalTitle: "O dia, nos quatro subsistemas",
       nationalSubtitle:

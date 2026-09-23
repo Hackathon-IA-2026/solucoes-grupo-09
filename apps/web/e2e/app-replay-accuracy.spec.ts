@@ -27,11 +27,21 @@ test.describe("the Time Machine says whether the forecast held", () => {
     */
     await routeGateway(page, { forecast: true, serving: "promoted" });
     await page.goto("/app/replay");
-    await expect
-      .poll(() => page.evaluate(() => document.body.textContent?.length ?? 0), {
-        timeout: 20_000,
-      })
-      .toBeGreaterThan(400);
+    /*
+      Wait for the *replay*, not for a character count.
+
+      A length threshold was met by the screen's chrome and its refusal copy
+      long before any figure arrived, and since the lane comes from `/v1/meta`
+      there is one more round trip than there was: the page now goes chrome →
+      lane → calendar → replay, and 400 characters are on screen after the
+      first of those. Both readings are real — this file failed on a different
+      assertion on each of two consecutive runs, which is what a wait that
+      resolves too early looks like.
+
+      `548` is the fixture's forecast median, the first figure that exists only
+      once the replay itself has landed.
+    */
+    await expect(page.getByText("548").first()).toBeVisible({ timeout: 20_000 });
   });
 
   test("the three figures are the contract's, and the error keeps its sign", async ({

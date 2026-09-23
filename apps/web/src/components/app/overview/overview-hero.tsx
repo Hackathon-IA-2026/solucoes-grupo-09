@@ -68,7 +68,10 @@ import { heroFigures } from "./hero-figures";
 import { ObservedNationalPanel } from "./national-panel";
 import { PlanVsActualPanel } from "./plan-vs-actual-panel";
 import { QuestionRow, SettledQuestionRow } from "./question-row";
+import { RailSummary } from "./rail-summary";
 import { RegionRail } from "./region-rail-panel";
+import { RiskLegend } from "./risk-legend";
+import { SettledPanels } from "./settled-panels";
 
 /**
  * The width at which the rails move beside the map rather than under it.
@@ -79,6 +82,25 @@ import { RegionRail } from "./region-rail-panel";
  * map is the thing that must not be squeezed.
  */
 const RAILS_BESIDE_MAP = 980;
+
+/**
+ * Where the 24-hour profile fits *over* the map instead of under it.
+ *
+ * The flat map is capped at `flatMaxWidth` and centred in its column, so a
+ * narrower column moves the drawing left rather than shrinking it — and the
+ * card sits in the bottom-left corner, which is where Sul ends up. Measured at
+ * 1280, the suite's desktop width: the map draws about 530 px from x≈300, Sul
+ * spans 521–650, and a 300 px card spans 300–600. They overlap by 79 px across
+ * the region's whole head, and `app-overview-selection.spec.ts` reports it as
+ * "subtree intercepts pointer events" on the press that selects it.
+ *
+ * Narrowing the card does not fix it — 340 and 300 both collide — because the
+ * map shrinks with the column while the card does not. So the overlay is a
+ * *wide* arrangement, and below this the fan is the full-width panel under the
+ * block, which is exactly where it lives on a phone and for the same reason.
+ * The two branches are exclusive by construction.
+ */
+const FAN_OVER_MAP = 1400;
 
 export function OverviewHero({
   observed,
@@ -174,6 +196,8 @@ export function OverviewHero({
   const gridContext = useGridContext(params.subsystem, params.date);
   const [width, setWidth] = useState(0);
   const wide = width >= RAILS_BESIDE_MAP;
+  /* Whether the fan can sit on the map without covering a region. */
+  const fanOverMap = width >= FAN_OVER_MAP;
 
   const meta = subsystemMeta(observed.subsystem as SubsystemCode);
   /*
@@ -429,10 +453,30 @@ export function OverviewHero({
     24 hours rather than the settled day, which is a different window and not a
     second rendering of this one.
   */
-  const nationalPanel =
-    forecast === null ? (
-      <ObservedNationalPanel national={observed.day.national} window={window24h} />
-    ) : null;
+  const nationalPanel = (
+    <ObservedNationalPanel national={observed.day.national} window={window24h} />
+  );
+
+  /*
+    **The settled four, drawn here rather than at the foot of the page.**
+
+    `app/index.tsx` rendered `SettledPanels` after `ForecastPanels` — a whole
+    screen below the map that names the regions it is about — and it is the
+    observed half of the four the rail forecasts. It belongs where a reader can
+    put the two side by side, which is the band under this block.
+
+    `null` in the settled state, where `ObservedPanels` already draws these
+    rows: that is the same condition `index.tsx` was applying by rendering this
+    only in the forecast branch.
+  */
+  const settledFour =
+    forecast === null ? null : (
+      <SettledPanels
+        observed={observed}
+        subsystem={params.subsystem}
+        onSelect={(code) => params.setParams({ subsystem: code })}
+      />
+    );
 
   /*
     The four subsystems beside the map, in their own component. Same split as
@@ -451,6 +495,18 @@ export function OverviewHero({
         regionsLabel: text.regionsLabel,
         windowLabel: forecast === null ? text.windowObserved : text.windowForecast,
       }}
+      /*
+        The sum, under its four parts, and only where the four are a forecast.
+        In the settled state the same addition is the observed national panel's,
+        with its own window — rendering both would put one total on the page
+        twice under two windows, which is the contradiction the rail's own
+        window sentence exists to stop.
+      */
+      summary={
+        forecast === null || magnitudeMwh === null ? undefined : (
+          <RailSummary totalMwh={magnitudeMwh} band={magnitudeBand} riskRow={riskRow} />
+        )
+      }
     />
   );
 
@@ -547,6 +603,17 @@ export function OverviewHero({
         a basis of two gaps — otherwise this row's own two gaps come out of the
         shared free space and the rails end up wider than a card.
 
+        **The right rail is worth one and a half since the summary moved in.**
+        `region-rail.tsx` records what one card cost it in measurements: at
+        234 px of row the name used 105 and the chip could not fit beside the
+        figure; at 206 px `NORDESTE` and `SUDESTE/CENTRO-OESTE` both rendered
+        as three letters and an ellipsis, two of four regions reading
+        identically. The rail now carries a thumbnail, the reading, an interval
+        and two fleet figures, and a column sized for a caption cannot hold
+        them. The map gives up the half card: it is 2.5 : 1 against the rail
+        rather than 3 : 1, which at 1440 is about 40 px off a map that had
+        560 to spend.
+
         The gap is `space.md` and not `space.xl` because the arithmetic only
         closes when both rows use the same one. That is the cost of the
         alignment, and it is worth it: the card edges and the column edges are
@@ -578,6 +645,18 @@ export function OverviewHero({
           >
             {headline}
             {profile}
+            {/*
+              **The settled national total, under the day it settles.**
+
+              It was in the right rail above the four forecast rows, which put
+              a measurement at the head of a column of predictions. Here it
+              follows the hourly profile it is the sum of — the same window,
+              the same vocabulary — and the forecast sum sits with the four
+              rows it adds up, on the other side of the map. Each total is now
+              beside its own parts, which is the only arrangement in which a
+              reader can check either one.
+            */}
+            {nationalPanel}
             {dayFigures}
             {forecastFigures}
           </View>
@@ -585,7 +664,7 @@ export function OverviewHero({
 
         <View
           style={{
-            flexGrow: 3,
+            flexGrow: 2.5,
             flexShrink: 1,
             flexBasis: wide ? space.md * 2 : "auto",
             minWidth: 0,
@@ -639,6 +718,15 @@ export function OverviewHero({
               date={params.date}
               latestDate={latestTargetDate(new Date())}
               onDate={(date) => params.setParams({ date })}
+              /*
+                The colour key, top-right. The four regions are painted by risk
+                class and nothing on this screen said which red meant what — a
+                choropleth with no key is a picture rather than a reading. Only
+                where the paint is a forecast: in the settled state the regions
+                carry measured energy, and a *risk* key over them would name a
+                classification that is not what is drawn.
+              */
+              legend={forecast === null ? undefined : <RiskLegend />}
               defaultLayer="2d"
               // The point of the layout: a map with room to be looked at. 380 is
               // what it takes in a column beside four panels; here it is the
@@ -764,7 +852,7 @@ export function OverviewHero({
                 ) : undefined
               }
               overlay={
-                wide && forecast !== null ? (
+                fanOverMap && forecast !== null ? (
                   <View
                     /*
                       Pressable again, in the corner that leaves the map alone.
@@ -785,7 +873,28 @@ export function OverviewHero({
                       not a feature.
                     */
                     style={{
-                      width: 340,
+                      /*
+                        **300, and it was 340 until the rail took half a card.**
+
+                        The flat map is capped at `flatMaxWidth` and centred in
+                        its column, so narrowing the column moves the drawing
+                        *left* rather than shrinking it. Measured at the 1280
+                        the suite runs: the column went 725 → 604, the map
+                        stayed 560, and its left inset went 82 → 22 — which
+                        slid Sul from about 418 px to 358 px, onto a card whose
+                        right edge was 352. `app-overview-selection.spec.ts`
+                        caught it exactly as this corner's comment predicts:
+                        "subtree intercepts pointer events", 56 retries, on the
+                        press that selects that region.
+
+                        So the card gives back the 40 px rather than the map
+                        giving back the width. The cost is the one this file
+                        already names — the fan is drawn at its viewBox's
+                        aspect, so 40 px of width is about 16 px of height —
+                        and it is the cheaper side of the trade: a chart a
+                        little shorter against a region that cannot be clicked.
+                      */
+                      width: 300,
                       gap: 4,
                       padding: space.sm,
                       borderRadius: radius.lg,
@@ -850,7 +959,7 @@ export function OverviewHero({
             day the map is painted for. It sat in the right rail, beside the
             regions, where it read as a fourth region.
           */}
-          {planned}
+          {wide ? null : planned}
           {/*
             **And the episodes under it, at the same width.**
 
@@ -860,7 +969,13 @@ export function OverviewHero({
             full width because both are tables a reader scans across, which is
             the thing a half-width column takes away.
           */}
-          <EpisodesPanel observed={observed} scope={scope} subsystem={params.subsystem} />
+          {wide ? null : (
+            <EpisodesPanel
+              observed={observed}
+              scope={scope}
+              subsystem={params.subsystem}
+            />
+          )}
           {wide ? null : headline}
           {wide ? null : nationalPanel}
           {wide ? null : rail}
@@ -879,12 +994,21 @@ export function OverviewHero({
           */}
           {wide ? null : dayFigures}
           {wide ? null : forecastFigures}
+          {/*
+            The settled four, on a phone. They are in the foot band on a wide
+            screen and were at the foot of the page before that; leaving them
+            out of this branch dropped them off the narrow screen entirely,
+            which `app-observed-overview.spec.ts` caught on the run looking for
+            "Liquidado nos quatro subsistemas".
+          */}
+          {wide ? null : settledFour}
         </View>
 
         {wide ? (
           <View
             style={{
-              flexGrow: 1,
+              // One and a half cards — see the arithmetic above.
+              flexGrow: 1.5,
               flexShrink: 1,
               flexBasis: 0,
               minWidth: 0,
@@ -907,11 +1031,53 @@ export function OverviewHero({
               can say about itself — and the page gets its full width back for
               the three columns that actually need it.
             */}
-            {nationalPanel}
             {rail}
           </View>
         ) : null}
       </View>
+
+      {/*
+        **The three tables, across the foot of the block.**
+
+        The same kind of thing at three spans, and they were stacked one under
+        another in the centre column: the runs of hours the fortnight formed,
+        ONS's programme against ONS's settlement for this day, and the four
+        subsystems as ONS has settled them. Each is a table a reader scans
+        *across*, so stacking them spent the page's height on the axis none of
+        them needed — and the third was at the foot of the whole page, a scroll
+        past everything, where it was a section nobody reached.
+
+        `wide` only, and the stack above keeps them below that: a five-column
+        table is already at its limit in the centre column at 900 px, and three
+        side by side there would be three smears. The two branches are
+        exclusive by construction.
+      */}
+      {wide ? (
+        <View style={{ flexDirection: "row", alignItems: "stretch", gap: space.md }}>
+          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
+            <EpisodesPanel
+              observed={observed}
+              scope={scope}
+              subsystem={params.subsystem}
+            />
+          </View>
+          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
+            {planned}
+          </View>
+          {/*
+            The settled four. Absent in the settled state rather than drawn
+            twice: `ObservedPanels` already carries these rows there, and this
+            is the forecast state's copy of them — which is exactly the split
+            `app/index.tsx` was making when it rendered `SettledPanels` beside
+            `ForecastPanels` and nowhere else.
+          */}
+          {settledFour === null ? null : (
+            <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
+              {settledFour}
+            </View>
+          )}
+        </View>
+      ) : null}
 
       {/*
         The fan, full width and below the block, because it is an hourly series
@@ -924,7 +1090,7 @@ export function OverviewHero({
         `RegionMap` above, which also records what that costs. Rendering both
         would put one chart on the page twice.
       */}
-      {forecast === null || wide ? null : (
+      {forecast === null || fanOverMap ? null : (
         <Panel style={{ gap: space.md }}>
           <Text style={{ ...type.caption, color: colors.inkFaint }}>
             {`${meta.onsDisplayName} · ${copy.app.overview.profileSubtitle}`}

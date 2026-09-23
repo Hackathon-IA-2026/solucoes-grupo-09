@@ -94,11 +94,16 @@ test.describe("with nothing promoted, the screen still shows the grid", () => {
     }
     /*
       Wind and solar used to be the sixth heading in that list, on a card of
-      their own. The card is gone and the division is a line on each of the
-      rail's four rows instead, so the assertion moved with it: what must be on
-      screen is the split itself, not a heading over one region's copy of it.
+      their own. The card is gone and the division is on each of the rail's four
+      rows instead, so the assertion moved with it: what must be on screen is
+      the split itself, not a heading over one region's copy of it.
+
+      It is two labelled figures in the row's own column now rather than one
+      `eólica X · solar Y` line, so the pattern reads the pair rather than the
+      separator that used to join them. The property is the same and is the one
+      that matters: both fleets, as numbers, on the screen.
     */
-    expect(text).toMatch(/eólica\s+\S+\s+·\s+solar\s+\S+/);
+    expect(text).toMatch(/Eólica\s*\S+\s*Solar\s*\S+/i);
   });
 
   test("no panel claims an interval, and the screen says why", async ({ page }) => {

@@ -21,7 +21,8 @@ import { Text, View } from "react-native";
 import { BandStrip } from "@/components/charts/band-figure";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import type { Technology, TechnologySplit } from "@/lib/fixtures";
+import type { SubsystemCode, Technology, TechnologySplit } from "@/lib/fixtures";
+import { MiniMap } from "./mini-map";
 
 /**
  * One headline figure: a label, a number in the product's largest type, and a
@@ -84,6 +85,7 @@ export function HeroStat({
  */
 export function RegionRow({
   code,
+  subsystem,
   name,
   value,
   unit,
@@ -96,9 +98,12 @@ export function RegionRow({
   note,
   split,
   emphasis,
+  band,
 }: {
   /** The short code — `N`, `NE`, `SE/CO`, `S` — as the map labels it. */
   code: string;
+  /** Which region, for the thumbnail. The code is a label; this is the shape. */
+  subsystem: SubsystemCode;
   name: string;
   value: number;
   unit: string;
@@ -116,6 +121,13 @@ export function RegionRow({
   split: TechnologySplit;
   /** Which fleet the URL is asking about; the other is dimmed, never hidden. */
   emphasis: Technology;
+  /**
+   * The row's P10-P90, where the row is a forecast.
+   *
+   * `null` on a settled row, and the row prints nothing rather than a strip of
+   * zeroes: a measurement has no interval, which is this file's oldest rule.
+   */
+  band: Band | null;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -147,6 +159,34 @@ export function RegionRow({
       }}
     >
       {/*
+        **The thumbnail, the reading, and the two fleets — three columns.**
+
+        The rail is two cards wide now rather than one (see the grid arithmetic
+        in `overview-hero.tsx`), and this row spends the width on the three
+        things a reader was previously asked to hold in their head: *which*
+        region this is, *how much* with its interval, and *which fleet* it is.
+
+        The middle column is the row as it was and every measurement below
+        still governs it; what is new is a locator on one side and the split
+        figures on the other, out of the middle column's line count.
+      */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "flex-start",
+          /*
+            It wraps. At 320 px the rail is the whole screen less its gutters
+            and these three columns want more than that, so the fleet figures
+            drop under the reading rather than pushing the row past the
+            viewport — `no-horizontal-overflow.spec.ts` is what holds that.
+          */
+          flexWrap: "wrap",
+          gap: space.md,
+        }}
+      >
+        <MiniMap subsystem={subsystem} selected={selected} />
+        <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, gap: 8 }}>
+          {/*
         **Two rows, and the first draft was one.**
 
         Name, figure and risk chip on a single line put `NORDESTE` and `NORTE`
@@ -159,7 +199,7 @@ export function RegionRow({
         region this row is about, and a reader matching the two should not have
         to translate.
       */}
-      {/*
+          {/*
         **Three lines, each using the whole width.**
 
         Measured at 234 px of row: the name line was using 105 of it and the
@@ -180,28 +220,28 @@ export function RegionRow({
         206. The probability it gave up rides beside the figure as `note` — a
         number among numbers rather than a second thing inside a badge.
       */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-        <Text
-          style={{
-            ...type.caption,
-            color: selected ? colors.accent : colors.inkFaint,
-            fontVariant: ["tabular-nums"],
-            // `SE/CO` is the widest of the four and was still clipping at 36.
-            minWidth: 44,
-          }}
-          numberOfLines={1}
-        >
-          {code}
-        </Text>
-        <Text
-          style={{
-            ...type.label,
-            color: selected ? colors.ink : colors.inkMuted,
-            flexGrow: 1,
-            flexShrink: 1,
-            minWidth: 0,
-          }}
-          /*
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <Text
+              style={{
+                ...type.caption,
+                color: selected ? colors.accent : colors.inkFaint,
+                fontVariant: ["tabular-nums"],
+                // `SE/CO` is the widest of the four and was still clipping at 36.
+                minWidth: 44,
+              }}
+              numberOfLines={1}
+            >
+              {code}
+            </Text>
+            <Text
+              style={{
+                ...type.label,
+                color: selected ? colors.ink : colors.inkMuted,
+                flexGrow: 1,
+                flexShrink: 1,
+                minWidth: 0,
+              }}
+              /*
             **It wraps; it does not truncate.**
 
             `numberOfLines={1}` turned `SUDESTE/CENTRO-OESTE` into `SUD…` at
@@ -211,53 +251,53 @@ export function RegionRow({
             already records once, from the first draft of this row. Two lines for
             one region is cheaper than a name a reader cannot trust.
           */
-          numberOfLines={2}
-        >
-          {name}
-        </Text>
-      </View>
+              numberOfLines={2}
+            >
+              {name}
+            </Text>
+          </View>
 
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          // At 320 px this line — figure, unit, probability, chip — wants
-          // 215 px in a 212 px box. It wraps rather than overflows: the chip
-          // drops under the figure, which at that width is a full-bleed row
-          // with the space for it.
-          flexWrap: "wrap",
-          gap: 5,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 22,
-            lineHeight: 26,
-            fontWeight: "600",
-            color: colors.ink,
-            fontVariant: ["tabular-nums"],
-          }}
-        >
-          {f.compact(value)}
-        </Text>
-        <Text style={{ ...type.caption, color: colors.inkFaint }}>{unit}</Text>
-        {note === undefined ? null : (
-          <Text
+          <View
             style={{
-              ...type.caption,
-              color: colors.inkFaint,
-              fontVariant: ["tabular-nums"],
-              marginStart: 4,
+              flexDirection: "row",
+              alignItems: "center",
+              // At 320 px this line — figure, unit, probability, chip — wants
+              // 215 px in a 212 px box. It wraps rather than overflows: the chip
+              // drops under the figure, which at that width is a full-bleed row
+              // with the space for it.
+              flexWrap: "wrap",
+              gap: 5,
             }}
           >
-            {note}
-          </Text>
-        )}
-        <View style={{ flexGrow: 1, flexShrink: 1 }} />
-        {trailing}
-      </View>
+            <Text
+              style={{
+                fontSize: 22,
+                lineHeight: 26,
+                fontWeight: "600",
+                color: colors.ink,
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {f.compact(value)}
+            </Text>
+            <Text style={{ ...type.caption, color: colors.inkFaint }}>{unit}</Text>
+            {note === undefined ? null : (
+              <Text
+                style={{
+                  ...type.caption,
+                  color: colors.inkFaint,
+                  fontVariant: ["tabular-nums"],
+                  marginStart: 4,
+                }}
+              >
+                {note}
+              </Text>
+            )}
+            <View style={{ flexGrow: 1, flexShrink: 1 }} />
+            {trailing}
+          </View>
 
-      {/*
+          {/*
         **One bar, on one scale, divided into the two fleets.**
 
         The bar's *length* is the row's share of the largest of the four and
@@ -278,62 +318,143 @@ export function RegionRow({
         the URL did not ask about is dimmed rather than dropped: a split whose
         other half you cannot see is a filter again.
       */}
-      <View
-        style={{
-          height: 6,
-          borderRadius: radius.pill,
-          backgroundColor: colors.surfaceSunken,
-          overflow: "hidden",
-        }}
-      >
-        <View
-          style={{
-            width: `${Math.max(2, Math.min(100, share * 100))}%`,
-            height: "100%",
-            borderRadius: radius.pill,
-            overflow: "hidden",
-            flexDirection: "row",
-          }}
-        >
           <View
             style={{
-              flexGrow: split.windMwh / fleets,
-              flexShrink: 1,
-              flexBasis: 0,
-              backgroundColor: colors.accent,
-              opacity: emphasis === "WIND" ? 0.95 : 0.34,
+              height: 6,
+              borderRadius: radius.pill,
+              backgroundColor: colors.surfaceSunken,
+              overflow: "hidden",
             }}
+          >
+            <View
+              style={{
+                width: `${Math.max(2, Math.min(100, share * 100))}%`,
+                height: "100%",
+                borderRadius: radius.pill,
+                overflow: "hidden",
+                flexDirection: "row",
+              }}
+            >
+              <View
+                style={{
+                  flexGrow: split.windMwh / fleets,
+                  flexShrink: 1,
+                  flexBasis: 0,
+                  backgroundColor: colors.accent,
+                  opacity: emphasis === "WIND" ? 0.95 : 0.34,
+                }}
+              />
+              <View
+                style={{
+                  flexGrow: split.solarMwh / fleets,
+                  flexShrink: 1,
+                  flexBasis: 0,
+                  backgroundColor: colors.violet,
+                  opacity: emphasis === "SOLAR" ? 0.95 : 0.34,
+                }}
+              />
+            </View>
+          </View>
+
+          {/*
+        **The interval, in figures, under the bar it belongs to.**
+
+        The bar above is the row's share of the largest of the four — a
+        comparison between regions — and it cannot also be an interval. So the
+        interval is printed: P10, P50 and P90 in the dictionary's own order, on
+        the row whose number they qualify.
+
+        Absent on a settled row rather than zeroed. A measurement has no
+        interval, and a strip of three equal numbers under one is the shape
+        `honesty.md` calls a band that is not one.
+      */}
+          {band === null ? null : (
+            <Text
+              style={{
+                ...type.caption,
+                color: colors.inkFaint,
+                fontVariant: ["tabular-nums"],
+              }}
+              numberOfLines={1}
+            >
+              {fill(copy.app.band.strip, {
+                p10: f.compact(band.p10),
+                p50: f.compact(band.p50),
+                p90: f.compact(band.p90),
+              })}
+            </Text>
+          )}
+        </View>
+
+        {/*
+          **The two fleets, as figures, in their own column.**
+
+          They were a line under the bar — `eólica 92,2k · solar 65,6k` — and
+          the reason for that line has not changed: the bar cannot carry a
+          proportion where the row is a sliver, which is three of the four
+          regions on most days. What changed is that the rail has the width to
+          put them beside the reading instead of under it, with the colour that
+          names each one rather than a word order the reader has to remember.
+
+          Never a percentage. The mock this follows printed `Eólica 0% · Solar
+          100%` for a Norte that is 1 956 MWh of wind against 7,8 of solar —
+          inverted, and unit-mixed on the row below it. These are the same
+          megawatt-hours the bar above is cut by, so the two cannot disagree.
+        */}
+        <View style={{ gap: 4, flexShrink: 1, minWidth: 0 }}>
+          <FleetFigure
+            tone={colors.accent}
+            label={copy.app.technology.WIND}
+            value={f.compact(split.windMwh)}
+            emphasised={emphasis === "WIND"}
           />
-          <View
-            style={{
-              flexGrow: split.solarMwh / fleets,
-              flexShrink: 1,
-              flexBasis: 0,
-              backgroundColor: colors.violet,
-              opacity: emphasis === "SOLAR" ? 0.95 : 0.34,
-            }}
+          <FleetFigure
+            tone={colors.violet}
+            label={copy.app.technology.SOLAR}
+            value={f.compact(split.solarMwh)}
+            emphasised={emphasis === "SOLAR"}
           />
         </View>
       </View>
+    </View>
+  );
+}
 
-      {/*
-        The two figures in words, because the bar cannot carry them where the
-        row is a sliver — which is three of the four regions on most days. A
-        segment two pixels wide states a proportion nobody can read; this line
-        states it on every row, which is what the rail was asked for.
-      */}
+/** One fleet's figure in the row's right column: a dot, its name, its energy. */
+function FleetFigure({
+  tone,
+  label,
+  value,
+  emphasised,
+}: {
+  tone: string;
+  label: string;
+  value: string;
+  emphasised: boolean;
+}) {
+  const colors = usePalette();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+      <View
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: radius.pill,
+          backgroundColor: tone,
+          opacity: emphasised ? 0.95 : 0.34,
+          flexShrink: 0,
+        }}
+      />
+      <Text style={{ ...type.caption, color: colors.inkFaint }}>{label}</Text>
       <Text
         style={{
           ...type.caption,
-          color: colors.inkFaint,
+          color: emphasised ? colors.ink : colors.inkMuted,
           fontVariant: ["tabular-nums"],
+          fontWeight: emphasised ? "700" : "400",
         }}
-        numberOfLines={1}
       >
-        {fill(copy.app.grid.hero.railSplit, {
-          wind: f.compact(split.windMwh),
-          solar: f.compact(split.solarMwh),
-        })}
+        {value}
       </Text>
     </View>
   );

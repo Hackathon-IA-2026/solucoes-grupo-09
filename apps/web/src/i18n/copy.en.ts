@@ -1248,7 +1248,7 @@ export const en = {
         totalLabel: "Curtailed energy, whole day",
         totalNoteForecast: "Tomorrow's joint band.",
         totalNoteObserved: "The settled day, summed over the published hours.",
-        regionsLabel: "The four subsystems",
+        regionsLabel: "The four subsystems, summarised",
         profileLabel: "Hour by hour",
         peakLabel: "Largest hour",
         refusedTitle: "The grid did not answer",
@@ -1376,6 +1376,10 @@ export const en = {
         "No forecast figures for this region today — nothing has been published for this day. What follows is observed and holds either way.",
       rowEnergy: "Expected curtailed energy",
       rowPeak: "peak {low}–{high} MW",
+      /** The map's colour key. Three classes, because `RiskClass` has three. */
+      /** Says `previsto` on purpose — see `rail-summary.tsx`. */
+      railSumLabel: "Sum of the four subsystems · forecast",
+      riskLegendLabel: "Risk level",
       profileSubtitle: "24-hour profile, P10–P90",
       nationalTitle: "The day, across all four subsystems",
       nationalSubtitle:

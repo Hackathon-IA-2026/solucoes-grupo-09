@@ -56,6 +56,15 @@ export interface HeroRegion {
   readonly value: number;
   readonly chip: ReactNode;
   readonly note: string | undefined;
+  /**
+   * The row's P10-P90, where the row is a forecast.
+   *
+   * `null` on a settled row, and that is the honest case rather than a missing
+   * one: a measurement has no interval. `region-rail.tsx` has said so since it
+   * was written; this makes the absence a value the rail can branch on instead
+   * of a thing it has to know.
+   */
+  readonly band: Band | null;
   /** The two fleets the row's figure divides into; see `region-rail.tsx`. */
   readonly split: TechnologySplit;
 }
@@ -159,6 +168,7 @@ export function heroFigures({
         value: row.dayExpectedMwh,
         chip: <RiskChip probability={row.occurrenceProbability} compact={true} />,
         note: `≈${f.percentPoints(roundProbability(row.occurrenceProbability))}`,
+        band: row.dailyEnergy,
         split: row.split,
       }))
     : observedRows(observed.day.subsystems, SUBSYSTEM_DISPLAY_ORDER).map((row) => ({
@@ -168,6 +178,7 @@ export function heroFigures({
         value: row.dayMwh,
         chip: undefined,
         note: undefined,
+        band: null,
         split: row.split,
       }));
 

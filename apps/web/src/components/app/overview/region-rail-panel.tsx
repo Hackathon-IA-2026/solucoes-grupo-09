@@ -14,7 +14,16 @@
  * screen manufactures a contradiction out of correct data.
  */
 
-import { Panel, radius, space, type, usePalette } from "@wattsteer/ui";
+import type { Band } from "@wattsteer/core/api";
+import {
+  LayersIcon,
+  Panel,
+  PanelHeader,
+  radius,
+  space,
+  type,
+  usePalette,
+} from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import { RiskChip } from "@/components/charts/risk-class";
 import { useCopy, useFormat } from "@/i18n";
@@ -35,6 +44,8 @@ export interface RailRegion {
   readonly value: number;
   readonly chip: React.ReactNode;
   readonly note: string | undefined;
+  /** The row's P10-P90, or `null` on a settled row. See `hero-figures.tsx`. */
+  readonly band: Band | null;
   /** The two fleets the row's figure divides into; see `region-rail.tsx`. */
   readonly split: TechnologySplit;
 }
@@ -48,6 +59,7 @@ export function RegionRail({
   onHoverChange,
   emphasis,
   text,
+  summary,
 }: {
   regions: readonly RailRegion[];
   /** The largest of the four, so every bar shares one scale. */
@@ -62,23 +74,42 @@ export function RegionRail({
     regionsLabel: string;
     windowLabel: string;
   };
+  /**
+   * The four rows added up, drawn under them inside this panel.
+   *
+   * A node rather than figures, because what the sum *means* forks on whether
+   * a forecast was published and this panel has no business knowing that. The
+   * hero composes it; the rail gives it the place where a reader can check the
+   * addition by looking up.
+   */
+  summary?: React.ReactNode;
 }) {
   const colors = usePalette();
   const copy = useCopy();
   return (
     <Panel style={{ gap: space.sm }}>
-      <Text style={{ ...type.caption, color: colors.inkFaint }}>{text.regionsLabel}</Text>
       {/*
-        **The rail's window, said out loud.**
+        `PanelHeader`, not a bare caption. The rail is two cards wide now and
+        heads a block a reader navigates to rather than a strip beside the map,
+        which is the vocabulary this header exists for — and the window below
+        stays exactly where it was, for the reason the next comment gives.
+      */}
+      <PanelHeader
+        icon={<LayersIcon size={16} color={colors.inkMuted} />}
+        title={text.regionsLabel}
+        subtitle={text.windowLabel}
+      />
+      {/*
+        **The rail's window is the header's subtitle now, and it is still said.**
 
-        The headline above reads the *settled day* and these four read the
+        The headline elsewhere reads the *settled day* and these four read the
         *last 24 hours* — two different windows, and in the observed state that
         makes them 0,0 MWh and 1 843 MWh for the same region, a few hundred
         pixels apart with nothing between them explaining it. Two honest
         numbers adjacent with no window on either is how a screen manufactures
-        a contradiction out of correct data.
+        a contradiction out of correct data. It moved into the header rather
+        than out of the panel.
       */}
-      <Text style={{ ...type.caption, color: colors.inkFaint }}>{text.windowLabel}</Text>
       {/*
         **The colour key, once, above the four rows.**
 
@@ -118,6 +149,7 @@ export function RegionRail({
         <RegionRow
           key={row.subsystem}
           code={row.code}
+          subsystem={row.subsystem}
           name={row.name}
           value={row.value}
           unit="MWh"
@@ -130,6 +162,7 @@ export function RegionRail({
           note={row.note}
           split={row.split}
           emphasis={emphasis}
+          band={row.band}
         />
       ))}
       {/*
@@ -147,6 +180,20 @@ export function RegionRail({
         is drawn, which is Explicar. The rail keeps what it can carry honestly:
         the two figures, labelled, under a window that says which.
       */}
+      {summary === undefined ? null : (
+        <>
+          {/*
+            A hairline, because the sum is about the four rows above it rather
+            than a sixth thing in a list of five. Inside the panel for the same
+            reason: a reader checks the addition by looking up, and a separate
+            card would put a page gap between a total and its parts.
+          */}
+          <View
+            style={{ height: 1, backgroundColor: colors.border, marginTop: space.xs }}
+          />
+          {summary}
+        </>
+      )}
     </Panel>
   );
 }

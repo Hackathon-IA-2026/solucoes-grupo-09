@@ -445,8 +445,25 @@ describe("a refused forecast renders no forecast", () => {
     // `OverviewHero` already drew — the national figure, the map, the rows, the
     // selection, the fan — and the hero is itself behind the same `forecast`
     // ternary, taking it as a prop rather than reading a state of its own.
+    //
+    // `SettledPanels` is no longer the second half of the forecast side: it is
+    // the hero's foot band now, behind the hero's own `forecast === null`
+    // gate — which is the same condition this ternary applies, one component
+    // in. The exclusivity asserted here is therefore unchanged; what moved is
+    // where the settled four are drawn, and the assertion below checks that the
+    // observed stack still states no forecast.
     expect(OVERVIEW_FLAT).toContain(
-      "{forecast === null ? ( <ObservedPanels observed={observed} subsystem={params.subsystem} onSelect={select} onExplain={explain} heroElsewhere={true} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} heroElsewhere={true} /> <SettledPanels observed={observed} subsystem={params.subsystem} onSelect={select} /> </> )}",
+      "{forecast === null ? ( <ObservedPanels observed={observed} subsystem={params.subsystem} onSelect={select} onExplain={explain} heroElsewhere={true} /> ) : (",
+    );
+    expect(OVERVIEW_FLAT).toContain(
+      "<ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} heroElsewhere={true} /> )}",
+    );
+    // And the four settled rows are behind the hero's copy of that gate rather
+    // than loose in the tree: a `SettledPanels` outside it would draw the
+    // forecast state's settled block on a day with no forecast, beside the
+    // observed stack that already draws one.
+    expect(flat(read("components/app/overview", "overview-hero.tsx"))).toContain(
+      "forecast === null ? null : ( <SettledPanels",
     );
     // Each forecast panel is inside `ForecastPanels`, which is now a file of
     // its own — so this is a containment check rather than the `indexOf`
