@@ -378,3 +378,56 @@ about ONS's own field definitions rather than about this code.
       service, deleted afterwards.
 - [ ] When AWS reopens on site: `infra/aws/event/deploy.sh`, keeping the
       memory ceilings in `compose.aws.yml`. The CloudFront address will change.
+- [ ] **The Time Machine offers 5 replayable days out of a 120-day window, and
+      the last 115 are a calibration question.** Investigated 22–23/09; two
+      defects found and fixed, one question left that needs the author of
+      `training/calibration.py`.
+
+      *Fixed, and both were real.* The screens pinned `REPLAY_LANE`, the
+      literal `dessem_free_v1__gate_late__thr5` out of `lib/fixtures` — the
+      lane the gate had refused. Measured against production on one window:
+      `gate_early` 5 replayable days, `gate_late` 0, so the screen was empty by
+      construction. And `/internal/backfill/holdout` ran its child inside the
+      POST, which this deployment cuts at 300 s: the job was enqueued 23:02 and
+      failed 23:07:48 "ML service is unreachable" while the child scored for
+      another ninety minutes. That route's product *is* its response body, so
+      every backfill ever run scored a fold and threw it away. It starts and
+      polls now, like the retrain since forecaster 45.
+
+      *The question.* With the plumbing fixed, every fold refuses on the same
+      thing, always in the same direction:
+
+      | fold | refusal |
+      |---|---|
+      | F5 | low predicts 0.065, observed 0.119 |
+      | F4 | 0.098 against 0.163 |
+      | F3 | 0.122 against 0.192 |
+      | F2 | elevated 0.863 against 1.000 |
+      | F1 | no frozen predecessor — no pool at all, and no retrain fixes that |
+
+      The same bias the gate reported on its own rail (`p50_unbiasedness`
+      0.3499 against `[0.45, 0.55]`, ECE 0.1037 against 0.05), so the retrain
+      and the backfill are two views of one finding.
+
+      `derive_risk_bins` quotes the spec — "choose edges from the **calibrated**
+      reliability curve" — and is handed `kept`, which
+      `out_of_fold_occurrence` documents as "**raw**, not calibrated, because
+      the reliability curve exists to measure how far the raw probability is
+      from the truth". `OutOfFoldPrediction.probability` documents itself as
+      the calibrated one. Two docstrings on one path disagree.
+
+      **Do not "fix" this by making the bins calibrated without deciding it.**
+      The pool comes from *prior* folds, fitted by other models; the only
+      isotonic in scope belongs to *this* fold's calibration window, so
+      applying it would calibrate one model's output with another's map. That
+      may be exactly why the code uses raw — in which case the stale docstring
+      is `OutOfFoldPrediction`'s and the spec sentence is the loose one. Either
+      way the answer changes what a reader sees labelled "risco baixo" across
+      the whole product, and `test_incumbent_risk_bins.py` exists because a
+      mistake on this path killed every Friday retrain once already.
+
+      Passing `incumbent_risk_bins` in `backfill_lane` — the retrain passes it,
+      the backfill does not — is a real asymmetry and worth closing, but it
+      does **not** rescue this: the incumbent's edges are `(0.05, 0.9)`, both on
+      the 0.05 grid, so they were already among the candidates and already
+      failed.
