@@ -655,7 +655,18 @@ export function createMetaRoutes(deps: {
       // endpoint — being able to say *which* things are missing is its job.
       const [service, freshness, published] = await Promise.all([
         readModel(deps.ml),
-        deps.db === undefined ? [] : readSourceFreshness(deps.db, { now }),
+        /*
+          Without the row counts: this endpoint publishes the source, the two
+          instants and the lag, and never the volume — see `toFreshness`. The
+          count is an exact `count(*)` per source that no index can answer, and
+          after the forced history sweep it took `/v1/meta` to 38.9 s while
+          `/v1/grid/now` answered in 1.2 s. Every screen waits on this read
+          before it can name a lane, so the cost was the whole app hanging on a
+          number nobody receives.
+        */
+        deps.db === undefined
+          ? []
+          : readSourceFreshness(deps.db, { now, countRows: false }),
         deps.db === undefined ? [] : readLatestPublished(deps.db, { asOf: now }),
       ]);
 

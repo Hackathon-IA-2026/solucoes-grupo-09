@@ -563,3 +563,37 @@ describe("meta · the boundary", () => {
     expect(route).not.toContain("fetch(");
   });
 });
+
+describe("meta · what it does not pay for", () => {
+  it("asks for freshness without the row counts, which it never publishes", () => {
+    /*
+      A source-level guard because the property lives in *how* the read is
+      called, and nothing about a response body could see it: `toFreshness`
+      carries the source, the two instants and the lag, so an exact `count(*)`
+      per source is seventeen full table scans whose results are discarded.
+
+      Measured on production 2026-09-24, after the forced history sweep put
+      28.6M rows into those tables: `/v1/meta` answered in 38.9 s against
+      `/v1/grid/now`'s 1.2 s, and sometimes not at all. Every screen waits on
+      this read before it can name a lane, so the Time Machine sat on its
+      default day — a past day the reader had picked never loaded — for as long
+      as the scan ran. The cost was the whole app hanging on a number no caller
+      receives.
+    */
+    const route = code("api/meta.ts");
+    expect(route).toContain("countRows: false");
+  });
+
+  it("and the freshness block on the wire still names no volume", () => {
+    // The other half of the same property: if a row count is ever added to
+    // `toFreshness`, the line above stops being a saving and becomes a bug,
+    // and this is what goes red.
+    const route = code("api/meta.ts");
+    const block = route.slice(
+      route.indexOf("function toFreshness"),
+      route.indexOf("function toFreshness") + 500,
+    );
+    expect(block).toContain("latestValidTime");
+    expect(block).not.toContain("rows");
+  });
+});

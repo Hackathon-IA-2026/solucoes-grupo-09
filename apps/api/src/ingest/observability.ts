@@ -232,8 +232,20 @@ const SOURCES: SourceHealthSpec[] = [
  */
 export interface SourceFreshness {
   source: IngestionSource;
-  /** Fact rows stored, all versions — the volume an operator recognises. */
-  rows: number;
+  /**
+   * Fact rows stored, all versions — the volume an operator recognises.
+   *
+   * `null` when the caller did not ask for it. Counting is an exact `count(*)`
+   * per source and no index answers one, so it is a full scan of every fact
+   * table — and after a forced history sweep those tables are tens of millions
+   * of rows. `/v1/meta` was paying for seventeen of those scans in series and
+   * publishing none of them: `toFreshness` carries the source, the two instants
+   * and the lag, and never this. Measured on production 2026-09-24, that made
+   * `/v1/meta` take 38.9 s against `/v1/grid/now`'s 1.2 s — and `/v1/meta` is
+   * the read every screen waits for before it can name a lane, so the Time
+   * Machine sat on its default day for as long as the scan ran.
+   */
+  rows: number | null;
   /** Newest fact time. Ahead of `now` for a forecast, by design. */
   latestValidTime: Date | null;
   /** When the newest row was learned. */
@@ -328,9 +340,18 @@ export const ONS_SOURCES = SOURCES.filter((spec) => spec.source !== "weather").l
  */
 export async function readSourceFreshness(
   db: Database,
-  options: { now?: Date } = {},
+  options: {
+    now?: Date;
+    /**
+     * Whether to count the rows. `/ingest/health` wants the number — it is the
+     * volume an operator recognises — and `/v1/meta` does not publish it, so it
+     * asks for the instants alone. See {@link SourceFreshness.rows}.
+     */
+    countRows?: boolean;
+  } = {},
 ): Promise<SourceFreshness[]> {
   const now = options.now ?? new Date();
+  const countRows = options.countRows ?? true;
   /*
     The last successful read per source, for the `last_read` basis — one query
     for the whole table rather than one per source, and only when some spec
@@ -353,13 +374,18 @@ export async function readSourceFreshness(
   }
   const freshness: SourceFreshness[] = [];
   for (const spec of SOURCES) {
+    /*
+      The count is its own column rather than its own query because when it is
+      wanted the scan happens anyway; what matters is that it is *absent* when
+      it is not, since `max()` reads an index and `count(*)` cannot.
+    */
     const [facts] = await db.execute<{
-      rows: number;
+      rows: number | null;
       latest_valid: string | null;
       latest_ingested: string | null;
     }>(sql`
       select
-        count(*)::int as rows,
+        ${countRows ? sql`count(*)::int` : sql`null::int`} as rows,
         max(${sql.identifier(spec.validTimeColumn ?? "valid_time")}) as latest_valid,
         max(ingested_at) as latest_ingested
       from ${sql.identifier(spec.table)}
@@ -381,7 +407,7 @@ export async function readSourceFreshness(
 
     freshness.push({
       source: spec.source,
-      rows: Number(facts?.rows ?? 0),
+      rows: countRows ? Number(facts?.rows ?? 0) : null,
       latestValidTime,
       latestIngestedAt,
       lagHours,
