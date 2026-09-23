@@ -571,7 +571,8 @@ def test_a_claim_that_restates_an_open_question_is_not_an_answer():
     )
     echo = {"claim": question, "citations": [{"chunk_id": "c1", "quote": row}]}
     claim, failures = check_claim(echo, by_chunk, Record(question=question))
-    assert claim is None and failures[-1].code == "claim_restates_question"
+    # Its only figures are the question's, so the figure check refuses it first.
+    assert claim is None and failures[-1].code in {"claim_without_the_figure", "claim_restates_question"}
 
     answer = {
         "claim": "A demanda máxima instantânea do Nordeste foi de 16.165 MW, às 18:15.",
@@ -583,6 +584,29 @@ def test_a_claim_that_restates_an_open_question_is_not_an_answer():
     yes = {"claim": fault, "citations": [{"chunk_id": "c2", "quote": fault}]}
     asks_yes_no = Record(question=f"{fault[:-1]}?")
     assert check_claim(yes, {"c2": _hit(fault)}, asks_yes_no)[0] is not None
+
+
+def test_the_question_date_is_not_the_figure_asked_for():
+    """Measured on 23/09/2026: asked how much the Nordeste's thermal plants
+    generated against the schedule, the claim said only that they were below
+    it, and its one digit was the question's date."""
+    from wattsteer_rag.gate import Record, check_claim
+
+    row = "| Térmica | Nordeste | Programado 2.521 | Verificado 2.330 | inferior ao programado |"
+    by_chunk = {"c1": _hit(row)}
+    question = "Em 09/10/2025, quanto as térmicas do Nordeste geraram frente ao programado?"
+    vague = {
+        "claim": "Em 09/10/2025, a geração térmica do Nordeste foi inferior ao programado.",
+        "citations": [{"chunk_id": "c1", "quote": row}],
+    }
+    claim, failures = check_claim(vague, by_chunk, Record(question=question))
+    assert claim is None and failures[-1].code == "claim_without_the_figure"
+
+    figure = {
+        "claim": "Em 09/10/2025, as térmicas do Nordeste verificaram 2.330 contra 2.521 programados.",
+        "citations": [{"chunk_id": "c1", "quote": row}],
+    }
+    assert check_claim(figure, by_chunk, Record(question=question))[0] is not None
 
 
 def test_one_bulletin_table_does_not_take_every_passage():

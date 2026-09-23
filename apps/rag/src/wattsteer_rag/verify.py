@@ -88,7 +88,8 @@ and the claim. Work in this order:
    (a figure and when it happened, a normal range and an emergency one); a
    claim may answer one of them. Judge it on the part it answers: it is
    supported when the passages state what the claim says about that part, even
-   if they say nothing about the others.
+   if they say nothing about the others. A claim that answers no part of the
+   question (a figure of something else, however well quoted) is not supported.
 
 Answer only with JSON:
 {"answer_from_passages": "<your answer, or null>",

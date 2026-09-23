@@ -211,7 +211,12 @@ def _claim_failures(claim: str, accepted: list[dict], record: Record) -> list[Ga
     others = agents_not_asked(claim, record.question) if from_report else []
     if others:
         return [GateFailure("claim_about_another_agent", ", ".join(others))]
-    if ASKS_FIGURE.search(record.question) and not re.search(r"\d", claim):
+    # The figure must be the claim's own: measured on 23/09/2026, "Em 09/10/2025,
+    # a geração térmica ... foi inferior ao valor programado" passed because the
+    # question's date was a digit.
+    asked = {_number_key(number) for number in numbers_in(record.question)}
+    stated = {_number_key(number) for number in numbers_in(claim)}
+    if ASKS_FIGURE.search(record.question) and not stated - asked:
         return [
             GateFailure(
                 "claim_without_the_figure", "the question asks how much and the claim states no figure"
