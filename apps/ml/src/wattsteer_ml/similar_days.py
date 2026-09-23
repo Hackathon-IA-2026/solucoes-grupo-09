@@ -76,11 +76,11 @@ import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 from zoneinfo import ZoneInfo
 
 #: ONS's clock. The pool is grouped by the Brasília civil day, not the UTC one.
 BRASILIA = ZoneInfo("America/Sao_Paulo")
-from typing import Any
 
 #: The day vector, in a fixed order so a distance is reproducible.
 #:
@@ -128,7 +128,9 @@ class Neighbour:
     hours: int
 
 
-def _standardise(pool: Sequence[DayVector]) -> tuple[tuple[float, ...], tuple[float, ...]]:
+def _standardise(
+    pool: Sequence[DayVector],
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
     """Per-feature mean and standard deviation over the pool.
 
     A standard deviation of zero is returned as zero and the caller drops that
@@ -173,7 +175,7 @@ def nearest(
     if not settled:
         return []
 
-    means, deviations = _standardise(settled)
+    _means, deviations = _standardise(settled)
     live = [index for index, spread in enumerate(deviations) if spread > 0.0]
     if not live:
         # Every day in the pool is identical on every coordinate. There is no

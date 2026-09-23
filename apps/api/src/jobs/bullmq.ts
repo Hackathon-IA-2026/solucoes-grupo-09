@@ -159,6 +159,44 @@ export function createBullMqRunner<TPayload, TResult>(
         console.error("bullmq worker error:", redactedRedisError(err));
       }
     });
+    /*
+      **A line per job, because silence and work looked identical.**
+
+      On 2026-09-22 the worker ran for nineteen hours and logged nothing
+      between its boot banner and its shutdown. Its `gate_early` publication
+      never wrote a row, no job was recorded as failed, the scheduler advanced
+      past the slot, and the same job succeeded in seconds when submitted by
+      hand afterwards. Whatever stopped it — a stalled Redis consumer is the
+      shape that fits — the operator-visible evidence was a quiet log, which is
+      exactly what a *healthy* worker also produced.
+
+      So completion is logged, not just failure. One line per job is roughly
+      thirty a day at the current schedule: the hourly sweep, two publications,
+      eight replay refreshes and the weekly jobs. That is a heartbeat somebody
+      can look at and a gap somebody can see, which is the whole of what was
+      missing.
+
+      `failed` carries the attempt count because the interesting failure is the
+      last one, not the first: BullMQ retries, and a line without the count
+      reads as three outages where there was one.
+    */
+    worker.on("completed", (job) => {
+      const kind =
+        job.data && typeof job.data === "object" && "kind" in job.data
+          ? String((job.data as { kind: unknown }).kind)
+          : "job";
+      console.log(`✅ ${kind} ${job.id}`);
+    });
+    worker.on("failed", (job, err) => {
+      const kind =
+        job?.data && typeof job.data === "object" && "kind" in job.data
+          ? String((job.data as { kind: unknown }).kind)
+          : "job";
+      console.warn(
+        `⚠️  ${kind} ${job?.id ?? "?"} failed on attempt ` +
+          `${job?.attemptsMade ?? "?"}: ${clientSafeMessage(err)}`,
+      );
+    });
   }
 
   return {

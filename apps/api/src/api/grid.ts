@@ -1,5 +1,6 @@
 import type {
   GridContext,
+  GridDay,
   GridNow,
   GridOutlook,
   RiskClass,
@@ -11,6 +12,7 @@ import { encodeWire } from "@wattsteer/core/wire";
 import { Elysia, t } from "elysia";
 import type { GridContextObservation } from "../contract/grid-context.js";
 import { readGridContext } from "../contract/grid-context.js";
+import { type GridDayObservation, readGridDay } from "../contract/grid-day.js";
 import type { GridNowObservation } from "../contract/grid-now.js";
 import { readGridNow } from "../contract/grid-now.js";
 import type { Database } from "../database/connection.js";
@@ -26,7 +28,11 @@ import {
   gateProfile as parseGateProfile,
   targetDate as parseTargetDate,
 } from "./params.js";
-import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
+import {
+  applyCachePolicy,
+  CACHE_POLICIES,
+  observedPolicyFor,
+} from "./plugins/cache-policy.js";
 
 /**
  * `GET /v1/grid/now` — the observed "right now".
@@ -83,6 +89,43 @@ function toGridNow(observation: GridNowObservation): GridNow {
       split: entry.split,
     })),
     national: observation.national,
+  };
+}
+
+/**
+ * The wire body for one settled day, built field by field.
+ *
+ * Field by field for the reason `toGridNow` gives: the encoder carries an
+ * unrecognised key through unrenamed, the schema is `additionalProperties:
+ * false`, and a read's own business — here `asOf` is wanted but nothing else
+ * of the observation's shape is — should be a compiler error rather than a
+ * validator's.
+ *
+ * `peak_hour_mwh` and its reason travel as a pair, which is what makes a null
+ * without a reason unrepresentable: `null` here means the subsystem settled no
+ * curtailment at all that day, and a zero would say it settled hours that
+ * happened to be empty. Two different measurements.
+ */
+function toGridDay(observation: GridDayObservation, date: string): GridDay {
+  return {
+    date,
+    asOf: observation.asOf.toISOString(),
+    dataVersion: observation.dataVersion,
+    vintageFidelity: observation.vintageFidelity,
+    settledHours: observation.settledHours,
+    subsystems: observation.subsystems.map((entry) => ({
+      subsystem: entry.subsystem,
+      onsDisplayName: subsystemMeta(entry.subsystem).onsDisplayName,
+      constrainedOffMwh: entry.constrainedOffMwh,
+      peakHourMwh: entry.peakHourMwh,
+      peakHourUnavailableReason:
+        entry.peakHourMwh === null ? "no_settled_curtailment" : null,
+      split: entry.split,
+    })),
+    national: {
+      constrainedOffMwh: observation.nationalConstrainedOffMwh,
+      derived: "sum_of_four",
+    },
   };
 }
 
@@ -378,6 +421,78 @@ export function createGridRoutes(deps: { db: Database | undefined; now?: () => D
             "their scalar technology splits, and the national total with its " +
             "derivation named. Observed, not forecast: it needs no model and is " +
             "served with the modelling service unreachable.",
+        },
+      },
+    )
+    .get(
+      "/v1/grid/day",
+      async ({ query, set, request }) => {
+        /*
+          The axes first, the database second — the order `/v1/grid/outlook`
+          states in the same words, and the one `/v1/grid/context` shipped
+          inverted: a malformed date answered 503, so a caller holding a bad
+          request was told the service was down.
+
+          A **civil** date through `civilDayWindow`, never a UTC midnight plus
+          24 hours: ONS's timestamps are Brasília local time and a UTC day is
+          the wrong day by three hours every day of the year.
+        */
+        const window = civilDayWindow("date", query.date);
+        if (!deps.db) {
+          throw new CodedError("DATA_UNAVAILABLE", "Persistence is not configured");
+        }
+        const asOf =
+          query.as_of === undefined ? new Date() : instant("as_of", query.as_of);
+
+        const observation = await readGridDay(deps.db, {
+          asOf,
+          from: window.from,
+          to: window.to,
+        });
+
+        /*
+          **No absence branch, and that is the decision.** `/v1/grid/now`
+          refuses when no hour is settled in all four subsystems, because an
+          invented "now" under four zeroes reads as "no curtailment anywhere".
+          A *named* day cannot make that mistake: the caller said which day, and
+          a day that has settled nothing carries `settled_hours: 0` saying so
+          on the response. Refusing here would make "tomorrow" and "a quiet
+          Sunday" the same answer, and they are not.
+        */
+        if (
+          applyCachePolicy({ set, request }, observedPolicyFor(window.to, new Date()), [
+            observation.dataVersion,
+            observation.settledHours,
+            query.date,
+          ])
+        ) {
+          return null;
+        }
+
+        return encodeWire("GridDay", toGridDay(observation, query.date));
+      },
+      {
+        query: t.Object({
+          date: t.String({
+            description: "The Brasília civil day to read (YYYY-MM-DD).",
+          }),
+          as_of: t.Optional(
+            t.String({
+              description:
+                "Vintage cut (ISO-8601). Defaults to now, and is on the response.",
+            }),
+          ),
+        }),
+        detail: {
+          summary: "The four subsystems over one settled civil day",
+          description:
+            "The day-axis twin of `/v1/grid/now`: the four subsystems' settled " +
+            "constrained-off for a named day with their scalar technology " +
+            "splits and each one's largest hour, the national total with its " +
+            "derivation named, and how many of the day's hours have settled at " +
+            "all. Observed, not forecast: it needs no model and is served with " +
+            "the modelling service unreachable. A day that settled nothing is " +
+            "200 with zeros and `settled_hours: 0`, never a refusal.",
         },
       },
     )

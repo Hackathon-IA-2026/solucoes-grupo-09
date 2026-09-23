@@ -131,11 +131,21 @@ export function HonestyNote({
   points,
   tone = "warning",
   right,
+  columns = false,
 }: {
   title: string;
   points: string[];
   tone?: "warning" | "neutral";
   right?: ReactNode;
+  /**
+   * Lay the points out side by side where the screen is wide enough.
+   *
+   * The Time Machine dashboard carries this block above its headline row, and
+   * five stacked paragraphs at 1600px pushed every figure below the fold. The
+   * points still read in order and still wrap to one column at 320px — the
+   * block is denser, never shorter, and never collapsible.
+   */
+  columns?: boolean;
 }) {
   const colors = usePalette();
   const accent = tone === "warning" ? colors.warning : colors.borderStrong;
@@ -183,33 +193,54 @@ export function HonestyNote({
         </Text>
         {right}
       </View>
-      {points.map((point) => (
-        // The dash must not shrink and the sentence must; without the pair the
-        // row sits at the sentence's unwrapped width. Same default, same ADR.
-        <View key={point} style={{ flexDirection: "row", gap: 8, flexShrink: 1 }}>
-          <Text style={{ fontSize: 12, color: colors.inkFaint, flexShrink: 0 }}>—</Text>
-          <Text
+      <View
+        style={
+          columns
+            ? {
+                flexDirection: "row",
+                flexWrap: "wrap",
+                columnGap: space.xl,
+                rowGap: space.sm,
+              }
+            : { gap: space.sm }
+        }
+      >
+        {points.map((point) => (
+          // The dash must not shrink and the sentence must; without the pair the
+          // row sits at the sentence's unwrapped width. Same default, same ADR.
+          <View
+            key={point}
             style={{
-              fontSize: 12,
-              lineHeight: 19,
-              color: colors.inkMuted,
-              flex: 1,
-              /*
+              flexDirection: "row",
+              gap: 8,
+              flexShrink: 1,
+              ...(columns ? { flexGrow: 1, flexBasis: 420, minWidth: 0 } : null),
+            }}
+          >
+            <Text style={{ fontSize: 12, color: colors.inkFaint, flexShrink: 0 }}>—</Text>
+            <Text
+              style={{
+                fontSize: 12,
+                lineHeight: 19,
+                color: colors.inkMuted,
+                flex: 1,
+                /*
                 These sentences quote identifiers, and an identifier does not
                 wrap: `dessem_free_v1__gate_late__thr5/2025-10-01T…Z` is one
                 unbreakable 45-character word, ~250px at this size, in a 244px
                 card at 320. `flex: 1` cannot help — there is no space to break
                 at. The browser is told it may break inside the word.
               */
-              ...(Platform.OS === "web"
-                ? ({ overflowWrap: "anywhere", wordBreak: "break-word" } as object)
-                : null),
-            }}
-          >
-            {point}
-          </Text>
-        </View>
-      ))}
+                ...(Platform.OS === "web"
+                  ? ({ overflowWrap: "anywhere", wordBreak: "break-word" } as object)
+                  : null),
+              }}
+            >
+              {point}
+            </Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }

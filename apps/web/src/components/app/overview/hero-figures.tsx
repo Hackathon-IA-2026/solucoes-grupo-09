@@ -148,7 +148,7 @@ export function heroFigures({
     ? ({ kind: "forecast", rows: outlookRows(forecast.outlook) } as const)
     : ({
         kind: "observed",
-        rows: observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER),
+        rows: observedRows(observed.day.subsystems, SUBSYSTEM_DISPLAY_ORDER),
       } as const);
 
   const regions = forecast
@@ -161,11 +161,11 @@ export function heroFigures({
         note: `≈${f.percentPoints(roundProbability(row.occurrenceProbability))}`,
         split: row.split,
       }))
-    : observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER).map((row) => ({
+    : observedRows(observed.day.subsystems, SUBSYSTEM_DISPLAY_ORDER).map((row) => ({
         code: subsystemMeta(row.subsystem).short,
         subsystem: row.subsystem,
         name: row.onsDisplayName,
-        value: row.last24hMwh,
+        value: row.dayMwh,
         chip: undefined,
         note: undefined,
         split: row.split,
@@ -285,17 +285,15 @@ export function heroFigures({
     forecast === null
       ? (() => {
           const totalMwh =
-            scope === "sin"
-              ? observed.now.national.last24hConstrainedOffMwh
-              : day.totalMwh;
+            scope === "sin" ? observed.day.national.constrainedOffMwh : day.totalMwh;
           return {
             cut: totalMwh > 0,
             totalMwh,
             national: scope === "sin",
             peakHour: day.peakHour,
             peakSubsystem: observed.subsystem as SubsystemCode,
-            where: observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER)
-              .filter((row) => row.last24hMwh > 0)
+            where: observedRows(observed.day.subsystems, SUBSYSTEM_DISPLAY_ORDER)
+              .filter((row) => row.dayMwh > 0)
               .map((row) => row.subsystem),
           };
         })()

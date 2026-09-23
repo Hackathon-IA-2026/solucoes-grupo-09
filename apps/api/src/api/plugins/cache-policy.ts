@@ -224,6 +224,18 @@ export const CACHE_POLICIES = {
    */
   featuredDays: { name: "featured-days", directive: shared(maxAge(ONE_HOUR_SEC)) },
 
+  /**
+   * `/v1/replay/compare/<date>`, `/v1/replay/timeline/<date>` and
+   * `/v1/replay/attribution/<date>` — one replayed day, reviewed.
+   *
+   * Key: every provenance the body carries — each pinned origin's instant and
+   * artifact, each settled `data_version`, each write instant — so an ONS
+   * restatement or a newer backtest vintage moves the validator. The replay's
+   * ten minutes, because the two halves age the same way the replay's do: the
+   * forecast half is pinned and the settled half is what can still move.
+   */
+  replayReview: { name: "replay-review", directive: shared(maxAge(TEN_MINUTES_SEC)) },
+
   /** `/v1/plants`. Key: the registry snapshot's `ingested_at`. Daily SIGA/ONS. */
   registry: { name: "registry", directive: shared(maxAge(ONE_DAY_SEC)) },
 
@@ -421,6 +433,33 @@ export const CACHE_POLICIES = {
    */
   voiceSession: { name: "voice-session", directive: NO_STORE },
 } as const satisfies Record<string, CachePolicy>;
+
+/**
+ * How long ONS keeps repairing a day after it closes.
+ *
+ * Two days — the same tolerance the health surface gives the bulk files, and
+ * the window inside which a restatement is ordinary rather than news.
+ */
+const SETTLING_TAIL_MS = 48 * 3_600_000;
+
+/**
+ * Which of the two observed rows a range falls on.
+ *
+ * The one switch on this surface that reads a clock, and it reads it to pick a
+ * *freshness window* and never a key: both rows key on the same provenance, so
+ * a restatement invalidates a settled range and a settling one identically,
+ * and the clock only decides how long a shared cache may go without asking.
+ *
+ * Beside the policies rather than inside a route, because two routes pick
+ * between them — `/v1/curtailment/*` and `/v1/grid/day` — and a second copy of
+ * a rule about *which* policy applies is the drift this table exists to
+ * prevent.
+ */
+export function observedPolicyFor(to: Date, now: Date): CachePolicy {
+  return to.getTime() > now.getTime() - SETTLING_TAIL_MS
+    ? CACHE_POLICIES.observedTail
+    : CACHE_POLICIES.observedSettled;
+}
 
 /** Every row of the table, for the assertions that must hold of all of them. */
 export const ALL_CACHE_POLICIES: readonly CachePolicy[] = Object.values(CACHE_POLICIES);

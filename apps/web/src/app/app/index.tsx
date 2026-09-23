@@ -153,7 +153,7 @@ export default function GridOverviewScreen() {
               rows:
                 settled === null
                   ? []
-                  : observedRows(settled.now.subsystems, SUBSYSTEM_DISPLAY_ORDER),
+                  : observedRows(settled.day.subsystems, SUBSYSTEM_DISPLAY_ORDER),
             }
           : { kind: "forecast", rows: outlookRows(published.outlook) },
       forecastHours: published === null ? null : forecastHours(published.forecast),
@@ -570,7 +570,6 @@ export default function GridOverviewScreen() {
       {forecast === null ? (
         <ObservedPanels
           observed={observed}
-          scope={scope}
           subsystem={params.subsystem}
           onSelect={select}
           onExplain={explain}
@@ -586,7 +585,6 @@ export default function GridOverviewScreen() {
           />
           <SettledPanels
             observed={observed}
-            scope={scope}
             subsystem={params.subsystem}
             onSelect={select}
           />

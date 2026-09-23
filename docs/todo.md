@@ -217,7 +217,81 @@ is above 90%, and the number only counts on a fresh set.
       transparency and reproducibility, his 16/09 reply calls it the operation
       procedures manual.
 
-### 5b. The observed curtailment is too high by roughly 2–3×
+### 5b. ~~The observed curtailment is too high~~ — SETTLED 22/09
+
+Two things were wrong: **the field this repository read**, and **the
+denominator this ticket judged it by**. The second is why the first hid for so
+long, and both are recorded because the corrections matter more than the fix.
+
+#### The field
+
+The adapter read `val_geracaolimitada` as the curtailed energy. ONS's published
+dictionary for `restricao_coff_eolica_usi` says it is not:
+
+| field | ONS's definition |
+|---|---|
+| `val_geracaolimitada` | "Geração limitada. Representa o **limite** para a geração da usina/conjunto estabelecido pelo ONS em Tempo Real, em MWmed." |
+| `val_geracaonaorealizadaapurada` (GNRa) | "…a estimativa de geração frustrada, obtida pela **diferença entre a geração de referência e a geração verificada** (se menor que zero, GNRa = 0)." |
+
+Summed over all of September, `reference − verified` equals GNRa to the
+megawatt-hour — 2.561.378 both — which confirms the dictionary's formula over
+81.676 restricted half-hours rather than over one row.
+
+**The aggregate effect is 1,19×, not the 2–3× this ticket estimated**, and it
+is not a uniform deflation: Sul goes *up* by 4,3×.
+
+| | old (ceiling) | new (GNRa) | |
+|---|---|---|---|
+| N | 34.701 | 21.776 | 1,59× |
+| NE | 3.642.836 | 3.045.195 | 1,13× |
+| SE | 811.462 | 555.956 | 1,46× |
+| **S** | 41.452 | **178.187** | **0,23×** |
+| all | 4.530.452 | 3.801.113 | 1,19× |
+
+#### The denominator
+
+This ticket's decisive argument was *"a fleet cannot be 71 % curtailed and
+generating at the same time"*, computed against **installed capacity**. That is
+the wrong comparison, and it is what made a coherent record look impossible.
+
+NE, 2026-09-20 10:00, summed over every reporting entity:
+
+| | MW |
+|---|---|
+| electromechanical availability | 36.918 |
+| **reference** — what the resource allowed | 30.460 |
+| **verified generation** | **4.119** |
+| GNRa — the cut | 26.174 |
+
+The fleet was **not generating**: 4,1 GW out of 36,9 GW available. There is no
+contradiction — the cut is the distance between what the wind and the sun
+allowed and what ONS let through. The appearance of one came from the ceiling:
+a ceiling sits *next to* generation by construction, so reading it as a cut
+produced "curtailed ≈ generated", which is absurd, and it was the reading that
+was absurd.
+
+Against reference generation — the quantity a cut compares to — NE's September
+runs **7 % to 43 %** of potential, day by day:
+
+| day | GNRa MWh | verified | reference | cut |
+|---|---|---|---|---|
+| 01/09 | 28.914 | 367.653 | 399.581 | 7 % |
+| 13/09 | 201.861 | 341.572 | 551.276 | 37 % |
+| 20/09 | 254.216 | 330.385 | 588.551 | **43 %** |
+
+That is the published order of magnitude for Nordeste curtailment.
+
+- [x] Settle `val_geracaolimitada` against `val_geracaoreferencia` and
+      `val_geracao`. **ONS's data dictionary answered it, not the specialist.**
+- [x] The impossibility. It was a denominator, not the data.
+- [ ] **Re-ingest `recent` + `history`**: every stored row is still a ceiling.
+      NE moves ~13 % down, Sul 4,3 % *up*, and nothing on screen is true until
+      it has run.
+- [ ] Until it has, no absolute MWh figure for observed curtailment goes in the
+      deck. After it has, they are defensible — state them against *reference
+      generation* and never against installed capacity.
+
+### 5b-old. The measurement that found it
 
 Measured 21/09 against production, and **it is systematic rather than one
 extreme day**. Every day of 01–16/09 reads 150–220 GWh for Nordeste.

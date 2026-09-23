@@ -36,15 +36,13 @@ import { SelectedRegion } from "@/components/app/selected-region";
 import { SubsystemRow } from "@/components/app/subsystem-row";
 import { useAppParams } from "@/components/app/use-app-params";
 import type { ForecastNetwork } from "@/components/app/use-network";
-import { BandCard } from "@/components/charts/band-figure";
 import { FanChart } from "@/components/charts/fan-chart";
 import { RiskCaveat } from "@/components/charts/risk-class";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
 import { useVoiceHighlight } from "@/components/voice/use-voice-agent";
-import { useCopy, useFormat } from "@/i18n";
-import { fill } from "@/i18n/format";
+import { useCopy } from "@/i18n";
 import { type SubsystemCode, subsystemMeta } from "@/lib/fixtures";
-import { forecastHours, forecastRow, outlookRows } from "@/lib/network";
+import { forecastHours, outlookRows } from "@/lib/network";
 
 /**
  * Everything a promoted model pays for.
@@ -77,11 +75,9 @@ export function ForecastPanels({
 }) {
   const colors = usePalette();
   const copy = useCopy();
-  const f = useFormat();
   const params = useAppParams();
   const meta = subsystemMeta(params.subsystem);
   const rows = outlookRows(forecast.outlook);
-  const selected = forecastRow(forecast.forecast);
   const [overviewWidth, onOverviewLayout] = useContainerWidth();
   // One hover, two affordances — see `SubsystemMap`'s `hovered` prop.
   const [hovered, setHovered] = useState<SubsystemCode | null>(null);
@@ -282,30 +278,26 @@ export function ForecastPanels({
         `region-rail.tsx` for why it is one segmented bar and not two.
       */}
 
-      <FadeIn
-        delay={210}
-        style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
-      >
-        <BandCard
-          label={fill(copy.app.overview.dailyEnergy, {
-            subsystem: meta.onsDisplayName,
-          })}
-          band={selected.dailyEnergy}
-          unit="MWh"
-          footnote={copy.app.overview.dailyEnergyNote}
-        />
-        <BandCard
-          label={fill(copy.app.overview.peakPower, {
-            subsystem: meta.onsDisplayName,
-          })}
-          band={selected.peakPower}
-          unit="MW"
-          tone="violet"
-          footnote={fill(copy.app.overview.peakPowerNote, {
-            mw: f.number(forecast.forecast.thresholdMw),
-          })}
-        />
-      </FadeIn>
+      {/*
+        **The day's two bands moved into the hero's left column, under the
+        profile.**
+
+        They were here, at the bottom of the page, a full scroll below the map
+        that says which region they are about — while the settled state's two
+        figures had already moved up under `Hora a hora` for exactly that
+        reason. Two states of one screen putting the same claim in two places is
+        how a reader learns to distrust the position of a number, so the
+        forecast pair follows the observed pair rather than the other way round:
+        the day expectation and its P10-P90 now sit beside the map, in the
+        column that already carries the headline and the hourly shape.
+
+        `OverviewHero` renders them under `forecast !== null` and renders the
+        settled pair under `forecast === null`, so exactly one of the two is
+        ever on the page. That exclusivity is the point: a band and a settled
+        megawatt-hour a few hundred pixels apart under labels that both say "the
+        day" is the adjacency `lib/network.ts` keeps its two row types apart to
+        prevent.
+      */}
     </>
   );
 }

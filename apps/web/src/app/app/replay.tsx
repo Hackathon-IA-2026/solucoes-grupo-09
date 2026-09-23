@@ -94,6 +94,7 @@ import { ReadingState } from "@/components/app/thinking-orb";
 import { useAppParams } from "@/components/app/use-app-params";
 import { useReplay } from "@/components/app/use-replay";
 import { useReplayDays } from "@/components/app/use-replay-days";
+import { useReplayLane } from "@/components/app/use-replay-lane";
 import { useScenario } from "@/components/app/use-scenario";
 import { useServing } from "@/components/app/use-serving";
 import { NO_BRIEFING_DATA } from "@/components/briefing/briefing-data";
@@ -112,7 +113,7 @@ import {
   vintageNote,
 } from "@/i18n/replay";
 import { type BatteryAsset, replayDay, type ShiftableLoadAsset } from "@/lib/fixtures";
-import { dispatchSeries, forecastHours, observedHours, REPLAY_LANE } from "@/lib/replay";
+import { dispatchSeries, forecastHours, observedHours } from "@/lib/replay";
 
 export default function TimeMachineScreen() {
   const palette = usePalette();
@@ -122,6 +123,8 @@ export default function TimeMachineScreen() {
   const serving = useServing();
   const params = useAppParams();
   const day = replayDay(params.episode);
+  /* Read from `/v1/meta`, never written down — see `use-replay-lane.ts`. */
+  const { lane: replayLane } = useReplayLane();
   const days = useReplayDays(day.subsystem);
   const [showAllDays, setShowAllDays] = useState(false);
   // The replayed day is the selection, so the scenario in the address bar
@@ -364,7 +367,7 @@ export default function TimeMachineScreen() {
         subject={{
           subsystem: day.subsystem,
           targetDate: day.date,
-          lane: REPLAY_LANE,
+          lane: replayLane ?? "",
           artifactId: state.replay.forecastOrigin.runLabel,
         }}
         testID="replay-feedback"

@@ -38,16 +38,14 @@ import type {
   HourlyDispatch,
 } from "@/lib/fixtures";
 
-/**
- * The lane a replay is pinned to.
- *
- * Required by the gateway and never defaulted there, because a post-go-live day
- * has one candidate forecast per served lane and no rule yet says which one a
- * replay is of. The prototype pins the one lane its other numbers come from, so
- * the model card a reader can open and the replay they are looking at describe
- * the same artifact family rather than two.
- */
-export { FIXTURE_LANE as REPLAY_LANE } from "@/lib/fixtures";
+/*
+  The lane a replay is pinned to used to be here, as
+  `export { FIXTURE_LANE as REPLAY_LANE }`. It is read from `/v1/meta` now —
+  `components/app/use-replay-lane.ts` carries the argument and the measurement
+  that ended it. The gateway still never defaults a lane, and for the same
+  reason: a post-go-live day has one candidate forecast per served lane and no
+  rule yet says which one a replay is of.
+*/
 
 /**
  * The UTC instant an `America/Sao_Paulo` civil hour starts at.

@@ -48,7 +48,7 @@ import type {
   ForecastDayAhead,
   GridOutlook,
   RiskClass,
-  SubsystemNow,
+  SubsystemDay,
   SubsystemOutlook,
   TechnologySplit,
 } from "@wattsteer/core/api";
@@ -211,7 +211,24 @@ export function observedHours(
 export interface ObservedRow {
   readonly subsystem: SubsystemCode;
   readonly onsDisplayName: string;
-  readonly last24hMwh: number;
+  /**
+   * The settled **day**'s constrained-off, not a rolling 24 hours.
+   *
+   * It was `last_24h_constrained_off_mwh` off `GET /v1/grid/now`, and the rail
+   * that draws these rows carried a paragraph explaining why that was safe: the
+   * headline above it reads the settled day and these four read the last 24
+   * hours, "which in the observed state makes them 0,0 MWh and 1 843 MWh for
+   * the same region, a few hundred pixels apart". That paragraph was the
+   * mitigation for a screen showing two windows at once.
+   *
+   * There is one window now. `GET /v1/grid/day?date=` answers the same four
+   * figures for a named civil day — the same day the profile beside them draws
+   * hour by hour — so the rail and the chart finally describe the same thing,
+   * and a reader who picks another day moves all of it together.
+   */
+  readonly dayMwh: number;
+  /** The day's largest hour, `null` where the subsystem settled nothing. */
+  readonly peakHourMwh: number | null;
   readonly split: TechnologySplit;
 }
 
@@ -223,16 +240,17 @@ export interface ObservedRow {
  * response is a rendering decision and this is where it is made.
  */
 export function observedRows(
-  subsystems: readonly SubsystemNow[],
+  subsystems: readonly SubsystemDay[],
   order: readonly SubsystemCode[],
 ): ObservedRow[] {
   return order
     .map((code) => subsystems.find((each) => each.subsystem === code))
-    .filter((each): each is SubsystemNow => each !== undefined)
+    .filter((each): each is SubsystemDay => each !== undefined)
     .map((each) => ({
       subsystem: each.subsystem,
       onsDisplayName: each.onsDisplayName,
-      last24hMwh: each.last24hConstrainedOffMwh,
+      dayMwh: each.constrainedOffMwh,
+      peakHourMwh: each.peakHourMwh,
       split: each.split,
     }));
 }

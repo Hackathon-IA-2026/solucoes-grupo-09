@@ -80,6 +80,10 @@ const OBSERVED = {
   reasons: [],
   evidence: null,
   now: {} as never,
+  // The settled day the screen is about. `as never` like `now`: this suite is
+  // about the sentences the voice context builds, and it builds none from
+  // either — a populated fixture here would be a shape to maintain for nothing.
+  day: {} as never,
   hours: [
     { validTime: "2026-09-14T03:00:00Z", hourLocal: 0, constrainedOffMwh: 120 },
     { validTime: "2026-09-14T04:00:00Z", hourLocal: 1, constrainedOffMwh: 80 },

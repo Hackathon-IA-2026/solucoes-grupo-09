@@ -1183,7 +1183,8 @@ export const en = {
     observed: {
       badge: "Observed",
       stamp: "Observed · settled through {when} BRT · {lag} h behind",
-      window24h: "Last 24 h to {hour} BRT",
+      /* A settled day, not a rolling window; see the pt-BR entry. */
+      window24h: "Settled day, {date}",
       windowDay: "Settled day, {date}",
       rowEnergy: "Curtailed energy, last 24 h",
       selectedFigure: "{mwh} MWh settled · wind {wind} · solar {solar}",
@@ -1198,7 +1199,7 @@ export const en = {
         "An energy in MWh, not a power in MW: ONS publishes energy per hour, and the peak-power band a forecast states is a model's claim about the shape inside that hour. There is no such model today, so no such figure is shown.",
       emptyDay:
         "The day settled with no curtailment at all in this subsystem, which is a measurement and not a missing figure.",
-      nationalTitle: "The last 24 hours, across all four subsystems",
+      nationalTitle: "The settled day, across all four subsystems",
       nationalSubtitle: "A sum of four measurements, and it is exact",
       nationalLabel: "Settled constrained-off energy, all four subsystems",
       /* See the note on the Portuguese side. */
@@ -1255,7 +1256,7 @@ export const en = {
         noBand: "A settlement is a number, not an interval.",
         nationalLabel: "Brazil",
         windowForecast: "Expected tomorrow, per subsystem.",
-        windowObserved: "The last settled 24 h, per subsystem.",
+        windowObserved: "The settled day, per subsystem.",
         /** See the pt-BR entry: compact on purpose, and on all four rows. */
         railSplit: "wind {wind} · solar {solar}",
       },
@@ -1293,6 +1294,9 @@ export const en = {
       lockView: "Lock this view as the default",
       unlockView: "Unlock the default view",
       legendTitle: "Risk class",
+      /* Hints, not labels; see the pt-BR entry. */
+      dayPreviousHint: "Show the previous day",
+      dayNextHint: "Show the next day",
       scopeLabel: "Scope",
       runLabel: "Run",
       layer2d: "2D",
@@ -1869,6 +1873,179 @@ export const en = {
       refusalReset: "Back to the reference fleet",
       shareNote:
         "The fleet lives in the address bar, so this link is the whole state — including the day and the assets it was scored against.",
+    },
+    /*
+      The Time Machine dashboard at `/app/time-machine`. It sits beside the
+      current screen while it is checked, reads the same replay, and adds three
+      reads: the four subsystems, the day's timeline and the pinned
+      attribution. Nothing here grades a day with a percentage — one day
+      cannot produce an accuracy — and nothing names a cause: the reason is
+      ONS's, read from the settled record.
+    */
+    timeMachine: {
+      metaTitle: "Time Machine dashboard — WattSteer",
+      title: "What WattSteer said at D−1, and what ONS settled",
+      lede: "The D−1 forecast against what ONS settled.",
+      ledeAbsent: "What ONS settled. No held-out forecast answers this day.",
+      about: "About this panel",
+      strip: {
+        modelDidNotSee: "Model did not see this day",
+        trainedUntil: "{fold} · trained to {date}",
+      },
+      currentScreen: "Previous version",
+      subsystems: "Subsystem",
+      subsystemUnavailable: "No held-out forecast for this subsystem on this day",
+      refreshing: "Updating…",
+      kpi: {
+        forecastTitle: "What we forecast",
+        forecastKicker: "P50 · D−1",
+        forecastBand: "P10 {p10} · P90 {p90}",
+        forecastWindow: "Likely hours {from}–{to}",
+        forecastNoWindow: "No likely hour",
+        settledTitle: "What settled",
+        settledKicker: "Settled by ONS",
+        settledAbsent: "Not settled yet",
+        deviationTitle: "Deviation",
+        deviationKicker: "Settled − P50",
+        coverageTitle: "Track record",
+        coverageKicker: "Days inside the band",
+        coverageValue: "of {days} days",
+        coverageTarget: "Calibrated to reach {target}",
+        coverageServingNote:
+          "Measured on the model serving today, not on the fold artifact that produced this day's forecast.",
+        coverageAbsent: "Not measured",
+        recoveredTitle: "Fleet would absorb",
+        recoveredKicker: "Scored on the settled day",
+        recoveredFloor: "D−1 floor {floor} MWh · {met}",
+      },
+      chart: {
+        title: "Curtailment: D−1 against settled ({subsystem})",
+        subtitle: "Hour by hour · {date}",
+        figure:
+          "The forecast published at D−1 as a P10–P90 band with its P50, and the settled constrained-off energy of each hour as bars",
+        legendBand: "P10–P90 band (D−1)",
+        legendP50: "P50 (D−1)",
+        legendEdges: "P10 and P90 (D−1)",
+        legendSettled: "Settled by ONS",
+        legendWindow: "Likely curtailed hours (P ≥ 0.5)",
+        peakSettled: "Settled peak",
+        peakForecast: "Forecast peak (P50)",
+        peakForecastNote: "P10 {p10} · P90 {p90} MW",
+        dayChance: "Chance of any curtailment",
+      },
+      timeline: {
+        title: "When each fact arrived",
+        subtitle: "Both D−1 gates, and the settled record",
+        gate: {
+          gate_early: "D−1 09:00 · 00Z run",
+          gate_late: "D−1 19:00 · 12Z run",
+        },
+        bandLine: "P50 {p50} MWh",
+        deviationLine: "{value} MWh against the settled",
+        settledNode: "Settled by ONS",
+        settledNodeAbsent: "Not settled yet",
+        settledRestatedNode: "ONS rewrote {rows} rows",
+        events: {
+          forecast_published: "Forecast published · {gate}",
+          forecast_published_counterfactual:
+            "Gate this reconstruction stands in for · {gate}",
+          forecast_written: "Forecast row written · {gate}",
+          forecast_written_counterfactual: "Reconstructed by the backtest · {gate}",
+          settled_written: "Settled record read from ONS · {rows} rows",
+          settled_restated: "ONS rewrote {rows} settled rows · version {version}",
+        },
+        noIntraday:
+          "WattSteer forecasts the next day only. There is no intraday revision, so the two D−1 gates are the whole forecast record of a day.",
+        eventsTitle: "Change log",
+        eventsEmpty: "Nothing recorded for this day yet.",
+      },
+      compare: {
+        title: "Comparison by subsystem",
+        subtitle: "Each pinned D−1 band beside what settled",
+        columns: {
+          subsystem: "Subsystem",
+          p50: "Forecast (P50)",
+          band: "P10–P90",
+          settled: "Settled",
+          deviation: "Deviation",
+          placement: "Where it landed",
+        },
+        placement: {
+          inside: "Inside the band",
+          above: "Above P90",
+          below: "Below P10",
+        },
+        national: "National",
+        nationalSettledNote: "Settled: the sum of the four subsystems",
+        nationalAbsent: {
+          subsystem_forecast_missing:
+            "No joint band: a subsystem has no held-out forecast",
+          origins_differ: "No joint band: the four came from different publications",
+          no_joint_ensemble: "No joint band was published for this day",
+        },
+        settledAbsent: "Not settled",
+        bandAbsent: "No band",
+        note: "No percentage is shown: one day cannot produce an accuracy. The national band is the joint row the ensemble drew over the four day totals — never four medians added.",
+      },
+      tabs: {
+        label: "Evidence",
+        drivers: "What moved the forecast",
+        analogues: "Similar days",
+        reasons: "ONS's stated reason",
+        audit: "Audit",
+      },
+      attribution: {
+        title: "What moved the forecast at D−1",
+        note: "The bars decompose the model's expectation for the day against its matched background. They explain the number the model published, not what ONS settled and not the deviation.",
+        absent: {
+          no_pinned_forecast:
+            "There is no pinned forecast for this day, so there is nothing to decompose.",
+          not_published:
+            "No attribution was written for this publication. A served attribution of another artifact is never shown in its place.",
+        },
+        total: "Expectation {day} MWh against a background of {baseline} MWh",
+      },
+      reasons: {
+        title: "The reason ONS recorded",
+        note: "ONS's classification of the settled curtailment, by share of the energy. WattSteer forecasts how much; the reason is ONS's.",
+        share: "{share} of the settled energy",
+        empty: "ONS recorded no reason for this day's settled energy.",
+        citation: "Source: {document}",
+      },
+      audit: {
+        title: "Every read behind this page",
+        note: "Each link is the gateway's own answer for this day, as JSON.",
+        replay: "The replay",
+        compare: "The four subsystems",
+        timeline: "The timeline",
+        attribution: "The attribution",
+      },
+      trace: {
+        title: "Traceability",
+        subtitle: "Which model, which data, which instant",
+        artifact: "Artifact",
+        fold: "Held out by",
+        trainWindow: "Trained on",
+        calibrationWindow: "Calibrated on",
+        lane: "Lane",
+        published: "Published at",
+        publishedCounterfactual: "Gate reconstructed",
+        written: "Row written",
+        settledVersion: "Settled data version",
+        settledWritten: "Settled read from ONS",
+        restated: "Rows ONS rewrote",
+        solver: "Solver",
+        window: "{from} – {to}",
+      },
+      context: {
+        title: "What changed between D−1 and the day",
+        note: "ONS's own programme for the day beside what the grid did. Both are ONS's numbers; neither is WattSteer's, and the pair is stated as facts, not as the reason for the deviation.",
+      },
+      fleet: {
+        title: "What the fleet would have done",
+        subtitle: "Planned on the D−1 P50, scored on the settled day",
+        note: "The plan was built on the D−1 P50 and scored on the settled day by the same simulator the live path uses.",
+      },
     },
   },
 } as const;

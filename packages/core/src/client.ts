@@ -42,6 +42,7 @@ import type {
   DiagnosisDayAhead,
   ForecastDayAhead,
   GridContext,
+  GridDay,
   GridNow,
   GridOutlook,
   Meta,
@@ -49,7 +50,10 @@ import type {
   ObservedReasons,
   OptimizationResult,
   Replay,
+  ReplayAttribution,
+  ReplayCompare,
   ReplayObservedOnly,
+  ReplayTimeline,
   Scenario,
   SimilarDays,
 } from "./types.generated.js";
@@ -301,6 +305,25 @@ export class ApiClient {
   }
 
   /**
+   * `GET /v1/grid/day` — the same four subsystems over a **named** settled day.
+   *
+   * The day-axis twin of `gridNow`, and a separate call rather than a parameter
+   * on that one: `now` finds its own window from the latest hour every
+   * subsystem has settled, and the two fields that make it mean anything —
+   * `latest_settled_hour` and `lag_hours` — describe a clock a caller asking
+   * for a Tuesday did not ask about.
+   */
+  gridDay(
+    query: { date: string; asOf?: string },
+    signal?: AbortSignal,
+  ): Promise<GridDay> {
+    return this.request<GridDay>("GridDay", "/v1/grid/day", {
+      query: { date: query.date, as_of: query.asOf },
+      signal,
+    });
+  }
+
+  /**
    * `GET /v1/forecast/day-ahead` — one subsystem, one day, one gate.
    *
    * There is no `technology` parameter, deliberately: the forecast grain is the
@@ -520,6 +543,63 @@ export class ApiClient {
       query: { d: query.d, s: query.s, lane: query.lane },
       signal,
     });
+  }
+
+  /**
+   * `GET /v1/replay/compare/<date>?lane=` — one replayed day across the four
+   * subsystems.
+   *
+   * Every subsystem is present, with its pinned day band or the refusal code
+   * standing in for it, and its settled total or `day_not_settled`. The
+   * national row's band is the joint row of the one publication all four
+   * resolved, never four bands added. No percentage comes back: one day cannot
+   * produce an accuracy.
+   */
+  replayCompare(
+    query: { date: string; lane: string },
+    signal?: AbortSignal,
+  ): Promise<ReplayCompare> {
+    return this.request<ReplayCompare>(
+      "ReplayCompare",
+      `/v1/replay/compare/${encodeURIComponent(query.date)}`,
+      { query: { lane: query.lane }, signal },
+    );
+  }
+
+  /**
+   * `GET /v1/replay/timeline/<date>?subsystem=` — the day at both served gates,
+   * and when each fact arrived.
+   *
+   * A reconstruction's `published_at` is the gate that would have been; the
+   * entry says so, and carries the instant it was actually written beside it.
+   */
+  replayTimeline(
+    query: { date: string; subsystem: string },
+    signal?: AbortSignal,
+  ): Promise<ReplayTimeline> {
+    return this.request<ReplayTimeline>(
+      "ReplayTimeline",
+      `/v1/replay/timeline/${encodeURIComponent(query.date)}`,
+      { query: { subsystem: query.subsystem }, signal },
+    );
+  }
+
+  /**
+   * `GET /v1/replay/attribution/<date>?subsystem=&lane=` — what moved the
+   * replayed forecast, for exactly its pinned publication.
+   *
+   * The bars explain the model's number, not the settled day and not the
+   * error. A publication nobody explained answers `not_published`.
+   */
+  replayAttribution(
+    query: { date: string; subsystem: string; lane: string },
+    signal?: AbortSignal,
+  ): Promise<ReplayAttribution> {
+    return this.request<ReplayAttribution>(
+      "ReplayAttribution",
+      `/v1/replay/attribution/${encodeURIComponent(query.date)}`,
+      { query: { subsystem: query.subsystem, lane: query.lane }, signal },
+    );
   }
 
   /**

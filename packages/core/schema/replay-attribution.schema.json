@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/replay-attribution.schema.json",
+  "title": "ReplayAttribution",
+  "description": "`GET /v1/replay/attribution/{date}` - what moved the replayed forecast at D-1, for exactly the publication the replay is pinned to. It decomposes the day's expectation against the artifact's matched background: it explains the model's number, never the settled outcome, never the forecast error and never the grid. A served attribution of the same day explains a different artifact and is never substituted for a missing one.",
+  "type": "object",
+  "properties": {
+    "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+    "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+    "lane": { "type": "string" },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "forecast_origin": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/forecast_origin" },
+        { "type": "null" }
+      ]
+    },
+    "attribution": {
+      "oneOf": [{ "$ref": "#/$defs/pinned_attribution" }, { "type": "null" }]
+    },
+    "attribution_unavailable_reason": {
+      "type": ["string", "null"],
+      "enum": ["no_pinned_forecast", "not_published", null],
+      "description": "`no_pinned_forecast`: the day has no band the replay would answer from. `not_published`: it has one, and no attribution was written for that publication. Set exactly when `attribution` is null."
+    }
+  },
+  "required": [
+    "subsystem",
+    "target_date",
+    "lane",
+    "vintage_fidelity",
+    "forecast_origin",
+    "attribution",
+    "attribution_unavailable_reason"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "pinned_attribution": {
+      "title": "ReplayPinnedAttribution",
+      "type": "object",
+      "properties": {
+        "target": { "type": "string", "enum": ["expected_mwh_day"] },
+        "total_attributed_mwh": { "type": "number" },
+        "sum_abs_attributed_mwh": { "type": "number", "minimum": 0 },
+        "stderr_mwh": { "type": "number", "minimum": 0 },
+        "baseline_expected_mwh": { "type": "number" },
+        "day_expected_mwh": { "type": "number" },
+        "driver_group_version": { "type": "string" },
+        "driver_group_hash": { "type": "string" },
+        "governing_rule_action": {
+          "type": ["string", "null"],
+          "enum": ["annotate", "demote", "withhold", null]
+        },
+        "rule_codes": { "type": "array", "items": { "type": "string" } },
+        "drivers": {
+          "type": "array",
+          "description": "All eight groups at day grain, ranked by |share|.",
+          "items": { "$ref": "diagnosis.schema.json#/$defs/driver" }
+        }
+      },
+      "required": [
+        "target",
+        "total_attributed_mwh",
+        "sum_abs_attributed_mwh",
+        "stderr_mwh",
+        "baseline_expected_mwh",
+        "day_expected_mwh",
+        "driver_group_version",
+        "driver_group_hash",
+        "governing_rule_action",
+        "rule_codes",
+        "drivers"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

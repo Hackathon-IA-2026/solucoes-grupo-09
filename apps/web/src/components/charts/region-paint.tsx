@@ -108,9 +108,7 @@ export function useRegionPaint(paint: MapPaint): {
    * scale in megawatt-hours, so "darkest" is never read as "large" on its own.
    */
   const observedMax =
-    paint.kind === "observed"
-      ? Math.max(...paint.rows.map((row) => row.last24hMwh), 0)
-      : 0;
+    paint.kind === "observed" ? Math.max(...paint.rows.map((row) => row.dayMwh), 0) : 0;
 
   const painted = new Map<SubsystemCode, RegionPaint>(
     paint.kind === "forecast"
@@ -146,7 +144,7 @@ export function useRegionPaint(paint: MapPaint): {
         })
       : paint.rows.map((row) => {
           const anchor = SUBSYSTEM_LABEL_ANCHOR[row.subsystem];
-          const share = observedMax === 0 ? 0 : row.last24hMwh / observedMax;
+          const share = observedMax === 0 ? 0 : row.dayMwh / observedMax;
           return [
             row.subsystem,
             {
@@ -157,7 +155,7 @@ export function useRegionPaint(paint: MapPaint): {
               // apart as surely as an eye can.
               label: fill(copy.app.overview.map.regionObserved, {
                 subsystem: subsystemMeta(row.subsystem).onsDisplayName,
-                mwh: f.compact(row.last24hMwh),
+                mwh: f.compact(row.dayMwh),
               }),
               // The figure itself, where the forecast map draws a binned glyph.
               // A number on a region is the plainest possible statement that
@@ -172,7 +170,7 @@ export function useRegionPaint(paint: MapPaint): {
                   fontFamily={FONT}
                   fill={colors.ink}
                 >
-                  {`${f.compact(row.last24hMwh)} MWh`}
+                  {`${f.compact(row.dayMwh)} MWh`}
                 </SvgText>
               ),
             },

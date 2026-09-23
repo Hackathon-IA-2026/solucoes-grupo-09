@@ -79,6 +79,8 @@ from typing import Any
 import asyncpg
 
 from wattsteer_ml.config import settings
+from wattsteer_ml.diagnosis.holdout import SkippedAttribution, holdout_attributions
+from wattsteer_ml.diagnosis.publication import AttributionPublication
 from wattsteer_ml.evaluation import Fold, FoldCalendar, materialize_fold_calendar
 from wattsteer_ml.evaluation.holdout import HoldoutBacktest, fold_holdout_publications
 from wattsteer_ml.evaluation.serving_lanes import SERVING_LANES
@@ -170,6 +172,30 @@ class LaneFailure:
 
 
 @dataclass(frozen=True)
+class LaneBackfill:
+    """One lane's reconstructed forecasts, and the attributions minted beside them.
+
+    The attributions are a second deliverable of the same fit rather than a
+    second fit: the fold artifact that composed each held-out band is the one
+    whose frozen background the bars are measured against, so the explanation
+    and the band describe one model. A day that could not be explained is named
+    in :attr:`skipped` and never takes its forecast down with it — a replay
+    without bars is still a replay, and a replay with a lane missing is not.
+    """
+
+    backtest: HoldoutBacktest
+    attributions: tuple[AttributionPublication, ...] = ()
+    skipped: tuple[SkippedAttribution, ...] = ()
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            **self.backtest.as_payload(),
+            "attributions": [one.as_payload() for one in self.attributions],
+            "attributions_skipped": [one.as_dict() for one in self.skipped],
+        }
+
+
+@dataclass(frozen=True)
 class HoldoutBackfillReport:
     """What one run produced: the payloads to write, and the lanes that did not.
 
@@ -181,7 +207,7 @@ class HoldoutBackfillReport:
     fold_id: str
     artifact_id: str
     as_of: datetime
-    runs: tuple[HoldoutBacktest, ...]
+    runs: tuple[LaneBackfill, ...]
     failures: tuple[LaneFailure, ...]
 
     def as_dict(self) -> dict[str, Any]:
@@ -208,7 +234,7 @@ async def _lane_inputs(
 
 def backfill_lane(
     inputs: LaneInputs, *, request: HoldoutBackfillRequest, artifact_id: str
-) -> HoldoutBacktest:
+) -> LaneBackfill:
     """One lane's fold: fit it, keep the artifact, mint its held-out days.
 
     The artifact is saved **before** the publications are minted, for the reason
@@ -228,7 +254,11 @@ def backfill_lane(
         artifact_id=artifact_id,
     )
     save_artifact(trained.bundle, trained.card, root=request.root)
-    return fold_holdout_publications(inputs.rows, trained=trained)
+    backtest = fold_holdout_publications(inputs.rows, trained=trained)
+    attributions, skipped = holdout_attributions(
+        inputs.rows, trained=trained, backtest=backtest
+    )
+    return LaneBackfill(backtest=backtest, attributions=attributions, skipped=skipped)
 
 
 def run_holdout_backfill(request: HoldoutBackfillRequest) -> HoldoutBackfillReport:
@@ -237,7 +267,7 @@ def run_holdout_backfill(request: HoldoutBackfillRequest) -> HoldoutBackfillRepo
     fold = request.fold(calendar)
     artifact_id = fold_artifact_id(fold)
 
-    runs: list[HoldoutBacktest] = []
+    runs: list[LaneBackfill] = []
     failures: list[LaneFailure] = []
     for lane in request.lanes:
         try:

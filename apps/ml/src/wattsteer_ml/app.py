@@ -56,9 +56,10 @@ from pydantic import BaseModel
 from . import __version__, artifacts
 from . import retrain_supervisor as supervisor
 from .artifacts import CARD_SUFFIX, inspect
+from .canonical_reads import ReadAxes, apply_axes
 from .caveated import caveated_figures
 from .config import settings
-from .constants import Subsystem
+from .constants import SUBSYSTEM_CODES, Subsystem
 from .database import database
 from .declined import DeclineKind, declined_figures
 from .diagnosis.publication import AttributionPublication, AttributionPublicationError
@@ -70,6 +71,7 @@ from .diagnosis.publish import (
 from .diagnosis.rule_context import RuleContextError, reason_mixes_from_payload
 from .evaluation.folds import FOLD_CALENDAR_RULES
 from .evaluation.holdout import HoldoutLeakError
+from .evaluation.serving_lanes import SERVING_LANES
 from .features import (
     FeatureRowsQuery,
     FeatureSet,
@@ -78,11 +80,7 @@ from .features import (
     read_serving_rows,
     serving_target_date,
 )
-from .canonical_reads import ReadAxes, apply_axes
 from .forecast_reads import served_profile_source
-from .similar_days import BRASILIA
-from .similar_days import FEATURES as SIMILAR_FEATURES
-from .similar_days import OUTCOME_SQL, POOL_SQL, nearest, pool_vectors
 from .lanes import Lane, LaneNameError, is_artifact_id
 from .optimizer import (
     OptimizerBugError,
@@ -121,6 +119,17 @@ from .replay.featured import FeaturedRuleError
 from .replay.inputs import ReplayInputs, ReplayInputSource, replay_input_source
 from .replay.reads import read_calendar_evidence
 from .replay.result import observed_only_result, replay_result
+from .replay.review import (
+    AttributionSource,
+    NationalBandAbsence,
+    NationalDaySource,
+    attribution_day,
+    attribution_source,
+    compare_day,
+    national_day_source,
+    shared_publication,
+    timeline_day,
+)
 from .replay.scoring import score_observed_only, score_replay
 from .replay.shortlist import (
     FeaturedDaysCache,
@@ -137,6 +146,8 @@ from .scenario_validation import (
     replay_target_date,
     validate_scenario,
 )
+from .similar_days import BRASILIA, OUTCOME_SQL, POOL_SQL, nearest, pool_vectors
+from .similar_days import FEATURES as SIMILAR_FEATURES
 from .training import CORRECTION_REGIME, contract_fault, read_card
 
 #: A canonical **view** Drizzle creates. `/ready` uses it to tell "migrations
@@ -1449,8 +1460,6 @@ async def similar_days_route(
         return parsed
 
     day = target_date or serving_target_date(datetime.now(tz=UTC))
-    gate_profile = cast(GateProfile, parsed.gate_profile)
-    feature_set = cast(FeatureSet, parsed.feature_set)
     pool_from = day - timedelta(days=days)
 
     connection_pool = await database.connect()
@@ -2135,6 +2144,191 @@ def replay_observed_only(
         return _solver_failure(bug, resolved.decoded.hash)
 
     return JSONResponse(content=body, headers={"x-optimizer-build": OPTIMIZER_BUILD})
+
+
+# --- one day, reviewed ---------------------------------------------------------
+#
+# The Time Machine's dashboard asks two questions one replay cannot answer: how
+# the *four* subsystems landed against their pinned bands, and what the day
+# looked like at *both* served gates. Both are reads — no solve, no model — and
+# both call `resolve_day` on the same `ReplayInputs` a replay reads, so a band
+# shown here is one the replay route would answer from the same row, and a
+# leaking artifact is the same `500` here as there. See
+# `wattsteer_ml.replay.review` for what is computed and why each is allowed.
+
+
+def national_source() -> NationalDaySource | None:
+    """The joint-row reader, or nothing with no database — a dependency for tests."""
+    if database is None:
+        return None
+    return national_day_source(database)
+
+
+def _reviewed(
+    read: ReplayInputSource, subsystem: str, target_date: date, lane: Lane
+) -> tuple[ReplayDay, ReplayInputs]:
+    """One (subsystem, day, lane), read and judged. Raises on a leak."""
+    inputs = read(
+        subsystem=subsystem, target_date=target_date, lane=lane, forecast_origin=None
+    )
+    artifact_id = inputs.evidence.artifact_id
+    windows = (
+        None
+        if artifact_id is None
+        else read_windows(settings.artifact_dir, lane, artifact_id)
+    )
+    day = resolve_day(
+        inputs.evidence,
+        subsystem=subsystem,
+        lane=lane.directory_name,
+        rules=FOLD_CALENDAR_RULES,
+        latest=latest_replayable_date(datetime.now(tz=UTC)),
+        windows=windows,
+        sources=inputs.sources,
+    )
+    return day, inputs
+
+
+def _leak_refusal(leak: HoldoutLeakError, subsystem: str, lane: Lane) -> JSONResponse:
+    logger.error("replay review: integrity violation — %s", leak)
+    violation = integrity_violation(leak, subsystem=subsystem, lane=lane.directory_name)
+    return _refusal(
+        violation.status, violation.code, violation.message, dict(violation.details)
+    )
+
+
+@app.get("/v1/replay/compare/{target_date}", tags=["replay"])
+def replay_compare(
+    target_date: date,
+    lane: Annotated[str, _REPLAY_LANE_QUERY],
+    read: Annotated[ReplayInputSource | None, Depends(replay_inputs_source)],
+    national: Annotated[NationalDaySource | None, Depends(national_source)],
+) -> JSONResponse:
+    """Four subsystems' pinned D−1 bands beside what settled, for one day.
+
+    Every subsystem is present, with a band or the refusal code that stands in
+    for it, and a settled total or `day_not_settled`. The national row is the
+    sum of four settled days — measurements add — beside the joint band read
+    from the one publication all four resolved, or a stated absence.
+    """
+    parsed = _replay_lane(lane)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    if read is None or national is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and a comparison is a "
+            "read of rows that only Postgres holds",
+        )
+    rows: list[tuple[str, ReplayDay, ReplayInputs]] = []
+    for subsystem in SUBSYSTEM_CODES:
+        try:
+            day, inputs = _reviewed(read, subsystem, target_date, parsed)
+        except HoldoutLeakError as leak:
+            return _leak_refusal(leak, subsystem, parsed)
+        rows.append((subsystem, day, inputs))
+
+    shared = shared_publication(rows)
+    joint = None
+    absence: NationalBandAbsence | None = None
+    if isinstance(shared, tuple):
+        joint = national(
+            target_date=target_date,
+            lane=parsed,
+            origin_kind=shared[0],
+            published_at=shared[1],
+        )
+        absence = None if joint is not None else "no_joint_ensemble"
+    else:
+        absence = shared
+    return JSONResponse(
+        content=compare_day(target_date, parsed, rows, joint, national_absence=absence)
+    )
+
+
+@app.get("/v1/replay/timeline/{target_date}", tags=["replay"])
+def replay_timeline(
+    target_date: date,
+    subsystem: Annotated[Subsystem, Query(description="ONS subsystem code.")],
+    read: Annotated[ReplayInputSource | None, Depends(replay_inputs_source)],
+) -> JSONResponse:
+    """One subsystem's day at every served gate, and when each fact arrived.
+
+    Not a lane parameter, deliberately: the question is what *each* served gate
+    said, and the gates are the serving lanes' own. Intraday forecasts are not
+    in it because WattSteer makes none — day-ahead is the only horizon.
+    """
+    if read is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and a timeline is a "
+            "read of rows that only Postgres holds",
+        )
+    gates: list[tuple[Lane, ReplayDay, ReplayInputs]] = []
+    for lane in SERVING_LANES:
+        try:
+            day, inputs = _reviewed(read, subsystem, target_date, lane)
+        except HoldoutLeakError as leak:
+            return _leak_refusal(leak, subsystem, lane)
+        gates.append((lane, day, inputs))
+    return JSONResponse(content=timeline_day(subsystem, target_date, gates))
+
+
+def pinned_attribution_source() -> AttributionSource | None:
+    """The attribution reader, or nothing with no database — a dependency for tests."""
+    if database is None:
+        return None
+    return attribution_source(database)
+
+
+@app.get("/v1/replay/attribution/{target_date}", tags=["replay"])
+def replay_attribution(
+    target_date: date,
+    subsystem: Annotated[Subsystem, Query(description="ONS subsystem code.")],
+    lane: Annotated[str, _REPLAY_LANE_QUERY],
+    read: Annotated[ReplayInputSource | None, Depends(replay_inputs_source)],
+    attribution: Annotated[AttributionSource | None, Depends(pinned_attribution_source)],
+) -> JSONResponse:
+    """What moved the replayed forecast at D−1 — bound to the pinned publication.
+
+    The day is judged first, by the same predicate a replay runs, so the bars
+    are only ever shown beside a band the replay route would answer from. The
+    attribution is then read for exactly that publication: its origin kind, its
+    instant and its artifact. A served attribution of the same day explains a
+    different artifact's number and is never substituted for a missing one.
+    """
+    parsed = _replay_lane(lane)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    if read is None or attribution is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and an attribution is a "
+            "stored row that only Postgres holds",
+        )
+    try:
+        day, inputs = _reviewed(read, subsystem, target_date, parsed)
+    except HoldoutLeakError as leak:
+        return _leak_refusal(leak, subsystem, parsed)
+    found = None
+    if inputs.forecast is not None and (
+        day.refusal is None or day.refusal.code == "REPLAY_OBSERVATION_INCOMPLETE"
+    ):
+        origin = inputs.forecast.origin
+        found = attribution(
+            subsystem=subsystem,
+            target_date=target_date,
+            gate_profile=origin.gate_profile,
+            origin_kind=origin.origin_kind,
+            published_at=origin.published_at,
+            run_label=origin.run_label,
+        )
+    return JSONResponse(
+        content=attribution_day(subsystem, target_date, parsed, day, inputs, found)
+    )
 
 
 # --- the featured days ---------------------------------------------------------

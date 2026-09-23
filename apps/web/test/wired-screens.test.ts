@@ -93,6 +93,15 @@ const OVERVIEW_FLAT = OVERVIEW_PARTS.map(flat).join(" ");
  */
 const OBSERVED_STACK = code(read("components", "app", "overview", "observed-panels.tsx"));
 const FORECAST_STACK = code(read("components", "app", "overview", "forecast-panels.tsx"));
+/**
+ * The hero, alone, because two of the forecast panels live there now.
+ *
+ * The day's energy and the peak used to be the last two cards on the page, at
+ * the bottom of `ForecastPanels`. They sit under the hourly profile in the
+ * hero's left column now, where the settled state's two figures already were,
+ * so the guard below reads this file for them rather than that one.
+ */
+const HERO = code(read("components", "app", "overview", "overview-hero.tsx"));
 const EXPLAIN_FLAT = flat(read("app", "app", "explain.tsx"));
 const EXPLAIN = code(read("app", "app", "explain.tsx"));
 const SHELL = code(read("components", "app", "app-shell.tsx"));
@@ -277,13 +286,27 @@ describe("a lede never promises a panel that is not there", () => {
     );
   });
 
-  it("all four screens pair a lede with an absent one", () => {
+  it("The Time Machine dashboard switches its lede on whether anything was scored", () => {
+    // `/app/time-machine` reads the same replay as `/app/replay`, so it owes the
+    // same pair for the same reason: its observed-only branch offers ONS's
+    // record *instead* of a replay, and a lede promising a scored day above it
+    // would contradict the panels it introduces.
+    const dashboard = code(read("app", "app", "time-machine.tsx"));
+    expect(dashboard).toContain('const scored = state.status === "replayed"');
+    expect(dashboard).toContain(
+      "scored ? copy.app.timeMachine.lede : copy.app.timeMachine.ledeAbsent",
+    );
+  });
+
+  it("every screen pairs a lede with an absent one", () => {
     // ADR-0008. The Overview names its pair differently because it got there
     // first and the state it falls back to is observed rather than absent.
+    // Four `ledeAbsent` keys: Explain, Mitigate, Replay and the Time Machine
+    // dashboard, which is a fifth screen and not a second copy of the fourth.
     for (const locale of ["copy.en.ts", "copy.pt.ts"] as const) {
       const dict = read("i18n", locale);
       expect(dict).toContain("ledeObserved:");
-      expect((dict.match(/ledeAbsent:/g) ?? []).length).toBe(3);
+      expect((dict.match(/ledeAbsent:/g) ?? []).length).toBe(4);
     }
   });
 
@@ -415,29 +438,52 @@ describe("a refused forecast renders no forecast", () => {
     // the two stacks are exclusive, and nothing that states a forecast exists
     // inside the observed one.
     //
-    // `scope` does not weaken it either. Both stacks take it because the
-    // episode list inside them follows the map's filter like every other
-    // figure on the screen, and it says nothing about whether a forecast
-    // exists — the ternary above is still the only thing that does.
+    // Neither stack takes `scope` any more: the episode list it was threaded
+    // for is the hero's now, under `Planejado × Realizado`.
     //
     // `heroElsewhere` does not weaken it. It tells both stacks to skip what
     // `OverviewHero` already drew — the national figure, the map, the rows, the
     // selection, the fan — and the hero is itself behind the same `forecast`
     // ternary, taking it as a prop rather than reading a state of its own.
     expect(OVERVIEW_FLAT).toContain(
-      "{forecast === null ? ( <ObservedPanels observed={observed} scope={scope} subsystem={params.subsystem} onSelect={select} onExplain={explain} heroElsewhere={true} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} heroElsewhere={true} /> <SettledPanels observed={observed} scope={scope} subsystem={params.subsystem} onSelect={select} /> </> )}",
+      "{forecast === null ? ( <ObservedPanels observed={observed} subsystem={params.subsystem} onSelect={select} onExplain={explain} heroElsewhere={true} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} heroElsewhere={true} /> <SettledPanels observed={observed} subsystem={params.subsystem} onSelect={select} /> </> )}",
     );
     // Each forecast panel is inside `ForecastPanels`, which is now a file of
     // its own — so this is a containment check rather than the `indexOf`
     // ordering comparison it used to be. That comparison was true only while
     // the two functions stayed adjacent and in that order in one string; a
     // reordering would have silently inverted it while still passing.
-    for (const panel of ["<SubsystemMap", "<FanChart", "<BandCard", "<SubsystemRow"]) {
+    for (const panel of ["<SubsystemMap", "<FanChart", "<SubsystemRow"]) {
       expect({ panel, inForecastPanels: FORECAST_STACK.includes(panel) }).toEqual({
         panel,
         inForecastPanels: true,
       });
     }
+    /*
+      `<BandCard` is the hero's now, and the property is unchanged rather than
+      relaxed: it is still the case that nothing draws a band outside a
+      `forecast !== null` branch. What moved is where that branch is — the two
+      cards are built in `OverviewHero`, which the screen renders only on the
+      `read` side of the ternary asserted above, and inside it they are behind a
+      gate of their own.
+
+      That inner gate is what this asserts, and it is the honest half of the
+      move: `dayFigures` is the settled pair under `forecast === null` and
+      `forecastFigures` is the band pair under its negation, so the two can
+      never be on the page together. A band and a settled megawatt-hour under
+      labels that both say "the day" is the adjacency `lib/network.ts` keeps its
+      two row types apart to prevent.
+
+      Non-vacuity: the two `toContain`s would fail on a renamed hero or on a
+      pair built unconditionally, and `<BandCard` reaching `observed-panels.tsx`
+      is still caught by the next test.
+    */
+    expect(HERO).toContain("<BandCard");
+    const heroFlat = HERO.replace(/\s+/g, " ");
+    expect(heroFlat).toContain(
+      "const forecastFigures = forecast === null || selectedRow === null ? null : (",
+    );
+    expect(heroFlat).toContain("const dayFigures = forecast === null ? (");
   });
 
   /**
@@ -490,14 +536,21 @@ describe("a refused forecast renders no forecast", () => {
     for (const observedOnly of [
       '<SubsystemMap paint={{ kind: "observed", rows }}',
       "<ObservedSubsystemRow",
-      "<ObservedCard",
       "<ObservedBadge />",
-      // Was `<SettledDayPanel`, which drew this stack's hourly bars until the
-      // hero's copy of the same `<ObservedProfile>` absorbed it — the page had
-      // one chart twice. `<EpisodesPanel` is the other panel this stack shares
-      // with the forecast one, so the guard still proves the function renders
-      // the observed vocabulary rather than nothing.
-      "<EpisodesPanel",
+      /*
+        The list keeps shrinking as panels move into the hero, and what it is
+        for does not change: it proves this function renders the observed
+        vocabulary rather than nothing, so the `not.toContain` loop above
+        cannot pass against an empty component.
+
+        `<SettledDayPanel` went when the hero's `<ObservedProfile>` absorbed
+        the same chart. `<ObservedCard` and `<EpisodesPanel` went together:
+        the day's two figures now sit under the profile they are about, and
+        the episode list under `Planejado × Realizado` at the centre column's
+        full width. What is left is the map, the rows, the national panel and
+        the badge — four markers, all of them this stack's own.
+      */
+      "<ObservedNationalPanel",
     ]) {
       expect({ observedOnly, present: observedStack.includes(observedOnly) }).toEqual({
         observedOnly,

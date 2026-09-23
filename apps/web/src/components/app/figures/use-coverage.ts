@@ -41,7 +41,7 @@ export type CoverageState =
   | { readonly status: "absent" }
   | { readonly status: "read"; readonly coverage: Coverage };
 
-export function useCoverage(gateProfile: GateProfile): CoverageState {
+export function useCoverage(gateProfile: GateProfile | null): CoverageState {
   /*
     The card is read through `use-model-card.ts`, memoised per lane, so this
     hook and `useLadder` — which are mounted on the same screen and measured on

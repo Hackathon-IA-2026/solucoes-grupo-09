@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/replay-timeline.schema.json",
+  "title": "ReplayTimeline",
+  "description": "`GET /v1/replay/timeline/{date}` - one subsystem's day at every served gate, and when each fact arrived. Day-ahead is the only horizon WattSteer forecasts at, so there is no intraday entry; the settled record is the last one, and a rewrite of it by ONS is an event of its own.",
+  "type": "object",
+  "properties": {
+    "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+    "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "gates": {
+      "type": "array",
+      "description": "One entry per served lane, early gate first.",
+      "items": { "$ref": "#/$defs/gate_entry" }
+    },
+    "settled": { "$ref": "#/$defs/settled" },
+    "events": {
+      "type": "array",
+      "description": "Every instant the day's record moved, oldest first.",
+      "items": { "$ref": "#/$defs/event" }
+    }
+  },
+  "required": [
+    "subsystem",
+    "target_date",
+    "vintage_fidelity",
+    "gates",
+    "settled",
+    "events"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "gate_entry": {
+      "title": "ReplayTimelineGate",
+      "type": "object",
+      "properties": {
+        "lane": { "type": "string" },
+        "gate_profile": { "$ref": "common.schema.json#/$defs/gate_profile" },
+        "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+        "replayable": { "type": "boolean" },
+        "refusal_code": { "type": ["string", "null"] },
+        "provenance": {
+          "type": ["string", "null"],
+          "enum": ["served", "fold_holdout", null]
+        },
+        "forecast_origin": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/forecast_origin" },
+            { "type": "null" }
+          ]
+        },
+        "published_at_is_counterfactual": {
+          "type": ["boolean", "null"],
+          "description": "True for a reconstruction: its `published_at` is the gate that would have been, not an instant anything was published at."
+        },
+        "written_at": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/utc_instant" },
+            { "type": "null" }
+          ],
+          "description": "When the day row was actually written - the publication for a served row, the backtest run for a reconstruction."
+        },
+        "day_total": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/band" }, { "type": "null" }]
+        },
+        "day_total_unavailable_reason": { "type": ["string", "null"] },
+        "settled_total_mwh": { "type": ["number", "null"], "minimum": 0 },
+        "settled_unavailable_reason": {
+          "oneOf": [
+            { "$ref": "replay-compare.schema.json#/$defs/settled_unavailable_reason" },
+            { "type": "null" }
+          ]
+        },
+        "settled_hours": { "type": "integer", "minimum": 0, "maximum": 24 },
+        "settled_data_version": { "type": ["string", "null"] },
+        "deviation_mwh": {
+          "type": ["number", "null"],
+          "description": "settled_total_mwh - day_total.p50 of this gate's band. Computed here so no client subtracts one band's quantile from another's."
+        },
+        "placement": {
+          "oneOf": [
+            { "$ref": "replay-compare.schema.json#/$defs/placement" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": [
+        "lane",
+        "gate_profile",
+        "vintage_fidelity",
+        "replayable",
+        "refusal_code",
+        "provenance",
+        "forecast_origin",
+        "published_at_is_counterfactual",
+        "written_at",
+        "day_total",
+        "day_total_unavailable_reason",
+        "settled_total_mwh",
+        "settled_unavailable_reason",
+        "settled_hours",
+        "settled_data_version",
+        "deviation_mwh",
+        "placement"
+      ],
+      "additionalProperties": false
+    },
+    "settled": {
+      "title": "ReplayTimelineSettled",
+      "description": "The settled record the day is scored against, and its own history as far as the rows in force can tell it.",
+      "type": "object",
+      "properties": {
+        "settled_total_mwh": { "type": ["number", "null"], "minimum": 0 },
+        "settled_unavailable_reason": {
+          "oneOf": [
+            { "$ref": "replay-compare.schema.json#/$defs/settled_unavailable_reason" },
+            { "type": "null" }
+          ]
+        },
+        "settled_hours": { "type": "integer", "minimum": 0, "maximum": 24 },
+        "data_version": { "type": ["string", "null"] },
+        "earliest_written_at": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/utc_instant" },
+            { "type": "null" }
+          ],
+          "description": "The oldest write among the rows in force. Not necessarily when the day first settled: a restated row's first arrival is superseded."
+        },
+        "latest_written_at": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/utc_instant" },
+            { "type": "null" }
+          ]
+        },
+        "entity_rows": { "type": "integer", "minimum": 0 },
+        "restated_rows": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Rows whose data_version is above 1 - values ONS changed after WattSteer first read them."
+        }
+      },
+      "required": [
+        "settled_total_mwh",
+        "settled_unavailable_reason",
+        "settled_hours",
+        "data_version",
+        "earliest_written_at",
+        "latest_written_at",
+        "entity_rows",
+        "restated_rows"
+      ],
+      "additionalProperties": false
+    },
+    "event": {
+      "title": "ReplayTimelineEvent",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "forecast_published",
+            "forecast_written",
+            "settled_written",
+            "settled_restated"
+          ]
+        },
+        "at": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "lane": { "type": "string" },
+        "gate_profile": { "$ref": "common.schema.json#/$defs/gate_profile" },
+        "counterfactual": { "type": "boolean" },
+        "rows": { "type": "integer", "minimum": 0 },
+        "data_version": { "type": "string" }
+      },
+      "required": ["kind", "at"],
+      "additionalProperties": false
+    }
+  }
+}

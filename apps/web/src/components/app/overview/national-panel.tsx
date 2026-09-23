@@ -13,7 +13,7 @@
  * exist — so these components receive a number and print it.
  */
 
-import type { GridNow, NationalOutlook } from "@wattsteer/core/api";
+import type { GridDay, GridNow, NationalOutlook } from "@wattsteer/core/api";
 import {
   CalendarDaysIcon,
   gradientBg,
@@ -111,8 +111,16 @@ export function ObservedNationalPanel({
   national,
   window: windowLabel,
 }: {
-  national: GridNow["national"];
-  /** The 24-hour window these four measurements cover. */
+  /**
+   * The settled day's national total, not the rolling window's.
+   *
+   * It was `GridNow["national"]`. The rail, the map's paint and this figure all
+   * read `GET /v1/grid/day` now, so the screen states one window rather than
+   * two — the rail's own docstring used to argue at length for why two was
+   * survivable, and this is the read that made it unnecessary.
+   */
+  national: GridDay["national"];
+  /** The settled day these four measurements cover. */
   window: string;
 }) {
   const colors = usePalette();
@@ -142,7 +150,7 @@ export function ObservedNationalPanel({
               color: colors.ink,
             }}
           >
-            {f.compact(national.last24hConstrainedOffMwh)}
+            {f.compact(national.constrainedOffMwh)}
           </Text>
           <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
             MWh

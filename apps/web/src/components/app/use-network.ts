@@ -60,6 +60,7 @@ import type {
   CurtailmentEpisodes,
   ForecastDayAhead,
   GateProfile,
+  GridDay,
   GridNow,
   GridOutlook,
   TechnologySplit,
@@ -125,6 +126,8 @@ export interface ObservedNetwork {
    */
   readonly evidence: EvidenceCitation | null;
   readonly now: GridNow;
+  /** The settled civil day the screen is about — the rail, the map, the total. */
+  readonly day: GridDay;
   /** The selected subsystem's settled day, one series, technologies summed. */
   readonly hours: CurtailmentHourObservation[];
   /** The local day `hours` covers — the most recent one that has settled. */
@@ -301,14 +304,27 @@ export function useNetwork(query: NetworkQuery): NetworkState {
     const observed = Promise.all([
       api.gridNow(signal),
       api.curtailmentHours({ subsystem, from: settled, to: hoursTo }, signal),
+      /*
+        **The four subsystems for the day this screen is about.**
+
+        `gridNow` answers the last 24 settled hours and has no date axis, so
+        the rail, the map's observed paint and the national total were the one
+        part of the screen that could not follow the date — and they were a
+        different window from the profile beside them, which
+        `region-rail-panel.tsx` mitigated with a paragraph rather than a fix.
+        `GET /v1/grid/day` is that axis. `gridNow` stays for the freshness
+        stamp, which is honestly about now and belongs in the chrome.
+      */
+      api.gridDay({ date: settled }, signal),
       episodes,
     ]).then(
-      async ([now, hours, episodes]): Promise<ObservedNetwork> => ({
+      async ([now, hours, day, episodes]): Promise<ObservedNetwork> => ({
         subsystem,
         dominantReason: (await reasons)[0] ?? null,
         reasons: await reasons,
         evidence: await evidence,
         now,
+        day,
         hours: observedHours(hours, settled),
         hoursDate: settled,
         daySplit: observedSplit(hours, settled),

@@ -320,16 +320,19 @@ export function EpisodeList({
               </View>
             ))}
           </View>
-          <Text
-            style={{
-              marginTop: space.md,
-              fontSize: 11,
-              lineHeight: 18,
-              color: colors.inkFaint,
-            }}
-          >
-            {fill(note, { gap: f.number(maxGapHours) })}
-          </Text>
+          {/* An empty note is a screen that carries its footnote elsewhere. */}
+          {note === "" ? null : (
+            <Text
+              style={{
+                marginTop: space.md,
+                fontSize: 11,
+                lineHeight: 18,
+                color: colors.inkFaint,
+              }}
+            >
+              {fill(note, { gap: f.number(maxGapHours) })}
+            </Text>
+          )}
         </>
       )}
     </Panel>

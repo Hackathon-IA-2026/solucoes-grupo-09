@@ -212,7 +212,7 @@ test.describe("the voice session outlives a tool-call navigation", () => {
       }),
     );
 
-    await expect(page).toHaveURL(/\/app\/replay/);
+    await expect(page).toHaveURL(/\/app\/time-machine/);
 
     // **The assertion the whole spec exists for.** Same socket, still open,
     // after a route change the agent itself caused.

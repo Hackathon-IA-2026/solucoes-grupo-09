@@ -951,7 +951,13 @@ export const pt: Copy = {
     observed: {
       badge: "Observado",
       stamp: "Observado · liquidado até {when} BRT · {lag} h de atraso",
-      window24h: "Últimas 24 h até {hour} BRT",
+      /*
+        A settled **day**, not a rolling window. The rail, the map's paint and
+        the national total read `GET /v1/grid/day` now — one window for the
+        whole screen, the same day the profile draws — so the label that said
+        "últimas 24 h" was the last thing still describing the old read.
+      */
+      window24h: "Dia liquidado, {date}",
       windowDay: "Dia liquidado, {date}",
       rowEnergy: "Energia cortada, últimas 24 h",
       selectedFigure: "{mwh} MWh liquidados · eólica {wind} · solar {solar}",
@@ -966,7 +972,7 @@ export const pt: Copy = {
         "Uma energia em MWh, não uma potência em MW: o ONS publica energia por hora, e a faixa de pico de potência que uma previsão informa é uma afirmação do modelo sobre o formato dentro daquela hora. Não há modelo nenhum hoje, então nenhum número desses é mostrado.",
       emptyDay:
         "O dia liquidou sem nenhum corte neste subsistema, o que é uma medição e não um número faltando.",
-      nationalTitle: "As últimas 24 horas, nos quatro subsistemas",
+      nationalTitle: "O dia liquidado, nos quatro subsistemas",
       nationalSubtitle: "Uma soma de quatro medições, e ela é exata",
       nationalLabel: "Energia liquidada em constrained-off, os quatro subsistemas",
       /*
@@ -1044,7 +1050,7 @@ export const pt: Copy = {
         noBand: "Uma liquidação é um número, não um intervalo.",
         nationalLabel: "Brasil",
         windowForecast: "Esperado no dia seguinte, por subsistema.",
-        windowObserved: "Últimas 24 h liquidadas, por subsistema.",
+        windowObserved: "Dia liquidado, por subsistema.",
         /**
          * A divisão por frota, na linha de cada região.
          *
@@ -1095,6 +1101,10 @@ export const pt: Copy = {
       lockView: "Travar esta vista como inicial",
       unlockView: "Destravar a vista inicial",
       legendTitle: "Classe de risco",
+      /* Hints, not labels: the arrows are ‹ and › and a screen reader needs
+         the verb. See `Chip` on why the label is never replaced. */
+      dayPreviousHint: "Ver o dia anterior",
+      dayNextHint: "Ver o dia seguinte",
       scopeLabel: "Escopo",
       runLabel: "Rodada",
       layer2d: "2D",
@@ -1584,6 +1594,174 @@ export const pt: Copy = {
       refusalReset: "Voltar à frota de referência",
       shareNote:
         "A frota vive na barra de endereços, então este link é o estado inteiro — inclusive o dia e os ativos contra os quais ele foi avaliado.",
+    },
+    /* O painel da Máquina do tempo em `/app/time-machine`. Ver `copy.en.ts`. */
+    timeMachine: {
+      metaTitle: "Máquina do tempo — painel — WattSteer",
+      title: "O que o WattSteer disse em D−1 e o que o ONS liquidou",
+      lede: "A previsão de D−1 contra o que o ONS liquidou.",
+      ledeAbsent: "O que o ONS liquidou. Nenhuma previsão retida responde por este dia.",
+      about: "Sobre este painel",
+      strip: {
+        modelDidNotSee: "Modelo não viu este dia",
+        trainedUntil: "{fold} · treino até {date}",
+      },
+      currentScreen: "Versão anterior",
+      subsystems: "Subsistema",
+      subsystemUnavailable: "Nenhuma previsão retida para este subsistema neste dia",
+      refreshing: "Atualizando…",
+      kpi: {
+        forecastTitle: "O que previmos",
+        forecastKicker: "P50 · D−1",
+        forecastBand: "P10 {p10} · P90 {p90}",
+        forecastWindow: "Horas prováveis {from}–{to}",
+        forecastNoWindow: "Nenhuma hora provável",
+        settledTitle: "O que aconteceu",
+        settledKicker: "Liquidado pelo ONS",
+        settledAbsent: "Ainda não liquidado",
+        deviationTitle: "Desvio",
+        deviationKicker: "Liquidado − P50",
+        coverageTitle: "Histórico",
+        coverageKicker: "Dias dentro da faixa",
+        coverageValue: "de {days} dias",
+        coverageTarget: "Calibrado para chegar a {target}",
+        coverageServingNote:
+          "Medido no modelo em serviço hoje, não no artefato do fold que produziu a previsão deste dia.",
+        coverageAbsent: "Não medido",
+        recoveredTitle: "A frota absorveria",
+        recoveredKicker: "Avaliado no dia liquidado",
+        recoveredFloor: "Piso D−1 {floor} MWh · {met}",
+      },
+      chart: {
+        title: "Curtailment: D−1 contra o liquidado ({subsystem})",
+        subtitle: "Hora a hora · {date}",
+        figure:
+          "A previsão publicada em D−1 como faixa P10–P90 com seu P50, e a energia constrained-off liquidada de cada hora como barras",
+        legendBand: "Faixa P10–P90 (D−1)",
+        legendP50: "P50 (D−1)",
+        legendEdges: "P10 e P90 (D−1)",
+        legendSettled: "Liquidado pelo ONS",
+        legendWindow: "Horas prováveis de corte (P ≥ 0,5)",
+        peakSettled: "Pico liquidado",
+        peakForecast: "Pico previsto (P50)",
+        peakForecastNote: "P10 {p10} · P90 {p90} MW",
+        dayChance: "Chance de haver corte",
+      },
+      timeline: {
+        title: "Quando cada fato chegou",
+        subtitle: "Os dois gates de D−1 e o liquidado",
+        gate: {
+          gate_early: "D−1 09:00 · rodada 00Z",
+          gate_late: "D−1 19:00 · rodada 12Z",
+        },
+        bandLine: "P50 {p50} MWh",
+        deviationLine: "{value} MWh contra o liquidado",
+        settledNode: "Liquidado pelo ONS",
+        settledNodeAbsent: "Ainda não liquidado",
+        settledRestatedNode: "O ONS reescreveu {rows} linhas",
+        events: {
+          forecast_published: "Previsão publicada · {gate}",
+          forecast_published_counterfactual:
+            "Gate que esta reconstrução representa · {gate}",
+          forecast_written: "Linha da previsão gravada · {gate}",
+          forecast_written_counterfactual: "Reconstruída pelo backtest · {gate}",
+          settled_written: "Liquidado lido do ONS · {rows} linhas",
+          settled_restated:
+            "O ONS reescreveu {rows} linhas liquidadas · versão {version}",
+        },
+        noIntraday:
+          "O WattSteer prevê só o dia seguinte. Não há revisão intradiária, então os dois gates de D−1 são todo o registro de previsão de um dia.",
+        eventsTitle: "Registro de alterações",
+        eventsEmpty: "Nada registrado para este dia ainda.",
+      },
+      compare: {
+        title: "Comparação por subsistema",
+        subtitle: "Cada faixa de D−1 fixada ao lado do liquidado",
+        columns: {
+          subsystem: "Subsistema",
+          p50: "Previsto (P50)",
+          band: "P10–P90",
+          settled: "Liquidado",
+          deviation: "Desvio",
+          placement: "Onde caiu",
+        },
+        placement: {
+          inside: "Dentro da faixa",
+          above: "Acima do P90",
+          below: "Abaixo do P10",
+        },
+        national: "Nacional",
+        nationalSettledNote: "Liquidado: a soma dos quatro subsistemas",
+        nationalAbsent: {
+          subsystem_forecast_missing:
+            "Sem faixa conjunta: um subsistema não tem previsão retida",
+          origins_differ:
+            "Sem faixa conjunta: os quatro vieram de publicações diferentes",
+          no_joint_ensemble: "Nenhuma faixa conjunta foi publicada para este dia",
+        },
+        settledAbsent: "Não liquidado",
+        bandAbsent: "Sem faixa",
+        note: "Nenhum percentual é mostrado: um dia não produz acurácia. A faixa nacional é a linha conjunta que o ensemble sorteou sobre os quatro totais do dia — nunca quatro medianas somadas.",
+      },
+      tabs: {
+        label: "Evidências",
+        drivers: "O que moveu a previsão",
+        analogues: "Dias parecidos",
+        reasons: "Motivo declarado pelo ONS",
+        audit: "Auditoria",
+      },
+      attribution: {
+        title: "O que moveu a previsão em D−1",
+        note: "As barras decompõem a expectativa do modelo para o dia contra o seu fundo de referência. Explicam o número que o modelo publicou, não o que o ONS liquidou e não o desvio.",
+        absent: {
+          no_pinned_forecast:
+            "Não há previsão fixada para este dia, então não há o que decompor.",
+          not_published:
+            "Nenhuma atribuição foi gravada para esta publicação. Uma atribuição servida de outro artefato nunca é mostrada no lugar.",
+        },
+        total: "Expectativa de {day} MWh contra um fundo de {baseline} MWh",
+      },
+      reasons: {
+        title: "O motivo que o ONS registrou",
+        note: "A classificação do ONS para o curtailment liquidado, pela fração da energia. O WattSteer prevê quanto; o motivo é do ONS.",
+        share: "{share} da energia liquidada",
+        empty: "O ONS não registrou motivo para a energia liquidada deste dia.",
+        citation: "Fonte: {document}",
+      },
+      audit: {
+        title: "Todas as leituras por trás desta página",
+        note: "Cada link é a própria resposta do gateway para este dia, em JSON.",
+        replay: "A reexecução",
+        compare: "Os quatro subsistemas",
+        timeline: "A linha do tempo",
+        attribution: "A atribuição",
+      },
+      trace: {
+        title: "Rastreabilidade",
+        subtitle: "Qual modelo, quais dados, qual instante",
+        artifact: "Artefato",
+        fold: "Retido por",
+        trainWindow: "Treinado em",
+        calibrationWindow: "Calibrado em",
+        lane: "Lane",
+        published: "Publicado em",
+        publishedCounterfactual: "Gate reconstruído",
+        written: "Linha gravada",
+        settledVersion: "Versão dos dados liquidados",
+        settledWritten: "Liquidado lido do ONS",
+        restated: "Linhas reescritas pelo ONS",
+        solver: "Solver",
+        window: "{from} – {to}",
+      },
+      context: {
+        title: "O que mudou entre D−1 e o dia",
+        note: "A programação do próprio ONS para o dia ao lado do que a rede fez. Os dois números são do ONS, nenhum é do WattSteer, e o par é apresentado como fato, não como o motivo do desvio.",
+      },
+      fleet: {
+        title: "O que a frota teria feito",
+        subtitle: "Plano no P50 de D−1, avaliado no dia liquidado",
+        note: "O plano foi montado sobre o P50 de D−1 e avaliado no dia liquidado pelo mesmo simulador que o caminho ao vivo usa.",
+      },
     },
   },
 };

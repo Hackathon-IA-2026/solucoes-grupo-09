@@ -34,7 +34,7 @@
 
 import { useContainerWidth, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import Svg, { G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
+import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 import { useCopy, useFormat } from "@/i18n";
 import type { HourlyDispatch } from "@/lib/fixtures";
 
@@ -73,14 +73,25 @@ export function PlanVsExecuted({
   );
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
-  const slot = chartW / executed.length;
+  /*
+    **Twenty-four slots, from the settled day — never from the dispatch.**
+
+    The slot was `chartW / executed.length`, which is right only while the
+    dispatch carries every hour. The contract's own replay example carries one
+    (13:00), and at one entry the slot was the whole plot: the settled bars were
+    placed at `i × 640` and every one but the first fell off the chart, which
+    drew an empty figure over a day with 600 MWh in it. `actualHours` is
+    positional by contract — index `i` is hour `i` — so it is the axis, and each
+    dispatch point is placed at its own `hourLocal` on it.
+  */
+  const slot = chartW / Math.max(actualHours.length, 1);
   const barW = Math.max(3, slot * 0.5);
   const scale = containerWidth > 0 ? containerWidth / W : 0;
 
   const x = (i: number) => PAD.left + i * slot + slot / 2;
   const y = (value: number) => PAD.top + chartH - (value / top) * chartH;
   const path = (hours: HourlyDispatch[]) =>
-    `M${hours.map((hour, i) => `${x(i).toFixed(1)},${y(hour.absorbedMwh).toFixed(1)}`).join(" L")}`;
+    `M${hours.map((hour) => `${x(hour.hourLocal).toFixed(1)},${y(hour.absorbedMwh).toFixed(1)}`).join(" L")}`;
 
   return (
     <View onLayout={onLayout}>
@@ -135,11 +146,11 @@ export function PlanVsExecuted({
             the reason the suppression below is a statement rather than a shrug.
           */
           const key = `h${i}`;
-          // The axis label still wants the *reported* hour where there is one:
-          // it is the same number in every case the contract allows, and
-          // reading it from the series rather than assuming it is what would
-          // show up if that ever stopped being true.
-          const hourLocal = executed[i]?.hourLocal ?? i;
+          // The axis label is the position too. It used to be read off
+          // `executed[i]`, which is the same number only while the dispatch
+          // carries all twenty-four hours — and with one entry it labelled the
+          // first slot 13 and the rest by index.
+          const hourLocal = i;
           return (
             // react-doctor-disable-next-line react-doctor/no-array-index-as-key
             <G key={key}>
@@ -189,6 +200,29 @@ export function PlanVsExecuted({
           fill="none"
         />
         <Path d={path(executed)} stroke={colors.accent} strokeWidth={2} fill="none" />
+        {/*
+          A dot on every point, because a path through one point draws nothing:
+          a plan that scheduled a single hour would otherwise be a legend entry
+          with no mark behind it.
+        */}
+        {scheduled.map((hour) => (
+          <Circle
+            key={`s${hour.hourLocal}`}
+            cx={x(hour.hourLocal)}
+            cy={y(hour.absorbedMwh)}
+            r={2.5}
+            fill={colors.violet}
+          />
+        ))}
+        {executed.map((hour) => (
+          <Circle
+            key={`e${hour.hourLocal}`}
+            cx={x(hour.hourLocal)}
+            cy={y(hour.absorbedMwh)}
+            r={2.5}
+            fill={colors.accent}
+          />
+        ))}
       </Svg>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14, marginTop: 8 }}>

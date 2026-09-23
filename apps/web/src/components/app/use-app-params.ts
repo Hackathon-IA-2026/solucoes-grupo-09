@@ -50,7 +50,7 @@ function fromAddressBar(): Record<string, string> {
 }
 
 export function useAppParams(): AppParams & {
-  setParams: (next: Partial<Omit<AppParams, "date">>) => void;
+  setParams: (next: Partial<AppParams>) => void;
 } {
   const raw = useLocalSearchParams();
   // The router's answer wins wherever it has one; the address bar supplies the
@@ -133,7 +133,7 @@ export function useAppParams(): AppParams & {
     Every control on the selection bar goes through this hook, so translating
     here covers all of them, and covers the next one added.
   */
-  const setParams = useCallback((next: Partial<Omit<AppParams, "date">>) => {
+  const setParams = useCallback((next: Partial<AppParams>) => {
     router.setParams(writeParams(next));
   }, []);
   return { ...params, setParams };

@@ -100,9 +100,56 @@ describe("constrained-off · restriction cause", () => {
     expect(cnf?.cause?.description).toContain("MOP 442-S/2025");
   });
 
-  it("derives curtailed energy from the limited-generation column", () => {
+  it("derives the curtailed energy where ONS has not written GNRa", () => {
+    /*
+      **This assertion used to hold the defect.** It read
+      `val_geracaolimitada / 2` and called it the curtailed energy, and ONS's
+      published dictionary says that field is the *ceiling*: "Representa o
+      limite para a geração da usina/conjunto estabelecido pelo ONS em Tempo
+      Real". The shortfall under it is `val_geracaonaorealizadaapurada`, which
+      the same dictionary defines as "a diferença entre a geração de referência
+      e a geração verificada (se menor que zero, GNRa = 0)".
+
+      Reading the ceiling made every observed figure in the product about 2.9×
+      too high — `docs/todo.md` 5b measured 2–3× empirically and could not find
+      the cause, because the arithmetic was right and the field was not.
+
+      This fixture predates the column, so the derivation runs: reference
+      355,262 − verified 171,415 = 183,847 MWmed over a half-hour. The old
+      answer was 163,261 — larger than the truth and entirely plausible, which
+      is what let it stand.
+    */
     const cnf = parse.rows.find((row) => row.reportingEntityCode === "CJU_BABBS");
-    expect(cnf?.constrainedOffMwh).toBeCloseTo(163.261 / 2, 6);
+    expect(cnf?.constrainedOffMwh).toBeCloseTo((355.262 - 171.415) / 2, 6);
+    expect(parse.hasNotGeneratedColumn).toBe(false);
+  });
+
+  it("reads GNRa where ONS has written it, and it is not the ceiling", () => {
+    /*
+      Real numbers, from `RESTRICAO_COFF_EOLICA_2026_09.csv` as published:
+      Conj. Paulino Neves, 2026-09-01 10:00, reason ENE — verified 319,268,
+      **limitada 322,000**, reference 428,899, **GNRa 109,631**. The two
+      candidate fields differ by 2,9×, which is the whole point of the fixture.
+    */
+    const header = [
+      "id_subsistema;nom_subsistema;id_estado;nom_estado;nom_usina;id_ons;ceg",
+      "din_instante;val_geracao;val_geracaolimitada;val_disponibilidade",
+      "val_geracaoreferencia;val_geracaoreferenciafinal;cod_razaorestricao",
+      "cod_origemrestricao;dsc_restricao;val_geracaonaorealizadaapurada",
+    ].join(";");
+    const row = [
+      "N;Norte;MA;Maranhão;Conj. Paulino Neves;CJU_MAPLN;-",
+      "2026-09-01 10:00:00;319.268;322.0;410.6",
+      "428.899;;ENE",
+      "SIS;Razão energética;109.631",
+    ].join(";");
+    const parsed = parseConstrainedOffCsv(`${header}\n${row}\n`, "WIND");
+    expect(parsed.rejected).toEqual([]);
+    expect(parsed.hasNotGeneratedColumn).toBe(true);
+    // The hour holds one half-hour, so the MWh is half the MWmed.
+    expect(parsed.rows[0]?.constrainedOffMwh).toBeCloseTo(109.631 / 2, 6);
+    // And emphatically not the ceiling, which is what this replaced.
+    expect(parsed.rows[0]?.constrainedOffMwh).not.toBeCloseTo(322.0 / 2, 6);
   });
 
   it("keeps ENE rows with their systemic origin", () => {

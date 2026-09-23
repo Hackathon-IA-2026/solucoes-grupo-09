@@ -35,6 +35,7 @@ const PAGES: { path: string; gateway: boolean }[] = [
   { path: "/app/explain", gateway: true },
   { path: "/app/mitigate", gateway: true },
   { path: "/app/replay", gateway: true },
+  { path: "/app/time-machine", gateway: true },
 ];
 
 /**

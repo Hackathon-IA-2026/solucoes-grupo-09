@@ -29,8 +29,8 @@
 
 import type { SubsystemCode } from "@wattsteer/core";
 import { useEffect, useState } from "react";
+import { useReplayLane } from "@/components/app/use-replay-lane";
 import type { ReplayCandidateDay } from "@/lib/fixtures";
-import { REPLAY_LANE } from "@/lib/replay";
 import { readReplayDays, windowStart } from "@/lib/replay-days";
 import { settleWith } from "@/lib/settle";
 
@@ -44,14 +44,28 @@ export type ReplayDaysState =
 
 export function useReplayDays(subsystem: SubsystemCode): ReplayDaysState {
   const [state, setState] = useState<ReplayDaysState>({ status: "probing" });
+  /*
+    Read, not written down. The constant this replaced named the lane the gate
+    had refused, and the calendar it asked for was empty on every day of the
+    window — see `use-replay-lane.ts` for the measurement.
+  */
+  const { lane, resolved } = useReplayLane();
 
   useEffect(() => {
+    if (lane === null) {
+      /*
+        Two absences, and they are not the same sentence. Before `/v1/meta`
+        answers there is no lane *yet*, and `probing` is exactly that. Once it
+        has answered with nothing serving there is no lane *at all*, and the
+        honest answer is the empty calendar the picker already states in words
+        — sitting on `probing` there would be a skeleton that never resolves.
+      */
+      setState(resolved ? { status: "known", viewable: [] } : { status: "probing" });
+      return;
+    }
     const controller = new AbortController();
     const settle = settleWith(controller.signal, setState);
-    readReplayDays(
-      { subsystem, lane: REPLAY_LANE, from: windowStart(new Date()) },
-      controller.signal,
-    )
+    readReplayDays({ subsystem, lane, from: windowStart(new Date()) }, controller.signal)
       .then((days) => {
         /*
           A refusal and an empty calendar are the same answer here, and the
@@ -68,7 +82,7 @@ export function useReplayDays(subsystem: SubsystemCode): ReplayDaysState {
         settle({ status: "known", viewable: [] });
       });
     return () => controller.abort();
-  }, [subsystem]);
+  }, [subsystem, lane, resolved]);
 
   return state;
 }

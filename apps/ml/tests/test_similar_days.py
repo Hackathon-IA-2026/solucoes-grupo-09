@@ -74,8 +74,11 @@ def test_every_coordinate_is_a_mean_or_a_minimum_never_a_sum() -> None:
 
 
 def test_a_day_carries_the_programme_s_means_and_its_trough() -> None:
-    rows = [programme_row(date(2026, 5, 1), demand=1000, wind=200, solar=100,
-                          mmgd=50, residual_min=410)]
+    rows = [
+        programme_row(
+            date(2026, 5, 1), demand=1000, wind=200, solar=100, mmgd=50, residual_min=410
+        )
+    ]
     [vector] = pool_vectors(rows, {date(2026, 5, 1): 1234.0})
     assert vector.values[0] == 1000.0
     assert vector.values[4] == 650.0  # 1000 − 200 − 100 − 50
@@ -124,8 +127,11 @@ def test_a_day_is_never_its_own_analogue() -> None:
     # chose, so the target can be in it — and removing it must leave enough days
     # behind to still define a scale, which is why there are three here.
     target = day(date(2026, 5, 2), residual=98, outcome=900)
-    pool = [target, day(date(2026, 5, 1), residual=10, outcome=5),
-            day(date(2026, 5, 3), residual=140, outcome=40)]
+    pool = [
+        target,
+        day(date(2026, 5, 1), residual=10, outcome=5),
+        day(date(2026, 5, 3), residual=140, outcome=40),
+    ]
     dates = [neighbour.target_date for neighbour in nearest(target, pool, k=5)]
     assert date(2026, 5, 2) not in dates
     assert dates == [date(2026, 5, 3), date(2026, 5, 1)]

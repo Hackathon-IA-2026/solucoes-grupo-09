@@ -194,6 +194,55 @@ function civilDate(label: string, raw: string): string {
   return raw;
 }
 
+/**
+ * The provenance of a reviewed day, off the body the gateway already holds.
+ *
+ * Every pinned origin's instant and artifact, every settled `data_version`
+ * and every write instant, in the order the body carries them. Those are the
+ * facts that move the answer — a newer backtest vintage, an ONS restatement,
+ * a publication landing — and none of them is a clock, which is the rule
+ * `cache-policy.test.ts` holds every validator to.
+ */
+const PROVENANCE_KEYS: ReadonlySet<string> = new Set([
+  "published_at",
+  "run_label",
+  "settled_data_version",
+  "data_version",
+  "written_at",
+  "latest_written_at",
+]);
+
+export function reviewProvenance(body: unknown): string[] {
+  const found: string[] = [];
+  const walk = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        walk(item);
+      }
+      return;
+    }
+    if (typeof value !== "object" || value === null) {
+      return;
+    }
+    for (const [key, inner] of Object.entries(value)) {
+      if (PROVENANCE_KEYS.has(key) && typeof inner === "string") {
+        found.push(inner);
+      } else {
+        walk(inner);
+      }
+    }
+  };
+  walk(body);
+  return found;
+}
+
+const SUBSYSTEM_QUERY = t.Union([
+  t.Literal("N"),
+  t.Literal("NE"),
+  t.Literal("S"),
+  t.Literal("SE"),
+]);
+
 const LANE_DESCRIPTION =
   "The artifact lane a replay is pinned to, e.g. dessem_free_v1__gate_late__thr5. " +
   "Required and never defaulted: a post-go-live day has one candidate forecast " +
@@ -339,6 +388,114 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
             "500 REPLAY_INTEGRITY_VIOLATION when the read-time held-out " +
             "assertion fails, which is a WattSteer bug and is logged with the " +
             "artifact id.",
+        },
+      },
+    )
+    .get(
+      "/v1/replay/compare/:date",
+      async ({ params, query, set, request }) => {
+        const date = civilDate("date", params.date);
+        const body = await forward(
+          `/v1/replay/compare/${date}`,
+          new URLSearchParams({ lane: query.lane }),
+          endpoint,
+        );
+        if (
+          applyCachePolicy({ set, request }, CACHE_POLICIES.replayReview, [
+            date,
+            query.lane,
+            ...reviewProvenance(body),
+          ])
+        ) {
+          return null;
+        }
+        return body;
+      },
+      {
+        params: t.Object({ date: t.String({ description: "The civil day, BRT." }) }),
+        query: t.Object({ lane: t.String({ description: LANE_DESCRIPTION }) }),
+        detail: {
+          tags: ["replay"],
+          summary: "One replayed day across the four subsystems",
+          description:
+            "Each subsystem's pinned D-1 day band beside what settled, the signed " +
+            "deviation in MWh and where the settled total fell against the band. " +
+            "The national row is the sum of four settled days beside the joint " +
+            "band of the one publication all four resolved — or its stated " +
+            "absence. No percentage: one day cannot produce an accuracy.",
+        },
+      },
+    )
+    .get(
+      "/v1/replay/timeline/:date",
+      async ({ params, query, set, request }) => {
+        const date = civilDate("date", params.date);
+        const body = await forward(
+          `/v1/replay/timeline/${date}`,
+          new URLSearchParams({ subsystem: query.subsystem }),
+          endpoint,
+        );
+        if (
+          applyCachePolicy({ set, request }, CACHE_POLICIES.replayReview, [
+            date,
+            query.subsystem,
+            ...reviewProvenance(body),
+          ])
+        ) {
+          return null;
+        }
+        return body;
+      },
+      {
+        params: t.Object({ date: t.String({ description: "The civil day, BRT." }) }),
+        query: t.Object({ subsystem: SUBSYSTEM_QUERY }),
+        detail: {
+          tags: ["replay"],
+          summary: "One subsystem's day at every served gate, and when each fact arrived",
+          description:
+            "Both gates' bands, the instant each forecast was published and the " +
+            "instant it was written — which differ for a reconstruction — and the " +
+            "settled record's arrival and any ONS rewrite of it. Day-ahead is the " +
+            "only horizon; there is no intraday entry.",
+        },
+      },
+    )
+    .get(
+      "/v1/replay/attribution/:date",
+      async ({ params, query, set, request }) => {
+        const date = civilDate("date", params.date);
+        const body = await forward(
+          `/v1/replay/attribution/${date}`,
+          new URLSearchParams({ subsystem: query.subsystem, lane: query.lane }),
+          endpoint,
+        );
+        if (
+          applyCachePolicy({ set, request }, CACHE_POLICIES.replayReview, [
+            date,
+            query.subsystem,
+            query.lane,
+            ...reviewProvenance(body),
+          ])
+        ) {
+          return null;
+        }
+        return body;
+      },
+      {
+        params: t.Object({ date: t.String({ description: "The civil day, BRT." }) }),
+        query: t.Object({
+          subsystem: SUBSYSTEM_QUERY,
+          lane: t.String({ description: LANE_DESCRIPTION }),
+        }),
+        detail: {
+          tags: ["replay"],
+          summary: "What moved the replayed forecast, for its pinned publication",
+          description:
+            "The stored attribution of exactly the publication a replay is " +
+            "pinned to — its origin kind, instant and artifact. It explains the " +
+            "model's number and never the settled outcome or the error. A " +
+            "publication nobody explained is `not_published`, never a served " +
+            "attribution of the same day borrowed in its place.",
         },
       },
     );

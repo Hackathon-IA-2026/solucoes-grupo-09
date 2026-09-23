@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,7 +16,9 @@ LANE = "dessem_free_v1__gate_late__thr5"
 NEW, OLD = "2026-09-18T03:10:00Z", "2026-09-11T03:10:00Z"
 
 
-def _row(rung: str, number: int, qloss: float, fidelity: str = "point_in_time") -> dict:
+def _row(
+    rung: str, number: int, qloss: float, fidelity: str = "point_in_time"
+) -> dict[str, Any]:
     return {
         "run": "r",
         "rung": rung,
@@ -109,7 +112,9 @@ def test_the_page_carries_no_per_subsystem_or_summed_quantile() -> None:
 
 
 def test_retrain_main_exit_code_ignores_a_report_failure() -> None:
-    src = Path(__import__("wattsteer_ml.retrain", fromlist=["x"]).__file__).read_text()
+    module = __import__("wattsteer_ml.retrain", fromlist=["x"])
+    assert module.__file__ is not None
+    src = Path(module.__file__).read_text()
     main = src[src.index("def main(") :]
     assert "write_report_or_warn(request.root)" in main
     assert main.index("write_report_or_warn") < main.index("return 0 if decided")
