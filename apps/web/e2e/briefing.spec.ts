@@ -25,7 +25,6 @@ const APP_SCREENS = [
   "/app",
   "/app/explain",
   "/app/mitigate",
-  "/app/replay",
   "/app/time-machine",
 ] as const;
 

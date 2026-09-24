@@ -186,10 +186,16 @@ describe("no web code path sums two bands componentwise", () => {
     // ones actually caught summing bands (`docs/specs/replay.md` built a day
     // band from 24 hourly quantiles; `mitigate.tsx` printed a difference of two
     // medians), and `components/` is where the arithmetic is most tempting.
+    //
+    // The first landmark was `app/replay.tsx` until that screen was deleted and
+    // the Time Machine became the only replay surface. It is the same reader and
+    // the same day band, so it inherits the landmark rather than the guard
+    // losing one — a named surface that no longer exists would have to be
+    // dropped, and dropping it is how a walk quietly narrows.
     const files = sourceFiles(join(ROOT, SCOPE)).map((path) => relative(ROOT, path));
     expect(files.length).toBeGreaterThan(20);
     for (const surface of [
-      join("apps", "web", "src", "app", "app", "replay.tsx"),
+      join("apps", "web", "src", "app", "app", "time-machine.tsx"),
       join("apps", "web", "src", "app", "app", "mitigate.tsx"),
     ]) {
       expect(files).toContain(surface);

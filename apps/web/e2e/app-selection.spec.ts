@@ -36,7 +36,8 @@ function _query(page: Page): string {
  * the file asserts is unchanged: pressing a control writes a URL, and the URL
  * reads back.
  *
- * `/app/replay` still has a bar, and its own spec still drives radios.
+ * `/app/replay` had a bar of radios and its own spec driving them; that screen
+ * is deleted, so this file is the only driver of the selection controls.
  */
 async function press(page: Page, name: string | RegExp): Promise<void> {
   await page

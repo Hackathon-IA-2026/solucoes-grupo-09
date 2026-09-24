@@ -14,7 +14,7 @@
  * because it is the one a reader sees most.
  */
 
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { routeGateway } from "./gateway-fixtures";
 
 test.describe("the Time Machine says whether the forecast held", () => {
@@ -26,7 +26,13 @@ test.describe("the Time Machine says whether the forecast held", () => {
       asserting the numbers against a deployment that could not name a lane.
     */
     await routeGateway(page, { forecast: true, serving: "promoted" });
-    await page.goto("/app/replay");
+    /*
+      `/app/time-machine` since the old screen was removed. The figures are the
+      same contract example — a band of 402-548-731 against a settlement of 612
+      — and they were always shown by both, so this spec keeps its coverage
+      rather than being deleted with the route it happened to drive.
+    */
+    await page.goto("/app/time-machine");
     /*
       Wait for the *replay*, not for a character count.
 
@@ -56,15 +62,36 @@ test.describe("the Time Machine says whether the forecast held", () => {
     expect(body).toMatch(/\+64/);
   });
 
+  /*
+    Where the two sentences below live on the dashboard.
+
+    The old screen printed the placement sentence and the coverage paragraph as
+    running prose. The dashboard states the verdict on the deviation card's face
+    — "Dentro da faixa" — and keeps the full sentence and its refusal word for
+    word behind that card's ⓘ, which is the same move `ProvenanceStrip` makes
+    with the honesty paragraphs: the claim stays on screen, the argument is one
+    press away. So the claim is asserted on the face and the argument is
+    asserted after the press, rather than either being dropped.
+
+    The hint's accessible name is the card's own title, which is how `KpiCard`
+    builds it.
+  */
+  async function openDeviationHint(page: Page): Promise<string> {
+    await page.getByTestId("kpi-deviation").getByRole("button").first().click();
+    await expect(page.getByText(/P10–P90/).first()).toBeVisible({ timeout: 10_000 });
+    return (await page.locator("body").textContent()) ?? "";
+  }
+
   test("it says which side of the band the day fell on", async ({ page }) => {
-    const body = (await page.locator("body").textContent()) ?? "";
+    const face = (await page.locator("body").textContent()) ?? "";
+    expect(face).toMatch(/Dentro da faixa|Inside the band/);
+    const body = await openDeviationHint(page);
     expect(body).toMatch(/dentro da faixa P10–P90|inside the P10–P90 band/);
     expect(body).toMatch(/402/);
     expect(body).toMatch(/731/);
   });
 
   test("and does not grade it, or invent an accuracy percentage", async ({ page }) => {
-    const body = (await page.locator("body").textContent()) ?? "";
     /*
       The refusal, asserted where a reader would see it. A P10–P90 band is meant
       to be missed about one day in five, so a screen that scored every day
@@ -75,7 +102,12 @@ test.describe("the Time Machine says whether the forecast held", () => {
       `coverage_p10_in_band` is named on screen rather than computed there,
       because the fraction of days inside is a property of a fold and the gate
       already measures it.
+
+      The grading check reads the *whole* page and not the hint, because a grade
+      appearing anywhere is the defect — it is the one assertion here that must
+      not be scoped to where the good sentence is.
     */
+    const body = await openDeviationHint(page);
     expect(body).toMatch(/um dia a cada cinco|one day in five/);
     expect(body).toContain("coverage_p10_in_band");
     expect(body).not.toMatch(/Acur[áa]cia:\s*\d/);

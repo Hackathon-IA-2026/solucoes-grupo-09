@@ -1896,7 +1896,6 @@ export const en = {
         modelDidNotSee: "Model did not see this day",
         trainedUntil: "{fold} · trained to {date}",
       },
-      currentScreen: "Previous version",
       subsystems: "Subsystem",
       subsystemUnavailable: "No held-out forecast for this subsystem on this day",
       refreshing: "Updating…",

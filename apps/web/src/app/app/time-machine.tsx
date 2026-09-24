@@ -1,9 +1,12 @@
 /**
  * The Time Machine, as a dashboard — `/app/time-machine`.
  *
- * Served **beside** `/app/replay`, not instead of it, while the layout is
- * checked: both read the same replay of the same day, so a reader can hold the
- * two up against each other and every number should agree.
+ * The replay screen, and the only one. `/app/replay` was served **beside** it,
+ * not instead of it, while the layout was being judged: both read the same
+ * replay of the same day, so a reader could hold the two up against each other
+ * and every number had to agree. That comparison is over and the older screen
+ * is deleted, so the references to it below are the record of where a decision
+ * came from and not a second surface to keep in step.
  *
  * ## What it adds, and what it declined
  *
@@ -266,13 +269,6 @@ export default function TimeMachineDashboard() {
           />
         ))}
         <View style={{ flexGrow: 1 }} />
-        <Pill
-          label={text.currentScreen}
-          size="sm"
-          tone="secondary"
-          accessibilityRole="link"
-          onPress={() => router.push(`/app/replay?episode=${day.id}`)}
-        />
       </View>
     </View>
   );

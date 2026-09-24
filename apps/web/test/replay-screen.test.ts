@@ -30,7 +30,7 @@ import { pt as PT } from "../src/i18n/copy.pt";
  */
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
-const SCREEN = join(ROOT, "apps", "web", "src", "app", "app", "replay.tsx");
+const SCREEN = join(ROOT, "apps", "web", "src", "app", "app", "time-machine.tsx");
 
 function source(path: string): string {
   return readFileSync(path, "utf8");
@@ -91,10 +91,17 @@ describe("the day total is joint, and the screen reads it", () => {
     // `test/no-summed-bands.test.ts` is the standing repo-wide guard; this is
     // the local half, which says the screen reaches for the field that exists
     // rather than reaching for it and *also* keeping a sum around.
+    //
+    // The last check is keyed on a *binding* rather than on the bare token:
+    // `forecastBand` was the prototype's local sum, and on the Time Machine it
+    // is the name of a copy key (`text.forecastBand`, the "P10–P90" sentence
+    // printed beside the joint figure). A `toContain` on the word fired on the
+    // dictionary lookup, which is the screen doing the right thing — the defect
+    // is the screen *holding* a band it assembled, so that is what is matched.
     const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("replay.forecast.dayTotal");
     expect(screen).not.toMatch(/forecast\.hours\s*\.\s*reduce/);
-    expect(screen).not.toContain("forecastBand");
+    expect(screen).not.toMatch(/(?:const|let|var)\s+forecastBand\b/);
   });
 });
 
@@ -145,15 +152,16 @@ describe("the denominator is the day, not the episode", () => {
 });
 
 describe("the honesty block is above the numbers, and cannot be put away", () => {
-  it("it is rendered before the first figure on the replayed day", () => {
-    const screen = sourceWithoutComments(SCREEN);
-    const replayed = screen.slice(screen.indexOf("function Replayed("));
-    const honesty = replayed.indexOf("<HonestyNote");
-    const firstPanel = replayed.indexOf("<Panel");
-    expect(honesty).toBeGreaterThan(-1);
-    expect(firstPanel).toBeGreaterThan(-1);
-    expect(honesty).toBeLessThan(firstPanel);
-  });
+  // Two guards stood here — that the honesty block precedes the first figure,
+  // and that the provenance and vintage statements are two badges and not one.
+  // Both were written against `/app/replay`, which drew them as paragraphs. The
+  // dashboard draws the same two facts as the always-visible `ProvenanceStrip`,
+  // and `time-machine.test.ts` asserts both against it: `precedes every figure
+  // of the replayed day` checks the strip against four figure kinds rather than
+  // `<Panel` alone, and `always draws both badges and the held-out mark, with no
+  // collapsed state` checks the two badges plus the absence of any open/closed
+  // state. Repeating them here against the composing screen would assert less,
+  // so they live in one place.
 
   it("the block itself has no collapse affordance", () => {
     // A caveat behind an interaction is a caveat nobody reads, and these ones
@@ -166,21 +174,6 @@ describe("the honesty block is above the numbers, and cannot be put away", () =>
     expect(block).not.toContain("Pressable");
     expect(block).not.toContain("onPress");
     expect(block).not.toContain("collaps");
-  });
-
-  it("the provenance statement and the vintage statement are two, never merged", () => {
-    const screen = sourceWithoutComments(SCREEN);
-    expect(screen).toContain("<ProvenanceBadge");
-    expect(screen).toContain("<VintageBadge");
-    // Two axes, neither derived from the other. They coincide today, which is
-    // exactly the argument for keeping them apart: `fold_holdout` +
-    // `point_in_time` becomes populated the moment F6 freezes.
-    //
-    // That both badges are on the screen is structural and stays here. That the
-    // two sentences under them are genuinely two is a property of the strings,
-    // and `replay-notes.test.ts` asserts it by rendering both — this file used
-    // to assert it with `toContain("provenanceNote")`, which passed equally if
-    // the two notes returned the same sentence.
   });
 
   it("the IN-SAMPLE branch is deleted, not left unreachable", () => {
@@ -223,10 +216,14 @@ describe("one headline, the floor beside it, and no carbon anywhere", () => {
       EXAMPLE.avoidedEnergyMwh - EXAMPLE.recoveredFloorMwh,
       6,
     );
+    // `floorMarginMwh`'s arithmetic is asserted above, on the contract, but the
+    // dashboard does not print it: the card says the floor and then met or
+    // missed, in one sentence, and the margin is the subtraction a reader can
+    // do from the two figures already there. What this guard is for is that the
+    // floor never appears without the verdict, so that is what it reads.
     const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("replay.recoveredFloorMwh");
     expect(screen).toContain("replay.floorMet");
-    expect(screen).toContain("replay.floorMarginMwh");
   });
 
   it("no carbon field exists on the contract and none is rendered", () => {
@@ -316,21 +313,26 @@ describe("perfect foresight is fenced, and labelled in the spec's own words", ()
       EXAMPLE.upperBound.recoveredMwh - EXAMPLE.avoidedEnergyMwh,
       6,
     );
+    // On the dashboard the headline cards are `Headline` and the bound is read
+    // only inside `Fleet`, under `foresightLabel`. The fence is therefore two
+    // properties: the headline reads no `upperBound` field at all, and every
+    // read there is below the label that names it as perfect foresight.
     const screen = sourceWithoutComments(SCREEN);
     const headline = screen.slice(
-      screen.indexOf("function Replayed("),
-      screen.indexOf("function ObservedOnly("),
+      screen.indexOf("function Headline("),
+      screen.indexOf("function Fleet("),
     );
-    // The one place `upperBound` is read is the fenced block's props.
-    const reads = headline.match(/replay\.upperBound\.[A-Za-z]+/g) ?? [];
-    expect(reads.sort()).toEqual([
-      "replay.upperBound.avoidability",
+    expect(headline).not.toContain("replay.upperBound");
+    const fleet = screen.slice(screen.indexOf("function Fleet("));
+    const reads = [...(fleet.match(/replay\.upperBound\.[A-Za-z]+/g) ?? [])];
+    expect(reads.length).toBeGreaterThan(0);
+    expect([...new Set(reads)].sort()).toEqual([
       "replay.upperBound.forecastValueGapMwh",
       "replay.upperBound.recoveredMwh",
     ]);
-    expect(headline.indexOf("<PerfectForesight")).toBeGreaterThan(
-      headline.indexOf("copy.app.replay.headlineRecovered"),
-    );
+    for (const read of reads) {
+      expect(fleet.indexOf("text.foresightLabel")).toBeLessThan(fleet.indexOf(read));
+    }
   });
 });
 
@@ -430,7 +432,7 @@ describe("every refusal renders in both locales from a typed code", () => {
   it("the screen renders the code and never the envelope's message", () => {
     const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("copy.error[code]");
-    expect(screen).toContain("copy.error[view.refusal.code]");
+    expect(screen).toContain("copy.error[state.view.refusal.code]");
     // `message` on the envelope is developer prose for a log. A screen that
     // rendered it would be a monolingual product with nothing failing.
     expect(screen).not.toContain("refusal.message");

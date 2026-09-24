@@ -1088,7 +1088,10 @@ smoothed over.** Four, and they are all in the same two files:
    of the wrong artifact. Under this spec no replayable day is in-sample, and
    `apps/web/src/app/app/replay.tsx`'s `IN-SAMPLE` warning branch becomes
    unreachable. The field becomes `provenance: "served" | "fold_holdout"` plus
-   `heldOutBy`, and the badge becomes a provenance statement.
+   `heldOutBy`, and the badge becomes a provenance statement. That screen has
+   since been deleted: the Time Machine (`apps/web/src/app/app/time-machine.tsx`)
+   is the only replay surface, and it is where each contradiction below is to be
+   read now.
 2. `replay.tsx` builds `forecastBand` by summing `p10`, `p50` and `p90` across
    24 hours, with a note conceding a joint day-total would be narrower. That
    concession has expired: the forecaster's path ensemble computes the joint

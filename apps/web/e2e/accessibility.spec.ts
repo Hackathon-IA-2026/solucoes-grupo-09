@@ -126,7 +126,6 @@ const SCREENS: {
   { path: "/app", ready: "[data-region]", minChars: 600, forecast: false },
   { path: "/app/explain", ready: "text=/./", minChars: 300 },
   { path: "/app/mitigate", ready: "text=/./", minChars: 600 },
-  { path: "/app/replay", ready: "text=/./", minChars: 500 },
   { path: "/app/time-machine", ready: "text=/./", minChars: 500 },
 ];
 

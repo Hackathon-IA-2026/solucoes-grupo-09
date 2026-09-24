@@ -105,8 +105,10 @@ const APPBAR_NAV = marker("appbarNav");
 const SCREENS: ScreenDef[] = [
   { key: "overview", path: "/app" },
   /*
-    The Time Machine pill opens the dashboard. `/app/replay` is still served,
-    unchanged, so rolling back is this one path — not a restored screen.
+    The Time Machine pill opens the dashboard. `/app/replay` was served
+    unchanged beside it while the layout was judged, which made rolling back
+    this one path; that screen is deleted now and there is nothing to roll back
+    to.
   */
   { key: "replay", path: "/app/time-machine" },
 ];

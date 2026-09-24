@@ -1610,7 +1610,6 @@ export const pt: Copy = {
         modelDidNotSee: "Modelo não viu este dia",
         trainedUntil: "{fold} · treino até {date}",
       },
-      currentScreen: "Versão anterior",
       subsystems: "Subsistema",
       subsystemUnavailable: "Nenhuma previsão retida para este subsistema neste dia",
       refreshing: "Atualizando…",

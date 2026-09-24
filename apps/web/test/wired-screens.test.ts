@@ -278,17 +278,10 @@ describe("a lede never promises a panel that is not there", () => {
     );
   });
 
-  it("Replay switches its lede on whether anything was scored", () => {
-    const replay = code(read("app", "app", "replay.tsx"));
-    expect(replay).toContain('const scored = state.status === "replayed"');
-    expect(replay).toContain(
-      "scored ? copy.app.replay.lede : copy.app.replay.ledeAbsent",
-    );
-  });
-
   it("The Time Machine dashboard switches its lede on whether anything was scored", () => {
-    // `/app/time-machine` reads the same replay as `/app/replay`, so it owes the
-    // same pair for the same reason: its observed-only branch offers ONS's
+    // `/app/replay` owed the same pair and was asserted just above until it was
+    // deleted; the dashboard is the only replay surface now and inherits the
+    // obligation for the same reason: its observed-only branch offers ONS's
     // record *instead* of a replay, and a lede promising a scored day above it
     // would contradict the panels it introduces.
     const dashboard = code(read("app", "app", "time-machine.tsx"));
