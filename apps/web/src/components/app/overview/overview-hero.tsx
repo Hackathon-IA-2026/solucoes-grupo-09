@@ -667,20 +667,20 @@ export function OverviewHero({
               gap: space.md,
             }}
           >
-            {headline}
-            {profile}
             {/*
-              **The settled national total, under the day it settles.**
+              **The settled national total leads this column.**
 
-              It was in the right rail above the four forecast rows, which put
-              a measurement at the head of a column of predictions. Here it
-              follows the hourly profile it is the sum of — the same window,
-              the same vocabulary — and the forecast sum sits with the four
-              rows it adds up, on the other side of the map. Each total is now
-              beside its own parts, which is the only arrangement in which a
-              reader can check either one.
+              It was third, under the profile, on the argument that a total
+              should follow the hours it is the sum of. It is first now: this
+              is the one figure on the screen that is *measured* rather than
+              modelled, and a column that opens with it says what the grid did
+              before it says what we expect. The forecast sum still sits with
+              the four rows it adds up, on the other side of the map, so each
+              total is still beside its own parts.
             */}
             {nationalPanel}
+            {headline}
+            {profile}
           </View>
         ) : null}
 
