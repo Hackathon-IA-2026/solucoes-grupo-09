@@ -114,6 +114,7 @@ import {
 } from "@/i18n/replay";
 import { type BatteryAsset, replayDay, type ShiftableLoadAsset } from "@/lib/fixtures";
 import { dispatchSeries, forecastHours, observedHours } from "@/lib/replay";
+import { openingDay } from "@/lib/time-machine";
 
 export default function TimeMachineScreen() {
   const palette = usePalette();
@@ -122,10 +123,26 @@ export default function TimeMachineScreen() {
   const { locale } = useI18n();
   const serving = useServing();
   const params = useAppParams();
-  const day = replayDay(params.episode);
+  /* Resolved in the render rather than by the effect — see `time-machine.tsx`. */
+  const askedDay = replayDay(params.episode);
   /* Read from `/v1/meta`, never written down — see `use-replay-lane.ts`. */
   const { lane: replayLane } = useReplayLane();
-  const days = useReplayDays(day.subsystem);
+  const days = useReplayDays(askedDay.subsystem);
+  /*
+    The day the screen draws: the calendar's opening pick as soon as there is
+    one, and the asked day until then. `openingDay` is the same function the
+    effect below uses, so the frame and the URL cannot disagree about which day
+    this is.
+  */
+  const opening =
+    days.status === "known"
+      ? openingDay(days.viewable, askedDay, {
+          fromUrl: params.episodeFromUrl === true,
+          date: params.date,
+          subsystem: params.subsystem,
+        })
+      : null;
+  const day = opening === null ? askedDay : replayDay(opening);
   const [showAllDays, setShowAllDays] = useState(false);
   // The replayed day is the selection, so the scenario in the address bar
   // follows it — and it is validated under the replay's own `target_date`
@@ -173,13 +190,17 @@ export default function TimeMachineScreen() {
   */
   // biome-ignore lint/correctness/useExhaustiveDependencies: see the note above
   useEffect(() => {
-    if (days.status !== "known" || days.viewable.length === 0) {
-      return;
+    /*
+      `opening` is the render's own answer, so the URL is written to exactly
+      what the screen is drawing. Recomputing from `day` here would compare the
+      *resolved* day against the calendar, find it already in it, and never
+      write — the screen would show the right day and a link copied from the
+      address bar would not carry it.
+    */
+    if (opening !== null && opening !== params.episode) {
+      params.setParams({ episode: opening });
     }
-    if (!days.viewable.some((candidate) => candidate.id === day.id)) {
-      params.setParams({ episode: days.viewable[0]?.id });
-    }
-  }, [days, day.id]);
+  }, [opening, params.episode]);
 
   /*
     **Only the days the deployment can actually show.**
@@ -266,7 +287,12 @@ export default function TimeMachineScreen() {
    */
   const scored = state.status === "replayed";
 
-  const frame = (right: ReactNode, body: ReactNode) => (
+  /*
+    `controls` carries the day pills, so the holding state has to be able to
+    leave them out: while the calendar is unanswered the only day they could
+    offer is the fixture this hold exists to keep off the screen.
+  */
+  const frame = (right: ReactNode, body: ReactNode, withControls = true) => (
     <>
       <Head>
         <title>{copy.app.replay.metaTitle}</title>
@@ -288,6 +314,16 @@ export default function TimeMachineScreen() {
   // replay drawn for it. The code is rendered from the dictionaries; the
   // gateway's own developer prose is not on this screen and never reaches a
   // reader.
+  /*
+    The same hold as `/app/time-machine`, for the same reason: with no
+    `episode` in the URL, `replayDay` returns the `2024-11-05 · NE` fixture and
+    the screen drew it until the calendar answered. See that file for the
+    argument; a deep link still draws its own day at once.
+  */
+  if (days.status !== "known" && params.episodeFromUrl !== true) {
+    return frame(null, <ReadingState title={copy.app.replay.replayingTitle} />, false);
+  }
+
   if (scenarioState.scenario === null) {
     const code = scenarioState.readout.ok ? "BAD_INPUT" : scenarioState.readout.code;
     return frame(null, <Refusal code={code} onReset={scenarioState.reset} />);

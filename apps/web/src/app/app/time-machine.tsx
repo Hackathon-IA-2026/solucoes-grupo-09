@@ -123,8 +123,38 @@ export default function TimeMachineDashboard() {
   const f = useFormat();
   const text = copy.app.timeMachine;
   const params = useAppParams();
-  const day = replayDay(params.episode);
-  const days = useReplayDays(day.subsystem);
+  /*
+    **The day is resolved in the render, not by the effect below.**
+
+    `replayDay` returns the `2024-11-05 · NE` fixture for an id it does not
+    know, which is what an `/app/time-machine` with no `episode` carries. The
+    effect further down moves off it — but an effect runs *after* the render
+    that scheduled it, so there was always one frame showing a day from two
+    years ago. The hold above covers the frames before the calendar answers;
+    this covers the one frame after it, and between them the fixture never
+    reaches the screen.
+
+    The effect stays, because the URL still has to be written: it is the copy
+    every other reader of the selection reads. What changed is that the screen
+    no longer waits for it to know what to draw.
+  */
+  const askedDay = replayDay(params.episode);
+  const days = useReplayDays(askedDay.subsystem);
+  /*
+    The day the screen draws: the calendar's opening pick as soon as there is
+    one, and the asked day until then. `openingDay` is the same function the
+    effect below uses, so the frame and the URL cannot disagree about which day
+    this is.
+  */
+  const opening =
+    days.status === "known"
+      ? openingDay(days.viewable, askedDay, {
+          fromUrl: params.episodeFromUrl === true,
+          date: params.date,
+          subsystem: params.subsystem,
+        })
+      : null;
+  const day = opening === null ? askedDay : replayDay(opening);
   const scenarioState = useScenario(day.subsystem, day.date, {
     targetDate: replayTargetDate,
     followTargetDate: true,
@@ -179,18 +209,17 @@ export default function TimeMachineDashboard() {
   */
   // biome-ignore lint/correctness/useExhaustiveDependencies: see the note above
   useEffect(() => {
-    if (days.status !== "known") {
-      return;
+    /*
+      `opening` is the render's own answer, so the effect writes exactly what
+      the screen is already drawing — it used to recompute from `day`, which
+      after the render resolution is the *resolved* day, so `openingDay`
+      returned `null` and the URL was never written. The screen showed the
+      right day and a deep link copied from the address bar did not.
+    */
+    if (opening !== null && opening !== params.episode) {
+      params.setParams({ episode: opening });
     }
-    const next = openingDay(days.viewable, day, {
-      fromUrl: params.episodeFromUrl === true,
-      date: params.date,
-      subsystem: params.subsystem,
-    });
-    if (next !== null) {
-      params.setParams({ episode: next });
-    }
-  }, [days, day.id, params.episodeFromUrl, params.date, params.subsystem]);
+  }, [opening, params.episode]);
 
   const offered = days.status === "known" ? days.viewable : [day];
   const shown = offered.slice(0, FOLDED_DAYS).some((candidate) => candidate.id === day.id)
@@ -249,7 +278,12 @@ export default function TimeMachineDashboard() {
   );
 
   const scored = state.status === "replayed";
-  const frame = (right: ReactNode, body: ReactNode) => (
+  /*
+    `controls` carries the day pills, so the holding state has to be able to
+    leave them out: while the calendar is unanswered the only day they could
+    offer is the fixture this hold exists to keep off the screen.
+  */
+  const frame = (right: ReactNode, body: ReactNode, withControls = true) => (
     <>
       <Head>
         <title>{text.metaTitle}</title>
@@ -261,11 +295,35 @@ export default function TimeMachineDashboard() {
           lede={scored ? copy.app.timeMachine.lede : copy.app.timeMachine.ledeAbsent}
           right={right}
         />
-        {controls}
+        {withControls ? controls : null}
         {body}
       </AppShell>
     </>
   );
+
+  /*
+    **Wait for the calendar rather than drawing a day nobody asked for.**
+
+    `replayDay` falls back to `REPLAY_DAYS[0]` when the id is not one it knows,
+    and with no `episode` in the URL that is the fixture `2024-11-05 · NE`. So
+    the screen opened on a day from two years ago — with its heading, its
+    subsystem and its refusal sentence — and only when `/v1/replay/days`
+    answered did the effect above move it to a real one. Every load flashed a
+    date the deployment has no forecast for, which is the strongest possible
+    suggestion that the product is showing made-up data.
+
+    The effect that moves is not the fix: it cannot run before the answer it
+    needs. So the screen holds, which is what `web.md` asks of a read with no
+    previous answer to keep on screen — three states, and `reading` is one of
+    them.
+
+    Only when the episode did *not* come from the URL. A deep link names its own
+    day and is entitled to be drawn immediately; the probe then confirms or
+    moves it, which is the behaviour a link has always had.
+  */
+  if (days.status !== "known" && params.episodeFromUrl !== true) {
+    return frame(null, <ReadingState title={copy.app.replay.replayingTitle} />, false);
+  }
 
   if (scenarioState.scenario === null) {
     const code = scenarioState.readout.ok ? "BAD_INPUT" : scenarioState.readout.code;

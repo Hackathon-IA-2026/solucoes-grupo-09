@@ -151,3 +151,31 @@ test.describe("the Time Machine dashboard", () => {
     await shoot(page, "05-dashboard-en");
   });
 });
+
+test.describe("the screen holds rather than drawing a day nobody asked for", () => {
+  test("no 2024 fixture flashes before the calendar answers", async ({ page }) => {
+    /*
+      `replayDay` falls back to `REPLAY_DAYS[0]` for an id it does not know, and
+      with no `episode` in the URL that is the fixture `2024-11-05 · NE`. The
+      screen drew it — heading, subsystem and refusal sentence — until
+      `/v1/replay/days` answered and the effect moved it. Every load flashed a
+      date the deployment has no forecast for, which reads as invented data.
+
+      Sampled from the first paint rather than at the end, because the defect is
+      a flash: asserting only the settled state would pass on the bug.
+
+      The needle is the fixture's *day*, not the string `2024`. The settled
+      screen legitimately prints 2024 inside the artifact's training window —
+      "Treinado em 1 de abr. de 2024 – 30 de jun. de 2025" — and a test that
+      failed on that would be forbidding a true sentence.
+    */
+    const seen: string[] = [];
+    await routeGateway(page, { forecast: true, serving: "promoted", review: true });
+    await page.goto("/app/time-machine");
+    for (let sample = 0; sample < 24; sample += 1) {
+      seen.push((await page.locator("body").textContent()) ?? "");
+      await page.waitForTimeout(120);
+    }
+    expect(seen.filter((text) => text.includes("5 de nov. de 2024"))).toEqual([]);
+  });
+});
