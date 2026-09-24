@@ -14,7 +14,7 @@
  * because it is the one a reader sees most.
  */
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { routeGateway } from "./gateway-fixtures";
 
 test.describe("the Time Machine says whether the forecast held", () => {
@@ -67,25 +67,17 @@ test.describe("the Time Machine says whether the forecast held", () => {
 
     The old screen printed the placement sentence and the coverage paragraph as
     running prose. The dashboard states the verdict on the deviation card's face
-    — "Dentro da faixa" — and keeps the full sentence and its refusal word for
-    word behind that card's ⓘ, which is the same move `ProvenanceStrip` makes
-    with the honesty paragraphs: the claim stays on screen, the argument is one
-    press away. So the claim is asserted on the face and the argument is
-    asserted after the press, rather than either being dropped.
-
-    The hint's accessible name is the card's own title, which is how `KpiCard`
-    builds it.
+    — "Dentro da faixa" — and keeps the full sentence and its refusal in that
+    card's corner note, which the Overview's `QuestionCard` renders *always* and
+    hides with opacity rather than with `display`. That is deliberate and
+    documented on `HoverNote`: the caveat is load-bearing, so it stays in the
+    accessibility tree and in `body.textContent` whether or not a pointer ever
+    arrives. So these read the body, and the press is not needed to reach them.
   */
-  async function openDeviationHint(page: Page): Promise<string> {
-    await page.getByTestId("kpi-deviation").getByRole("button").first().click();
-    await expect(page.getByText(/P10–P90/).first()).toBeVisible({ timeout: 10_000 });
-    return (await page.locator("body").textContent()) ?? "";
-  }
 
   test("it says which side of the band the day fell on", async ({ page }) => {
-    const face = (await page.locator("body").textContent()) ?? "";
-    expect(face).toMatch(/Dentro da faixa|Inside the band/);
-    const body = await openDeviationHint(page);
+    const body = (await page.locator("body").textContent()) ?? "";
+    expect(body).toMatch(/Dentro da faixa|Inside the band/);
     expect(body).toMatch(/dentro da faixa P10–P90|inside the P10–P90 band/);
     expect(body).toMatch(/402/);
     expect(body).toMatch(/731/);
@@ -103,11 +95,10 @@ test.describe("the Time Machine says whether the forecast held", () => {
       because the fraction of days inside is a property of a fold and the gate
       already measures it.
 
-      The grading check reads the *whole* page and not the hint, because a grade
-      appearing anywhere is the defect — it is the one assertion here that must
-      not be scoped to where the good sentence is.
+      The grading check reads the whole page, because a grade appearing anywhere
+      is the defect.
     */
-    const body = await openDeviationHint(page);
+    const body = (await page.locator("body").textContent()) ?? "";
     expect(body).toMatch(/um dia a cada cinco|one day in five/);
     expect(body).toContain("coverage_p10_in_band");
     expect(body).not.toMatch(/Acur[áa]cia:\s*\d/);

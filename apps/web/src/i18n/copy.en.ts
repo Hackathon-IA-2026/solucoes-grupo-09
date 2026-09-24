@@ -1888,8 +1888,7 @@ export const en = {
     */
     timeMachine: {
       metaTitle: "Time Machine dashboard — WattSteer",
-      title: "What WattSteer said at D−1, and what ONS settled",
-      lede: "The D−1 forecast against what ONS settled.",
+      lede: "WattSteer's D−1 forecast against what ONS settled.",
       ledeAbsent: "What ONS settled. No held-out forecast answers this day.",
       about: "About this panel",
       strip: {

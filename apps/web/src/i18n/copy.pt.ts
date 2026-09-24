@@ -1602,8 +1602,7 @@ export const pt: Copy = {
     /* O painel da Máquina do tempo em `/app/time-machine`. Ver `copy.en.ts`. */
     timeMachine: {
       metaTitle: "Máquina do tempo — painel — WattSteer",
-      title: "O que o WattSteer disse em D−1 e o que o ONS liquidou",
-      lede: "A previsão de D−1 contra o que o ONS liquidou.",
+      lede: "A previsão de D−1 da WattSteer contra o que o ONS liquidou.",
       ledeAbsent: "O que o ONS liquidou. Nenhuma previsão retida responde por este dia.",
       about: "Sobre este painel",
       strip: {

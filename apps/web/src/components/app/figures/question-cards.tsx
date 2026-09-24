@@ -13,6 +13,19 @@
  * than the browser deciding. It reads as a verdict, it *is* a verdict, and the
  * probability sits under it so a reader can see which end of the bin they are
  * on. Nothing is lost except the false crispness.
+ *
+ * ## Who else draws these
+ *
+ * The Time Machine's top row is five of these too. It had its own card, with a
+ * round icon wash, a heavier figure and an accent border along the top, so the
+ * two screens stated figures in two visual languages and a reader crossing
+ * between them had to re-learn which part of a card was the number. One
+ * component, one language.
+ *
+ * What that card knew and this one did not is now here rather than in a second
+ * file: a figure that may be absent, more than one qualifying line, a caveat of
+ * more than one paragraph, and a figure colour that is not a verdict. Each is
+ * documented on its own prop below.
  */
 
 import {
@@ -42,7 +55,7 @@ import { Platform, Pressable, Text, View } from "react-native";
  * they ask. The mark opens on focus as well as on hover, because a control that
  * only answers a pointer is a control a keyboard cannot use.
  */
-function HoverNote({ note, id }: { note: string; id: string }) {
+function HoverNote({ note, id }: { note: readonly string[]; id: string }) {
   const colors = usePalette();
   const [open, setOpen] = useState(false);
   return (
@@ -56,7 +69,7 @@ function HoverNote({ note, id }: { note: string; id: string }) {
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={note}
+        accessibilityLabel={note.join(" ")}
         aria-describedby={id}
         aria-expanded={open}
         onPress={() => setOpen((value) => !value)}
@@ -101,9 +114,19 @@ function HoverNote({ note, id }: { note: string; id: string }) {
             : null),
         }}
       >
-        <Text style={{ ...type.caption, color: colors.inkMuted, lineHeight: 17 }}>
-          {note}
-        </Text>
+        {note.map((paragraph) => (
+          <Text
+            key={paragraph}
+            style={{
+              ...type.caption,
+              color: colors.inkMuted,
+              lineHeight: 17,
+              marginTop: paragraph === note[0] ? 0 : space.xs,
+            }}
+          >
+            {paragraph}
+          </Text>
+        ))}
       </View>
     </View>
   );
@@ -114,31 +137,64 @@ function HoverNote({ note, id }: { note: string; id: string }) {
  *
  * `tone` colours the headline and the border, and is passed only by the risk
  * card. The other four are figures rather than judgements, and colouring them
- * would imply a scale they are not on.
+ * would imply a scale they are not on. `accent` is the weaker of the two and
+ * colours the figure alone — what the Time Machine's cards need to keep a
+ * forecast and a measurement apart without claiming either is a verdict.
  */
 export function QuestionCard({
   icon,
   question,
   answer,
   unit,
+  absent,
   detail,
   footnote,
   tone,
+  accent,
   note,
   noteId,
+  testID,
   onPress,
   expanded,
 }: {
   icon: ReactNode;
   question: string;
-  answer: string;
+  /** The figure — or `null` for a stated absence, rendered as {@link absent}. */
+  answer: string | null;
   unit?: string;
+  /**
+   * What stands in the figure's place when there is no figure.
+   *
+   * A sentence, in muted ink, never a zero and never a bare dash — the rule is
+   * `honesty.md`'s and the Time Machine's coverage card is what needed it here:
+   * "we have not measured this yet" and "we measured zero" are different
+   * claims and the card may not blur them.
+   */
+  absent?: string;
   detail: string;
-  footnote?: string;
+  /**
+   * The lines under the detail. One string or several.
+   *
+   * Several because the Time Machine's cards qualify their figure with a band
+   * *and* a window, which are two facts and not one sentence.
+   */
+  footnote?: string | readonly string[];
+  /** Colours the figure **and** the border: the treatment a verdict gets. */
   tone?: string;
+  /**
+   * Colours the figure alone, leaving the border neutral.
+   *
+   * The two are separate because a colour on this product carries a vocabulary
+   * — a forecast is violet, a measurement is not — and that distinction has to
+   * survive on a card that is stating a figure rather than passing a judgement.
+   * `tone` is the risk card's treatment and says "this is a verdict"; `accent`
+   * says only "this figure is of this kind".
+   */
+  accent?: string;
   /** A caveat, behind a mark in the corner. See {@link HoverNote}. */
-  note?: string;
+  note?: string | readonly string[];
   noteId?: string;
+  testID?: string;
   /**
    * Makes the card itself the control that opens its own long answer.
    *
@@ -177,31 +233,48 @@ export function QuestionCard({
             textTransform: "uppercase",
             letterSpacing: 0.6,
           }}
-          numberOfLines={1}
+          /*
+            Two, not one. The Overview's questions are three words at most and
+            never reach a second line, but the Time Machine's labels are
+            sentences — "A frota absorveria" — and at this card's 188px floor a
+            one-line clamp truncated one of them. A clipped label is lost
+            information, and the row stretching to the tallest card is what
+            this layout already does.
+          */
+          numberOfLines={2}
         >
           {question}
         </Text>
       </View>
 
-      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5 }}>
+      {answer === null ? (
         <Text
-          style={{
-            fontSize: 27,
-            lineHeight: 32,
-            fontWeight: "700",
-            color: tone ?? colors.ink,
-            fontVariant: ["tabular-nums"],
-            letterSpacing: -0.8,
-            flexShrink: 1,
-          }}
-          numberOfLines={1}
+          style={{ ...type.caption, color: colors.inkFaint, lineHeight: 20 }}
+          numberOfLines={3}
         >
-          {answer}
+          {absent}
         </Text>
-        {unit === undefined ? null : (
-          <Text style={{ ...type.label, color: colors.inkMuted }}>{unit}</Text>
-        )}
-      </View>
+      ) : (
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5 }}>
+          <Text
+            style={{
+              fontSize: 27,
+              lineHeight: 32,
+              fontWeight: "700",
+              color: tone ?? accent ?? colors.ink,
+              fontVariant: ["tabular-nums"],
+              letterSpacing: -0.8,
+              flexShrink: 1,
+            }}
+            numberOfLines={1}
+          >
+            {answer}
+          </Text>
+          {unit === undefined ? null : (
+            <Text style={{ ...type.label, color: colors.inkMuted }}>{unit}</Text>
+          )}
+        </View>
+      )}
 
       {/*
         **The trailing lines sit on the row's bottom edge, not under a hole.**
@@ -223,18 +296,19 @@ export function QuestionCard({
         <Text style={{ ...type.caption, color: colors.inkMuted }} numberOfLines={2}>
           {detail}
         </Text>
-        {footnote === undefined ? null : (
+        {(typeof footnote === "string" ? [footnote] : (footnote ?? [])).map((line) => (
           <Text
+            key={line}
             style={{
               ...type.caption,
               color: colors.inkFaint,
               fontVariant: ["tabular-nums"],
             }}
-            numberOfLines={1}
+            numberOfLines={2}
           >
-            {footnote}
+            {line}
           </Text>
-        )}
+        ))}
       </View>
     </>
   );
@@ -264,10 +338,12 @@ export function QuestionCard({
     backgroundColor: colors.surface,
   };
 
+  const paragraphs = typeof note === "string" ? [note] : (note ?? []);
+
   return (
-    <View style={box}>
-      {note === undefined || noteId === undefined ? null : (
-        <HoverNote note={note} id={noteId} />
+    <View testID={testID} style={box}>
+      {paragraphs.length === 0 || noteId === undefined ? null : (
+        <HoverNote note={paragraphs} id={noteId} />
       )}
       {onPress === undefined ? (
         content

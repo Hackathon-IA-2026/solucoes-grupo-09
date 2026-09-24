@@ -33,7 +33,6 @@ const code = (source: string) =>
 const SCREEN = code(read("app", "app", "time-machine.tsx"));
 const OWNED = [
   SCREEN,
-  code(read("components", "app", "time-machine", "kpi-card.tsx")),
   code(read("components", "app", "time-machine", "gate-timeline.tsx")),
   code(read("components", "app", "time-machine", "subsystem-table.tsx")),
   code(read("components", "app", "time-machine", "evidence-tabs.tsx")),

@@ -67,6 +67,7 @@ import { Text, View } from "react-native";
 import { AnswerFeedback } from "@/components/app/answer-feedback";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { BatteryEditor, LoadEditor } from "@/components/app/asset-editor";
+import { QuestionCard } from "@/components/app/figures/question-cards";
 import { useCoverage } from "@/components/app/figures/use-coverage";
 import { useSimilarDays } from "@/components/app/figures/use-similar-days";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
@@ -83,7 +84,6 @@ import { ReadingState } from "@/components/app/thinking-orb";
 import { EvidenceTabs } from "@/components/app/time-machine/evidence-tabs";
 import { GateTimeline } from "@/components/app/time-machine/gate-timeline";
 import { InfoHint } from "@/components/app/time-machine/info-hint";
-import { KpiCard } from "@/components/app/time-machine/kpi-card";
 import { ProvenanceStrip } from "@/components/app/time-machine/provenance-strip";
 import { SubsystemTable } from "@/components/app/time-machine/subsystem-table";
 import { TraceabilityPanel } from "@/components/app/time-machine/traceability-panel";
@@ -287,7 +287,6 @@ export default function TimeMachineDashboard() {
       </Head>
       <AppShell fullWidth={true}>
         <ScreenTitle
-          title={text.title}
           lede={scored ? copy.app.timeMachine.lede : copy.app.timeMachine.ledeAbsent}
           right={right}
         />
@@ -632,16 +631,28 @@ function Headline({
   const window = likelyWindow(forecastHours(replay.targetDate, replay.forecast.hours));
 
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-      <KpiCard
+    /*
+      The same five-card row the Overview draws, from the same component.
+      `gap: space.md` rather than `lg` for that reason: the cards are exact
+      fifths of the row there and the grid below lines up with their edges.
+    */
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
+      <QuestionCard
         testID="kpi-forecast"
-        tone="forecast"
-        icon={<CalendarDaysIcon size={16} color={colors.violet} />}
-        title={text.forecastTitle}
-        kicker={text.forecastKicker}
-        value={mwh(band.p50, f)}
+        icon={<CalendarDaysIcon size={14} color={colors.violet} />}
+        question={text.forecastTitle}
+        answer={mwh(band.p50, f)}
         unit="MWh"
-        lines={[
+        detail={text.forecastKicker}
+        /*
+          Violet, through `accent` and not `tone`: this is the forecast's
+          colour everywhere else in the product and the card beside it is a
+          measurement, so the distinction has to be visible. `tone` would also
+          border the card, which is the risk card's treatment and would read as
+          a verdict about the day.
+        */
+        accent={colors.violet}
+        footnote={[
           fill(text.forecastBand, { p10: mwh(band.p10, f), p90: mwh(band.p90, f) }),
           window === null
             ? text.forecastNoWindow
@@ -651,25 +662,24 @@ function Headline({
               }),
         ]}
       />
-      <KpiCard
+      <QuestionCard
         testID="kpi-settled"
-        tone="settled"
-        icon={<CheckIcon size={16} color={colors.ink} />}
-        title={text.settledTitle}
-        kicker={text.settledKicker}
-        value={mwh(settled, f)}
+        icon={<CheckIcon size={14} color={colors.ink} />}
+        question={text.settledTitle}
+        answer={mwh(settled, f)}
         unit="MWh"
+        detail={text.settledKicker}
       />
-      <KpiCard
+      <QuestionCard
         testID="kpi-deviation"
-        tone="neutral"
-        icon={<ArrowUpDownIcon size={16} color={colors.inkMuted} />}
-        title={text.deviationTitle}
-        kicker={text.deviationKicker}
-        value={signedMwh(error, f)}
+        icon={<ArrowUpDownIcon size={14} color={colors.inkMuted} />}
+        question={text.deviationTitle}
+        answer={signedMwh(error, f)}
         unit="MWh"
-        lines={[copy.app.timeMachine.compare.placement[placement]]}
-        hint={[
+        detail={text.deviationKicker}
+        footnote={copy.app.timeMachine.compare.placement[placement]}
+        noteId="time-machine-placement-note"
+        note={[
           fill(copy.app.replay.accuracyPlacement[placement], {
             p10: mwh(band.p10, f),
             p90: mwh(band.p90, f),
@@ -677,24 +687,25 @@ function Headline({
           copy.app.replay.accuracyNote,
         ]}
       />
-      <KpiCard
+      <QuestionCard
         testID="kpi-coverage"
-        tone="record"
-        icon={<PieChartIcon size={16} color={colors.info} />}
-        title={text.coverageTitle}
-        kicker={text.coverageKicker}
-        value={coverage.status === "read" ? f.percent(coverage.coverage.dayTotal) : null}
+        icon={<PieChartIcon size={14} color={colors.info} />}
+        question={text.coverageTitle}
+        answer={coverage.status === "read" ? f.percent(coverage.coverage.dayTotal) : null}
         absent={
           coverage.status === "reading"
             ? copy.app.timeMachine.refreshing
             : text.coverageAbsent
         }
-        lines={
+        detail={text.coverageKicker}
+        accent={colors.info}
+        footnote={
           coverage.status === "read"
-            ? [fill(text.coverageValue, { days: f.number(coverage.coverage.days) })]
-            : []
+            ? fill(text.coverageValue, { days: f.number(coverage.coverage.days) })
+            : undefined
         }
-        hint={
+        noteId="time-machine-coverage-note"
+        note={
           coverage.status === "read"
             ? [
                 fill(text.coverageTarget, {
@@ -707,15 +718,15 @@ function Headline({
             : []
         }
       />
-      <KpiCard
+      <QuestionCard
         testID="kpi-fleet"
-        tone="fleet"
-        icon={<ZapIcon size={16} color={colors.accentStrong} />}
-        title={text.recoveredTitle}
-        kicker={text.recoveredKicker}
-        value={mwh(replay.avoidedEnergyMwh, f)}
+        icon={<ZapIcon size={14} color={colors.accentStrong} />}
+        question={text.recoveredTitle}
+        answer={mwh(replay.avoidedEnergyMwh, f)}
         unit="MWh"
-        lines={[
+        detail={text.recoveredKicker}
+        accent={colors.accentStrong}
+        footnote={[
           fill(text.recoveredFloor, {
             floor: mwh(replay.recoveredFloorMwh, f),
             met: replay.floorMet ? copy.app.replay.floorMet : copy.app.replay.floorMissed,
@@ -726,7 +737,8 @@ function Headline({
                 `${copy.app.replay.headlineAvoided}: ${f.percent(replay.avoidability, 1)}`,
               ]),
         ]}
-        hint={[
+        noteId="time-machine-fleet-note"
+        note={[
           copy.app.replay.floorNote,
           replay.avoidability === null
             ? fill(copy.app.replay.avoidabilityUndefined, {
