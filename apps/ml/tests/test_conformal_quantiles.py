@@ -76,6 +76,7 @@ from wattsteer_ml.training import (
     DeltaDrift,
     PartialBundleError,
     ScoredHour,
+    SubsystemCorrections,
     TrainedFold,
     conformal_rank,
     conformalise,
@@ -163,7 +164,7 @@ def _draw(
         true_hi = THRESHOLD_MW + math.exp(mu + z_hi * sigma)
         quantiles = MagnitudeQuantiles.from_boosters(
             q02=true_lo * lower_scale * 0.9,
-            q10=true_lo * lower_scale,
+                        q10=true_lo * lower_scale,
             q50=true_50,
             q90=true_hi * upper_scale,
         )
@@ -373,7 +374,9 @@ def test_conformal_narrows_a_band_that_was_too_wide() -> None:
 #: enough apart that the interpolant has room to attenuate a shift, and far
 #: enough above ``τ`` that the mixture's floor into ``F_pos``'s support never
 #: bites and so never flatters the measurement.
-_KNOTS = MagnitudeQuantiles.from_boosters(q02=60.0 * 0.9, q10=60.0, q50=90.0, q90=140.0)
+_KNOTS = MagnitudeQuantiles.from_boosters(
+    q02=60.0 * 0.9, q10=60.0, q50=90.0, q90=140.0
+)
 
 #: ``Q_pos(0.90) − Q_pos(0.10)`` for :data:`_KNOTS` — the scale ``δ_lo`` is a
 #: multiple of since forecaster 43. Named because every MWh figure in this file
@@ -829,11 +832,23 @@ def test_in_sample_lower_coverage_is_at_least_the_order_statistics_share(
     states a floor.
 
     **Which is what this fixture measures**, and forecaster 35 is why the
-    assertion now says so in two branches rather than one: this fold's
-    classifier never reaches ``p > 0.90`` on a curtailed hour, so ``δ_lo`` is
-    declined and the marginal is arithmetic all the way down. Before 35 the
-    same inequality was written against the *window's* rank, which held here
-    for a reason that had nothing to do with the fit.
+    assertion now says so in two branches rather than one: this fold's pooled
+    classifier reaches ``p > 0.90`` on essentially none of its curtailed hours,
+    so ``δ_lo`` is declined here too (the per-subsystem split moved one hour
+    into "states a floor", still far short of the nine
+    :func:`~wattsteer_ml.training.conformal.minimum_calibration_rows` needs).
+    Before 35 the same inequality was written against the *window's* rank,
+    which held here for a reason that had nothing to do with the fit.
+
+    **The declined branch asserts no lower-coverage guarantee**, and
+    deliberately does not assert ``coverage_p10 == 1.0`` either: a stated row
+    with no fitted ``δ_lo`` is served the boosters' own uncorrected quantile,
+    and nothing here promises that quantile covers its label. Only the
+    identity ``lower_stated_rows == lower_calibration_rows`` — asserted for
+    every fold, fitted or not, in
+    ``test_the_ranking_population_and_the_scored_population_are_one_predicate``
+    — is a property of the two definitions agreeing rather than of this
+    fixture's arithmetic.
 
     It is *not* evidence about the test fold either way: the boosters were
     early-stopped here and the isotonic map was fitted here, so this window is
@@ -861,8 +876,7 @@ def test_in_sample_lower_coverage_is_at_least_the_order_statistics_share(
             correction.lower_rank / correction.lower_calibration_rows
         )
     else:
-        assert report.lower_stated_rows == 0
-        assert report.coverage_p10 == 1.0
+        assert report.lower_stated_rows == correction.lower_calibration_rows
 
 
 def test_the_card_publishes_both_deltas_and_coverage_three_ways(
@@ -944,7 +958,16 @@ def test_a_served_band_is_never_the_uncorrected_one(
         window_start=correction.window_start,
         window_end=correction.window_end,
     )
-    blank = replace(trained.bundle, conformal=uncorrected)
+    # Serving reads `subsystem_conformal`, not `conformal` — see
+    # `_compose_with` — so both have to be blanked for the comparison to be
+    # about the correction's presence rather than about which field composition
+    # happens to consult.
+    blank_subsystem = SubsystemCorrections(
+        pooled=uncorrected, per_subsystem={}, declined=tuple(SUBSYSTEM_CODES)
+    )
+    blank = replace(
+        trained.bundle, conformal=uncorrected, subsystem_conformal=blank_subsystem
+    )
     served = forecast_rows(trained.bundle, test_rows)
     plain = forecast_rows(blank, test_rows)
     assert any(
@@ -1322,7 +1345,7 @@ def _mixed(
             )
         quantiles = MagnitudeQuantiles.from_boosters(
             q02=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * lower_scale * 0.9,
-            q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * lower_scale,
+                        q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * lower_scale,
             q50=THRESHOLD_MW + math.exp(mu),
             q90=THRESHOLD_MW + math.exp(mu + z_hi * sigma),
         )
@@ -1762,21 +1785,23 @@ def test_the_card_publishes_the_population_delta_lo_was_ranked_over(
 
 
 def test_the_fixture_folds_own_lower_tail_is_declined(trained: TrainedFold) -> None:
-    """Measured on the shared fit: this fixture states no floor anywhere.
+    """Measured on the shared fit: this fixture states almost no floor.
 
-    Not a fixture defect to be tuned away. The fixture's classifier never
-    reaches ``p > 0.90`` on a curtailed hour, so its served P10 is zero on every
-    one of them, and ``coverage_p10`` on it has always been arithmetic —
-    ``test_the_card_refuses_to_call_a_short_band_a_ninety_percent_band`` already
-    said so from the other end. What changed is that ``δ_lo`` no longer comes
-    back as a number ranked over those rows.
+    Not a fixture defect to be tuned away. The fixture's *pooled* classifier
+    reaches ``p > 0.90`` on essentially none of its curtailed hours, so
+    ``δ_lo`` is declined — the per-subsystem occurrence split moves one hour
+    (one subsystem's own curve crosses the threshold where the pooled one did
+    not, the effect this ticket exists to produce) but the module's own floor
+    is nine, and one row is nowhere near it, so ``δ_lo`` still comes back
+    declined rather than as a number ranked over one residual.
 
     The figure is a property of these invented rows and means nothing about the
     Brazilian grid; what it demonstrates is the declined path running end to end
-    through a real fit, a real bundle and a real card.
+    through a real fit, a real bundle and a real card, with the per-subsystem
+    calibration wired all the way in.
     """
     correction = trained.bundle.conformal
-    assert correction.lower_calibration_rows == 0
+    assert correction.lower_calibration_rows < conformal_module.minimum_calibration_rows()
     assert correction.lower_tail_fitted is False
     assert correction.delta_lo == 0.0
     quantiles = json.loads(trained.card.to_json())["quantiles"]
@@ -1832,7 +1857,7 @@ def _heteroscedastic_block(
         observed = THRESHOLD_MW + math.exp(rng.gauss(mu, sigma))
         quantiles = MagnitudeQuantiles.from_boosters(
             q02=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * 0.35 * 0.9,
-            q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * 0.35,
+                        q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * 0.35,
             q50=THRESHOLD_MW + math.exp(mu),
             q90=THRESHOLD_MW + math.exp(mu + z_hi * sigma),
         )

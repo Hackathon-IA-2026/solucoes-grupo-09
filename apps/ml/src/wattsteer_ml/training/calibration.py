@@ -66,18 +66,34 @@ under its own name, so the choice is auditable rather than implied.
 materialise a calendar, and does not choose which predictions are in the pool.
 It is handed :class:`OutOfFoldPrediction` values that already carry the fold
 they were predicted out of, and it refuses rather than repairs.
+
+**The occurrence map is fitted per subsystem too, where the rows allow —
+2026-09-23.** The live P10 diagnostic measured the pooled isotonic curve
+under-stating ``p`` for N and S specifically: NE holds 68%+ of the fitting
+population, and on the worst fold the pooled curve read 0.90 where N and S's
+own curves read at or above 0.9998 at the same raw score, which is exactly the
+gap that decides whether an hour clears conformal's ``states_lower_bound``
+eligibility test in :mod:`wattsteer_ml.training.conformal`.
+:func:`calibrate_by_subsystem` and :class:`SubsystemCalibration` mirror the
+shape :class:`~wattsteer_ml.training.conformal.SubsystemCorrections` already
+proved for ``δ_lo``, one stage earlier: the fit itself
+(:meth:`IsotonicCalibrator.fit`) still takes only ``(raw, observed)`` and
+never a key, so the split lives entirely in the function that calls it per
+subsystem, and ``reliability``/``risk_bins`` are untouched — see
+:class:`SubsystemCalibration`'s own docstring for why those two stay pooled.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from itertools import pairwise
 from typing import Any, Literal
 
 from wattsteer_ml.canonical import VintageFidelity
+from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation import FoldSegment, RowKey, pooled_fidelity
 
 #: Equal-width reliability bins over ``[0, 1]``, before any merge.
@@ -296,6 +312,108 @@ class IsotonicCalibrator:
             "clip_hi": self.clip_hi,
             "clip_basis": "calibration_labelled_rows",
             "calibration_labelled_rows": self.fitted_rows,
+        }
+
+    def calibrate_for(self, subsystem: Subsystem) -> IsotonicCalibrator:
+        """:meth:`__call__`'s target, under the interface :class:`SubsystemCalibration`
+        shares.
+
+        Ignores ``subsystem`` — this map is marginal — so
+        :func:`~wattsteer_ml.training.hurdle.compose_estimates`'s composition
+        can write ``isotonic.calibrate_for(key.subsystem)`` without knowing
+        whether it was handed a plain :class:`IsotonicCalibrator` or a
+        :class:`SubsystemCalibration`, the same shape
+        :meth:`~wattsteer_ml.training.conformal.ConformalCorrection.shift_for`
+        already gives the conformal correction.
+        """
+        return self
+
+
+#: Below this many labelled calibration-window rows for one subsystem, its own
+#: isotonic fit is declined and :meth:`SubsystemCalibration.calibrate_for`
+#: falls back to the pooled map. The isotonic fit's population is **every
+#: scored hour in the window for that subsystem**, curtailed or not — the fit
+#: needs resolution across the whole raw-score range, not only near the top —
+#: so this floor is the same order of magnitude the two lowest quantile
+#: boosters' ``role_overrides`` treat as "enough to say something" at
+#: ``min_data_in_leaf``: 300, against v1's shared 100
+#: (`training/hyperparameters.py`, ``MODEL_CONFIG_V2``). Below it, a subsystem
+#: that happens to run thin in one 90-day window (N and S both do, in the fold
+#: sweep behind this ticket) gets a curve with too few distinct raw scores to
+#: resolve reliably, and the pooled map — fitted on four subsystems' rows at
+#: once — is still the better estimate of what its own curve would say.
+MINIMUM_SUBSYSTEM_CALIBRATION_ROWS = 300
+
+#: Below this many **curtailed** (``y > τ``) rows among those, the fit is
+#: declined even if the total floor above is cleared: a monotone step function
+#: needs positive examples across its range to move away from the pooled
+#: curve's shape at all, and a subsystem that only ever states rare, isolated
+#: events would fit an isotonic map to a handful of step edges wearing 300
+#: rows of resolution it does not have where it matters.
+#:
+#: Set at more than three times :func:`~wattsteer_ml.training.conformal.\
+#: minimum_calibration_rows`'s floor of 9 at the nominal miscoverage —
+#: "comfortably above" it, per the measurement this floor answers to: a curve
+#: fitted on positives as thin as the conformal module's own order statistic
+#: is exactly as fragile as the thing that floor exists to protect, one stage
+#: earlier in the pipeline. The live P10 diagnostic (`p10_calibration_run.py`,
+#: 2026-09-23) measured N and S each carrying several hundred curtailed rows
+#: in a 90-day calibration window on the folds this ticket exists for — 500
+#: and 250 respectively on the worst fold sampled — so this floor is not
+#: expected to bind for them on a typical window; it exists for the window
+#: that genuinely is that thin, so a per-subsystem curve fitted on evidence
+#: this sparse is refused rather than served with unwarranted confidence.
+MINIMUM_SUBSYSTEM_CALIBRATION_POSITIVE_ROWS = 30
+
+
+@dataclass(frozen=True)
+class SubsystemIsotonic:
+    """One subsystem's own isotonic map on the calibration window, or a decline.
+
+    Mirrors :class:`~wattsteer_ml.training.conformal.SubsystemDeltaLo`'s shape
+    one stage earlier in the pipeline: :func:`calibrate_by_subsystem` builds
+    one of these per subsystem, and :attr:`SubsystemCalibration.per_subsystem`
+    keeps only the ones that cleared both floors — a subsystem below either is
+    named in :attr:`SubsystemCalibration.declined` instead of stored here with
+    a null map, exactly as :func:`~wattsteer_ml.training.conformal.\
+conformalise_by_subsystem` does for :class:`~wattsteer_ml.training.conformal.\
+SubsystemDeltaLo`.
+    """
+
+    subsystem: Subsystem
+    #: Labelled calibration-window rows for this subsystem alone.
+    rows: int
+    #: Of those, the ones above τ — what
+    #: :data:`MINIMUM_SUBSYSTEM_CALIBRATION_POSITIVE_ROWS` is checked against.
+    positive_rows: int
+    isotonic: IsotonicCalibrator | None
+    fitted: bool
+
+    def __post_init__(self) -> None:
+        if self.rows < 0 or self.positive_rows < 0:
+            raise CalibrationError(f"{self.subsystem}: a row count cannot be negative")
+        if self.positive_rows > self.rows:
+            raise CalibrationError(
+                f"{self.subsystem}: {self.positive_rows} positive rows out of "
+                f"{self.rows} total; the positive count is a subset of the whole"
+            )
+        if self.fitted and self.isotonic is None:
+            raise CalibrationError(
+                f"{self.subsystem}: fitted=True with no isotonic map behind it"
+            )
+        if not self.fitted and self.isotonic is not None:
+            raise CalibrationError(
+                f"{self.subsystem}: declined below the floor but carries a "
+                "fitted isotonic map anyway; a curve fitted over rows the "
+                "floor rejected is not a correction"
+            )
+
+    def card_fields(self) -> dict[str, Any]:
+        return {
+            "rows": self.rows,
+            "positive_rows": self.positive_rows,
+            "fitted": self.fitted,
+            **(self.isotonic.card_fields() if self.isotonic is not None else {}),
         }
 
 
@@ -748,6 +866,71 @@ class Calibration:
         }
 
 
+@dataclass(frozen=True)
+class SubsystemCalibration:
+    """The pooled :class:`Calibration`, plus a per-subsystem isotonic map where
+    the rows allow.
+
+    **Why ``reliability`` and ``risk_bins`` stay pooled.** Both are properties
+    of the *served* probability measured against the whole fleet's out-of-fold
+    predictions, and nothing measured indicts them the way the occurrence
+    map's own fitting population was measured to be dominated by NE — see the
+    module docstring's Step 0. Splitting them would halve an already-thin
+    out-of-fold pool for no measured gain, the same scoping decision that kept
+    ``δ_hi`` marginal in
+    :class:`~wattsteer_ml.training.conformal.SubsystemCorrections`.
+
+    **Why some subsystems fall back.** A 90-day calibration window's rows per
+    subsystem are bursty rather than scarce — some windows catch an episode of
+    N/S curtailment, most do not — and :data:`MINIMUM_SUBSYSTEM_CALIBRATION_\
+ROWS` and :data:`MINIMUM_SUBSYSTEM_CALIBRATION_POSITIVE_ROWS` are the floors a
+    window has to clear before its own curve is trusted over the pooled one.
+    Declining and falling back is the same discipline
+    :class:`~wattsteer_ml.training.conformal.SubsystemCorrections` already
+    applies one stage later; inventing a curve for a handful of rows would not
+    be a calibration.
+    """
+
+    pooled: Calibration
+    #: Only the subsystems whose rows cleared both floors. A subsystem absent
+    #: here fell back to :attr:`pooled`'s isotonic map — see :attr:`declined`.
+    per_subsystem: Mapping[Subsystem, SubsystemIsotonic]
+    #: The subsystems :attr:`per_subsystem` does not carry, named rather than
+    #: left for a reader to infer from a missing key.
+    declined: tuple[Subsystem, ...]
+
+    def __post_init__(self) -> None:
+        covered = set(self.per_subsystem) | set(self.declined)
+        if covered != set(SUBSYSTEM_CODES):
+            raise CalibrationError(
+                f"{covered} does not account for every subsystem in "
+                f"{SUBSYSTEM_CODES}; a subsystem with no verdict at all would "
+                "silently fall back to the pooled isotonic map with nothing on "
+                "the card saying so"
+            )
+        if set(self.per_subsystem) & set(self.declined):
+            raise CalibrationError("a subsystem cannot be both fitted and declined")
+
+    def calibrate_for(self, subsystem: Subsystem) -> IsotonicCalibrator:
+        """This subsystem's own map, or the pooled one if it declined."""
+        fit = self.per_subsystem.get(subsystem)
+        return (
+            fit.isotonic
+            if fit is not None and fit.isotonic is not None
+            else (self.pooled.isotonic)
+        )
+
+    def card_fields(self) -> dict[str, Any]:
+        return {
+            **self.pooled.card_fields(),
+            "subsystem_isotonic": {
+                subsystem: fit.card_fields()
+                for subsystem, fit in self.per_subsystem.items()
+            },
+            "subsystem_isotonic_declined": list(self.declined),
+        }
+
+
 def outside_calibration_window(
     pool: OutOfFoldPool, calibration_window: tuple[date, date] | None
 ) -> tuple[tuple[OutOfFoldPrediction, ...], int]:
@@ -802,6 +985,72 @@ def calibrate(
         isotonic=IsotonicCalibrator.fit(raw, observed),
         reliability=curve,
         risk_bins=derive_risk_bins(kept, incumbent=incumbent_risk_bins),
+    )
+
+
+def calibrate_by_subsystem(
+    raw: Sequence[float],
+    observed: Sequence[bool],
+    keys: Sequence[RowKey],
+    *,
+    pool: OutOfFoldPool,
+    calibration_window: tuple[date, date],
+    incumbent_risk_bins: RiskBins | None = None,
+    minimum_rows: int = MINIMUM_SUBSYSTEM_CALIBRATION_ROWS,
+    minimum_positive_rows: int = MINIMUM_SUBSYSTEM_CALIBRATION_POSITIVE_ROWS,
+) -> SubsystemCalibration:
+    """The pooled :func:`calibrate`, plus a per-subsystem isotonic map where
+    the rows allow.
+
+    Fits the pooled :class:`Calibration` exactly as :func:`calibrate` does —
+    ``reliability`` and ``risk_bins`` are untouched by this function — and then
+    refits :meth:`IsotonicCalibrator.fit` once per subsystem, on that
+    subsystem's own slice of ``raw``/``observed``, declining below
+    ``minimum_rows`` total or ``minimum_positive_rows`` curtailed. Each
+    subsystem's own fit sees only its own rows and nothing conditions
+    :meth:`IsotonicCalibrator.fit` itself, which never takes a key — see the
+    module docstring and ``tests.test_isotonic_calibration``'s structural
+    guard. The split happens here, one level up, exactly as
+    :func:`~wattsteer_ml.training.conformal.conformalise_by_subsystem` splits
+    ``δ_lo`` one level above :meth:`~wattsteer_ml.training.conformal.\
+ConformalCorrection.fit`.
+    """
+    if len(raw) != len(observed) or len(raw) != len(keys):
+        raise CalibrationError(
+            f"{len(raw)} raw scores, {len(observed)} labels and {len(keys)} "
+            "keys are not one set of rows"
+        )
+    pooled = calibrate(
+        raw=raw,
+        observed=observed,
+        pool=pool,
+        calibration_window=calibration_window,
+        incumbent_risk_bins=incumbent_risk_bins,
+    )
+    per_subsystem: dict[Subsystem, SubsystemIsotonic] = {}
+    declined: list[Subsystem] = []
+    for subsystem in SUBSYSTEM_CODES:
+        indices = [index for index, key in enumerate(keys) if key.subsystem == subsystem]
+        subset_raw = [raw[index] for index in indices]
+        subset_observed = [observed[index] for index in indices]
+        rows = len(subset_raw)
+        positive_rows = sum(1 for value in subset_observed if value)
+        fitted = rows >= minimum_rows and positive_rows >= minimum_positive_rows
+        fit = SubsystemIsotonic(
+            subsystem=subsystem,
+            rows=rows,
+            positive_rows=positive_rows,
+            isotonic=(
+                IsotonicCalibrator.fit(subset_raw, subset_observed) if fitted else None
+            ),
+            fitted=fitted,
+        )
+        if fitted:
+            per_subsystem[subsystem] = fit
+        else:
+            declined.append(subsystem)
+    return SubsystemCalibration(
+        pooled=pooled, per_subsystem=per_subsystem, declined=tuple(declined)
     )
 
 

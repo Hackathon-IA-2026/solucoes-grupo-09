@@ -77,6 +77,19 @@ carrying the four facts
 :meth:`~wattsteer_ml.training.background.MatchedBackground.card_fields`
 publishes and the sample's **measured** size, which is the largest single thing
 in the artifact.
+
+**The subsystem-split calibration is one required field, added the same way
+``subsystem_conformal`` was — 2026-09-23.** The bundle carries a
+:class:`~wattsteer_ml.training.calibration.SubsystemCalibration`: the pooled
+occurrence map (unchanged) plus a per-subsystem isotonic fit where the rows
+allow. The live P10 diagnostic measured the pooled map under-stating ``p`` for
+N and S specifically — NE holds 68%+ of the fitting population — which is
+exactly what decides whether an hour clears conformal's own
+``states_lower_bound`` eligibility test. Required for the same reason
+``subsystem_conformal`` is: composing a band from a probability the pooled map
+distorted, with no record that a finer map was ever fitted, is the failure
+this field exists to prevent. A bundle written before this field existed does
+not load.
 """
 
 from __future__ import annotations
@@ -116,8 +129,16 @@ from wattsteer_ml.driver_groups import CARD_DRIVERS_GROUP
 from wattsteer_ml.evaluation import Fold, FoldBlocks
 from wattsteer_ml.lanes import Lane, format_instant, is_artifact_id
 from wattsteer_ml.training.background import MatchedBackground
-from wattsteer_ml.training.calibration import Calibration, IsotonicCalibrator
-from wattsteer_ml.training.conformal import ConformalCorrection, CoverageReport
+from wattsteer_ml.training.calibration import (
+    Calibration,
+    IsotonicCalibrator,
+    SubsystemCalibration,
+)
+from wattsteer_ml.training.conformal import (
+    ConformalCorrection,
+    CoverageReport,
+    SubsystemCorrections,
+)
 from wattsteer_ml.training.contract import FeatureContract
 from wattsteer_ml.training.ensemble import DayGrainCoverage, PitMatrix
 from wattsteer_ml.training.headline_check import HeadlineFeatureCheck
@@ -276,9 +297,9 @@ class SubThresholdMeans:
 
 @dataclass(frozen=True)
 class HurdleBundle:
-    """The six estimators, ``μ_sub``, and everything needed to encode a row.
+    """The seven estimators, ``μ_sub``, and everything needed to encode a row.
 
-    Six and not two: the occurrence classifier, three pinball boosters, the
+    Seven and not two: the occurrence classifier, four pinball boosters, the
     conditional-mean booster and the share regressor. The last two exist for
     reasons the spec states rather than for symmetry — reusing ``q̂_pos^0.50`` as
     the expectation understates it systematically on a right-skewed magnitude,
@@ -299,6 +320,9 @@ class HurdleBundle:
     #: ``q̂_pos^0.02``. The knot that makes the composed P10 an interpolated
     #: quantile rather than the flat below the first one — see `FITTED_ALPHAS`.
     magnitude_p02: Booster
+    #: ``q̂_pos^0.05``. Added beside ``q̂_pos^0.02`` rather than in place of it —
+    #: resolves the 0.02–0.10 span with two segments instead of one, without
+    #: shrinking the region over which the served P10 interpolates.
     magnitude_p10: Booster
     magnitude_p50: Booster
     magnitude_p90: Booster
@@ -311,12 +335,37 @@ class HurdleBundle:
     #: :attr:`Calibration.isotonic` and through no other route, so a bundle
     #: without one has no probability to compose with.
     calibration: Calibration
+    #: The same fit, split by subsystem where the rows allow — see
+    #: :class:`~wattsteer_ml.training.calibration.SubsystemCalibration`.
+    #: Required for the same reason ``calibration`` is: the pooled map is the
+    #: **marginal, legacy-compatible copy**, kept as its own field for the same
+    #: precedent :attr:`conformal` sets beside :attr:`subsystem_conformal`
+    #: below — every card and diagnostic written before this field existed
+    #: reads ``bundle.calibration`` by name. Serving reaches ``p`` through
+    #: :attr:`subsystem_calibration`, not directly, so a caller cannot
+    #: accidentally apply the pooled map to a subsystem that has its own.
+    subsystem_calibration: SubsystemCalibration
     #: ``δ_lo`` and ``δ_hi``, fitted on the same calibration window against the
     #: *composed* band. Required: they are what turns the P10 from the name of a
     #: booster's output into a measured floor, and
     #: :func:`~wattsteer_ml.training.hurdle.forecast_rows` applies them to
     #: ``Q_pos`` before the one composition — never after it.
+    #:
+    #: **This is the pooled correction, marginal over subsystem.** Serving
+    #: reaches it through :attr:`subsystem_conformal`, not directly, so
+    #: `compose_estimates` cannot accidentally apply the marginal ``δ_lo`` to a
+    #: subsystem that has its own. Kept as its own required field anyway,
+    #: rather than folded into ``subsystem_conformal.pooled`` and read from
+    #: there, because every card and every diagnostic written before this
+    #: field existed reads ``bundle.conformal`` by name.
     conformal: ConformalCorrection
+    #: The same fit, split by subsystem where the rows allow — see
+    #: :class:`~wattsteer_ml.training.conformal.SubsystemCorrections`. Required
+    #: for the same reason ``conformal`` is: composing the served band from a
+    #: booster's raw output with no coverage statement behind it is the one
+    #: failure this whole family of fields exists to prevent, and an optional
+    #: field is a field a serving path can forget to check.
+    subsystem_conformal: SubsystemCorrections
     #: ``U`` — the randomised PIT of the composed, corrected band over the same
     #: calibration window, one row per complete day. Required: every figure
     #: above hour grain is a quantile of 500 whole-row draws of it, and the one
@@ -370,7 +419,7 @@ class HurdleBundle:
         return self.contract.feature_hash
 
     def estimators(self) -> dict[str, Booster]:
-        """The six, by name — the inventory the card and the loader both use."""
+        """The seven, by name — the inventory the card and the loader both use."""
         return {name: getattr(self, name) for name in ESTIMATOR_FIELDS}
 
 
@@ -432,7 +481,18 @@ class ModelCard:
     counts: TrainingCounts
     sub_threshold_means: SubThresholdMeans
     calibration: Calibration
+    #: The same fit, split by subsystem — see
+    #: :attr:`HurdleBundle.subsystem_calibration`. ``to_dict``'s
+    #: ``calibration`` group is built from this, not from ``calibration``
+    #: directly, so the card always shows whichever subsystems actually got
+    #: their own isotonic map.
+    subsystem_calibration: SubsystemCalibration
     conformal: ConformalCorrection
+    #: The same fit, split by subsystem — see
+    #: :attr:`HurdleBundle.subsystem_conformal`. ``to_dict``'s ``quantiles``
+    #: group is built from this, not from ``conformal`` directly, so the card
+    #: always shows whichever subsystems actually got their own correction.
+    subsystem_conformal: SubsystemCorrections
     #: ``U`` and what it measures about itself — the per-column KS distance, the
     #: days it kept and the days it dropped for holding an unsettled hour.
     pit: PitMatrix
@@ -518,9 +578,9 @@ class ModelCard:
                 **self.counts.as_card_fields(),
             },
             "model_config": self.config.card_fields(),
-            "calibration": dict(self.calibration.card_fields()),
+            "calibration": dict(self.subsystem_calibration.card_fields()),
             "quantiles": {
-                **self.conformal.card_fields(),
+                **self.subsystem_conformal.card_fields(),
                 **(
                     self.coverage.card_fields()
                     if self.coverage is not None
@@ -744,7 +804,7 @@ def _validated(loaded: object) -> HurdleBundle:
     ]
     if missing:
         raise PartialBundleError(
-            f"the bundle is missing {', '.join(sorted(missing))}; five estimators "
+            f"the bundle is missing {', '.join(sorted(missing))}; eight estimators "
             "compose a different model, not a degraded one"
         )
     for name, estimator in loaded.estimators().items():
@@ -753,7 +813,9 @@ def _validated(loaded: object) -> HurdleBundle:
                 f"{name} is a {type(estimator).__name__}, not a LightGBM Booster"
             )
     _validated_calibration(loaded.calibration)
+    _validated_subsystem_calibration(loaded.subsystem_calibration)
     _validated_conformal(loaded.conformal)
+    _validated_subsystem_conformal(loaded.subsystem_conformal)
     _validated_pit(loaded.pit)
     _validated_background(loaded.background)
     return loaded
@@ -823,6 +885,26 @@ def _validated_conformal(conformal: object) -> None:
     conformal.__post_init__()
 
 
+def _validated_subsystem_conformal(subsystem_conformal: object) -> None:
+    """The per-subsystem split, after the same ``__init__``-less load.
+
+    Same failure as :func:`_validated_conformal`, one level down: a bundle
+    whose ``subsystem_conformal`` came back as something else would serve
+    :attr:`HurdleBundle.conformal`'s marginal ``δ_lo`` to every subsystem with
+    no record that a finer correction was ever fitted — silently narrower than
+    what the artifact actually claims for the subsystems that cleared the
+    floor.
+    """
+    if not isinstance(subsystem_conformal, SubsystemCorrections):
+        raise PartialBundleError(
+            f"the bundle's subsystem conformal correction is a "
+            f"{type(subsystem_conformal).__name__}, not a SubsystemCorrections"
+        )
+    subsystem_conformal.__post_init__()
+    for fit in subsystem_conformal.per_subsystem.values():
+        fit.__post_init__()
+
+
 def _validated_calibration(calibration: object) -> None:
     """The calibration, part by part, after the same ``__init__``-less load.
 
@@ -849,6 +931,31 @@ def _validated_calibration(calibration: object) -> None:
             f"the calibrator is a {type(calibration.isotonic).__name__}, not an "
             "IsotonicCalibrator"
         )
+
+
+def _validated_subsystem_calibration(subsystem_calibration: object) -> None:
+    """The per-subsystem split, after the same ``__init__``-less load.
+
+    Same failure as :func:`_validated_calibration`, one level down: a bundle
+    whose ``subsystem_calibration`` came back as something else would serve
+    :attr:`HurdleBundle.calibration`'s pooled map to every subsystem with no
+    record that a finer calibration was ever fitted — silently the pooled
+    curve for the subsystems that cleared the floor, which is the exact
+    distortion this field exists to undo for N and S.
+    """
+    if not isinstance(subsystem_calibration, SubsystemCalibration):
+        raise PartialBundleError(
+            f"the bundle's subsystem calibration is a "
+            f"{type(subsystem_calibration).__name__}, not a SubsystemCalibration"
+        )
+    subsystem_calibration.__post_init__()
+    for fit in subsystem_calibration.per_subsystem.values():
+        fit.__post_init__()
+        if fit.isotonic is not None and not isinstance(fit.isotonic, IsotonicCalibrator):
+            raise PartialBundleError(
+                f"{fit.subsystem}'s isotonic map is a "
+                f"{type(fit.isotonic).__name__}, not an IsotonicCalibrator"
+            )
 
 
 def _window(start: Any, end: Any) -> dict[str, str]:

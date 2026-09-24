@@ -39,10 +39,14 @@ window untouched entirely.
 
 **``p`` is the calibrated probability, and there is one route to it.** The
 occurrence booster's raw output reaches :func:`wattsteer_ml.mixture.compose`
-through :attr:`Calibration.isotonic <wattsteer_ml.training.calibration.\
-Calibration.isotonic>` and through nothing else, so calibration changes the
-breakpoint at ``1 − p`` and changes nothing else about the band. There is still
-exactly one composition in this service and this file still holds none of it.
+through :meth:`SubsystemCalibration.calibrate_for <wattsteer_ml.training.\
+calibration.SubsystemCalibration.calibrate_for>` and through nothing else, so
+calibration changes the breakpoint at ``1 − p`` and changes nothing else about
+the band. That method reads a row's own subsystem to pick between that
+subsystem's own isotonic map and the pooled one — see
+:mod:`wattsteer_ml.training.calibration`'s module docstring — but the choice is
+still made once, before composition, and there is still exactly one
+composition in this service and this file still holds none of it.
 
 **The conformal correction is applied to ``Q_pos``, before the composition and
 never after it.** Forecaster ticket 06 fits ``δ_lo`` and ``δ_hi`` on the
@@ -150,18 +154,19 @@ from wattsteer_ml.training.bundle import (
     new_artifact_id,
 )
 from wattsteer_ml.training.calibration import (
-    Calibration,
     IsotonicCalibrator,
     OutOfFoldPool,
     OutOfFoldPrediction,
     RiskBins,
-    calibrate,
+    SubsystemCalibration,
+    calibrate_by_subsystem,
 )
 from wattsteer_ml.training.conformal import (
     ConformalCorrection,
     CoverageReport,
     ScoredHour,
-    conformalise,
+    SubsystemCorrections,
+    conformalise_by_subsystem,
 )
 from wattsteer_ml.training.contract import FeatureContract
 from wattsteer_ml.training.design import FeatureBlock, RowStamp
@@ -181,7 +186,7 @@ from wattsteer_ml.training.headline_check import (
     HeadlineFeatureCheck,
     check_headline_features,
 )
-from wattsteer_ml.training.hyperparameters import MODEL_CONFIG_V1, ModelConfig
+from wattsteer_ml.training.hyperparameters import MODEL_CONFIG_V2, ModelConfig
 
 
 class TrainingError(ValueError):
@@ -214,7 +219,7 @@ def train_fold(
     function_definition: str,
     pool: OutOfFoldPool,
     incumbent_risk_bins: RiskBins | None = None,
-    config: ModelConfig = MODEL_CONFIG_V1,
+    config: ModelConfig = MODEL_CONFIG_V2,
     background_rows_per_cell: int = BACKGROUND_ROWS_PER_CELL,
     background_seed: int = BACKGROUND_SEED,
     group_map: DriverGroupMap = DRIVER_GROUP_MAP,
@@ -226,7 +231,7 @@ def train_fold(
     git_sha_ml: str | None = None,
     git_sha_api: str | None = None,
 ) -> TrainedFold:
-    """Fit the six estimators and ``μ_sub`` on ``blocks``' base-fit block.
+    """Fit the eight estimators and ``μ_sub`` on ``blocks``' base-fit block.
 
     Args:
         rows: everything ``feature_rows(...)`` returned for this fold — base
@@ -312,9 +317,11 @@ def train_fold(
         incumbent_risk_bins=incumbent_risk_bins,
     )
 
-    # `FITTED_ALPHAS` is (0.02, 0.10, 0.50, 0.90) — the 0.02 knot is why the
-    # composed P10 interpolates instead of resting on a flat. See the constant's
-    # own note in `mixture.py`.
+    # `FITTED_ALPHAS` is (0.02, 0.05, 0.10, 0.50, 0.90) — the 0.02 and 0.05
+    # knots are why the composed P10 interpolates instead of resting on a flat,
+    # and why that interpolation is two segments rather than one. See the
+    # constant's own note in `mixture.py`. Indexed by position, not by literal,
+    # so this stays correct if a knot is ever added or removed here again.
     magnitude_p02 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[0])
     magnitude_p10 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[1])
     magnitude_p50 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[2])
@@ -341,7 +348,7 @@ def train_fold(
         blocks=blocks,
         fold=fold,
         occurrence=occurrence,
-        isotonic=fitted_calibration.isotonic,
+        isotonic=fitted_calibration,
         magnitude_p02=magnitude_p02,
         magnitude_p10=magnitude_p10,
         magnitude_p50=magnitude_p50,
@@ -356,7 +363,7 @@ def train_fold(
         blocks=blocks,
         fold=fold,
         occurrence=occurrence,
-        isotonic=fitted_calibration.isotonic,
+        isotonic=fitted_calibration,
         magnitude_p02=magnitude_p02,
         magnitude_p10=magnitude_p10,
         magnitude_p50=magnitude_p50,
@@ -406,8 +413,10 @@ def train_fold(
         magnitude_mean=magnitude_mean,
         wind_share=wind_share,
         sub_threshold_means=sub_threshold_means,
-        calibration=fitted_calibration,
-        conformal=correction,
+        calibration=fitted_calibration.pooled,
+        subsystem_calibration=fitted_calibration,
+        conformal=correction.pooled,
+        subsystem_conformal=correction,
         pit=pit,
         background=background,
     )
@@ -434,8 +443,10 @@ def train_fold(
         blocks=blocks,
         counts=counts,
         sub_threshold_means=bundle.sub_threshold_means,
-        calibration=fitted_calibration,
-        conformal=correction,
+        calibration=fitted_calibration.pooled,
+        subsystem_calibration=fitted_calibration,
+        conformal=correction.pooled,
+        subsystem_conformal=correction,
         pit=pit,
         background=background,
         headline_check=_fold_headline_check(
@@ -461,7 +472,7 @@ def out_of_fold_occurrence(
     fold: Fold,
     blocks: FoldBlocks,
     function_definition: str,
-    config: ModelConfig = MODEL_CONFIG_V1,
+    config: ModelConfig = MODEL_CONFIG_V2,
 ) -> tuple[OutOfFoldPrediction, ...]:
     """This fold's **calibrated** occurrence probabilities on its own test days.
 
@@ -681,7 +692,7 @@ def _compose_with(bundle: HurdleBundle, block: FeatureBlock) -> tuple[HourForeca
     return _compose_block(
         block,
         occurrence=bundle.occurrence,
-        isotonic=bundle.calibration.isotonic,
+        isotonic=bundle.subsystem_calibration,
         magnitude_p02=bundle.magnitude_p02,
         magnitude_p10=bundle.magnitude_p10,
         magnitude_p50=bundle.magnitude_p50,
@@ -690,7 +701,7 @@ def _compose_with(bundle: HurdleBundle, block: FeatureBlock) -> tuple[HourForeca
         wind_share=bundle.wind_share,
         sub_threshold_means=bundle.sub_threshold_means,
         threshold_mw=bundle.threshold_mw,
-        correction=bundle.conformal,
+        correction=bundle.subsystem_conformal,
     )
 
 
@@ -698,7 +709,7 @@ def _compose_block(
     block: FeatureBlock,
     *,
     occurrence: lgb.Booster,
-    isotonic: IsotonicCalibrator,
+    isotonic: IsotonicCalibrator | SubsystemCalibration,
     magnitude_p02: lgb.Booster,
     magnitude_p10: lgb.Booster,
     magnitude_p50: lgb.Booster,
@@ -707,7 +718,7 @@ def _compose_block(
     wind_share: lgb.Booster,
     sub_threshold_means: SubThresholdMeans,
     threshold_mw: float,
-    correction: ConformalCorrection | None,
+    correction: ConformalCorrection | SubsystemCorrections | None,
 ) -> tuple[HourForecast, ...]:
     """The one place a band is built, from loose estimators rather than a bundle.
 
@@ -725,7 +736,15 @@ def _compose_block(
     """
     matrix = block.matrix
     raw = np.clip(_predict(occurrence, matrix), 0.0, 1.0)
-    probability = [isotonic(float(value)) for value in raw]
+    # `isotonic.calibrate_for(key.subsystem)` rather than calling `isotonic`
+    # directly: both a plain `IsotonicCalibrator` and a `SubsystemCalibration`
+    # answer it — the first by ignoring the subsystem, the second by using it —
+    # so this loop does not need to know which one it was handed, the same
+    # shape `compose_estimates` already uses for `correction.shift_for`.
+    probability = [
+        isotonic.calibrate_for(key.subsystem)(float(value))
+        for key, value in zip(block.keys, raw, strict=True)
+    ]
     q02 = _predict(magnitude_p02, matrix)
     q10 = _predict(magnitude_p10, matrix)
     q50 = _predict(magnitude_p50, matrix)
@@ -786,12 +805,17 @@ class HourEstimates:
     #: ``q̂_pos^0.02``, where the estimator fitted one.
     #:
     #: ``None`` on every rung of the baseline ladder, which fits three knots and
-    #: not four. A rung that did not fit a 2nd percentile must not be given one:
+    #: not five. A rung that did not fit a 2nd percentile must not be given one:
     #: :func:`compose_estimates` repeats ``q10`` there, which reproduces exactly
     #: the flat-below-the-first-knot shape those rungs have always had. The
     #: served model fills it, and that is the only place the composed P10 stops
     #: sitting on a flat.
     q02: float | None = None
+    #: ``q̂_pos^0.05``, where the estimator fitted one. Same rule as ``q02``:
+    #: ``None`` on every ladder rung, and :func:`compose_estimates` repeats
+    #: ``q10`` there so the flat below the first fitted knot is preserved
+    #: exactly, not just approximately, for a rung that never claimed to
+    #: resolve that span.
 
 
 def compose_estimates(
@@ -800,7 +824,7 @@ def compose_estimates(
     *,
     sub_threshold_means: SubThresholdMeans,
     threshold_mw: float,
-    correction: ConformalCorrection | None = None,
+    correction: ConformalCorrection | SubsystemCorrections | None = None,
 ) -> tuple[HourForecast, ...]:
     """Compose a band per row from loose scalars. **The only composition.**
 
@@ -822,6 +846,11 @@ def compose_estimates(
     composed ``q``, which is the quantity the residuals were measured on. Every
     rung of the baseline ladder passes ``None`` and composes the same
     arithmetic with a neutral shift.
+
+    ``correction.shift_for(key.subsystem)`` rather than ``correction.shift()``:
+    both types answer it, a plain :class:`ConformalCorrection` by ignoring the
+    subsystem and a :class:`SubsystemCorrections` by using it, so this loop
+    does not need to know which one it was handed.
     """
     floor = 0.0
     forecasts: list[HourForecast] = []
@@ -841,7 +870,11 @@ def compose_estimates(
                 forecast=compose(
                     occurrence_probability=estimate.occurrence_probability,
                     positive_quantiles=quantiles,
-                    tail_shift=None if correction is None else correction.shift(),
+                    tail_shift=(
+                        None
+                        if correction is None
+                        else correction.shift_for(key.subsystem)
+                    ),
                     positive_mean_mwh=max(floor, estimate.positive_mean_mwh),
                     sub_threshold_mean_mwh=sub_threshold_means.mean_for(
                         key.subsystem, key.local_hour
@@ -861,19 +894,22 @@ def _fit_calibration(
     blocks: FoldBlocks,
     pool: OutOfFoldPool,
     incumbent_risk_bins: RiskBins | None,
-) -> Calibration:
-    """Isotonic on the calibration window; the curve and the edges on the pool.
+) -> SubsystemCalibration:
+    """Isotonic on the calibration window, pooled and per subsystem.
 
     The classifier is scored on the calibration window it was early-stopped
     against, which is the one thing that window is used for after the fits, and
     the base learners are **not** refit. The arithmetic lives in
     :mod:`wattsteer_ml.training.calibration`; this function's whole job is to
-    hand it the right block.
+    hand it the right block, partitioned by ``monitor.keys[i].subsystem`` for
+    the per-subsystem half exactly as :func:`_fit_conformal` partitions its own
+    rows for ``δ_lo``.
     """
     raw = np.clip(_predict(occurrence, monitor.matrix), 0.0, 1.0)
-    return calibrate(
-        raw=[float(value) for value in raw],
-        observed=[bool(value) for value in monitor.positive],
+    return calibrate_by_subsystem(
+        [float(value) for value in raw],
+        [bool(value) for value in monitor.positive],
+        list(monitor.keys),
         pool=pool,
         calibration_window=(blocks.calibration_start, blocks.calibration_end),
         incumbent_risk_bins=incumbent_risk_bins,
@@ -886,7 +922,7 @@ def _fit_conformal(
     blocks: FoldBlocks,
     fold: Fold,
     occurrence: lgb.Booster,
-    isotonic: IsotonicCalibrator,
+    isotonic: IsotonicCalibrator | SubsystemCalibration,
     magnitude_p02: lgb.Booster,
     magnitude_p10: lgb.Booster,
     magnitude_p50: lgb.Booster,
@@ -895,14 +931,16 @@ def _fit_conformal(
     wind_share: lgb.Booster,
     sub_threshold_means: SubThresholdMeans,
     threshold_mw: float,
-) -> ConformalCorrection:
+) -> SubsystemCorrections:
     """``δ_lo`` and ``δ_hi``, on the calibration window's curtailed hours.
 
     Against the **composed** band, which is what the spec asks for and what
     makes the correction a statement about the interval the product ships
     rather than about one booster's output: this function composes the window
     with ``correction=None`` and hands the resulting bands to
-    :func:`~wattsteer_ml.training.conformal.conformalise`.
+    :func:`~wattsteer_ml.training.conformal.conformalise_by_subsystem`, which
+    fits the pooled correction exactly as before and adds a per-subsystem
+    ``δ_lo`` on top of it.
 
     The rows are the calibration block's curtailed hours, and only those.
     ``Q_pos`` is conditional on ``Y > τ``, so a sub-threshold hour is not a test
@@ -938,7 +976,7 @@ def _fit_conformal(
         threshold_mw=threshold_mw,
         correction=None,
     )
-    return conformalise(
+    return conformalise_by_subsystem(
         _scored(composed, monitor_positives),
         window=(blocks.calibration_start, blocks.calibration_end),
     )
@@ -950,7 +988,7 @@ def _fit_pit(
     blocks: FoldBlocks,
     fold: Fold,
     occurrence: lgb.Booster,
-    isotonic: IsotonicCalibrator,
+    isotonic: IsotonicCalibrator | SubsystemCalibration,
     magnitude_p02: lgb.Booster,
     magnitude_p10: lgb.Booster,
     magnitude_p50: lgb.Booster,
@@ -959,7 +997,7 @@ def _fit_pit(
     wind_share: lgb.Booster,
     sub_threshold_means: SubThresholdMeans,
     threshold_mw: float,
-    correction: ConformalCorrection,
+    correction: ConformalCorrection | SubsystemCorrections,
 ) -> PitMatrix:
     """``U`` on the calibration window's settled hours, against the served band.
 
@@ -1219,6 +1257,41 @@ def _fit_quantile(
     )
 
 
+def _recency_weights(
+    config: ModelConfig, train: FeatureBlock
+) -> npt.NDArray[np.float64] | None:
+    """``0.5 ** (age_days / half_life)``, mean-normalised, or ``None`` for v1.
+
+    ``None`` on ``config.recency_half_life_days is None`` reproduces v1
+    exactly — an unweighted ``lgb.Dataset`` and a weighted one at all-ones
+    are not guaranteed byte-identical fits, so this is a branch rather than a
+    weight of 1.0 everywhere.
+
+    Age is measured against **this block's own** most recent
+    ``target_date`` — the base-fit block's last day for ``fit_block``, the
+    positives' own last curtailed day for ``positives``, which can differ by
+    a day if the most recent base-fit day curtailed nowhere. Each booster's
+    weights are therefore relative to the data it is actually being asked to
+    weigh, not to a date this function does not otherwise need.
+
+    Mean-normalised to 1 so `min_data_in_leaf` keeps roughly the meaning a
+    reader sets it under: a half-life short enough to nearly zero out the
+    oldest rows would otherwise silently shrink every leaf's effective count
+    as well as its recency, and the two are different knobs.
+    """
+    if config.recency_half_life_days is None:
+        return None
+    if not len(train):
+        return None
+    reference = max(key.target_date for key in train.keys)
+    age_days = np.array(
+        [(reference - key.target_date).days for key in train.keys], dtype=np.float64
+    )
+    weights = 0.5 ** (age_days / config.recency_half_life_days)
+    mean = float(np.mean(weights))
+    return weights / mean if mean > 0.0 else weights
+
+
 def _fit(
     *,
     config: ModelConfig,
@@ -1228,7 +1301,13 @@ def _fit(
     monitor: FeatureBlock,
     monitor_label: npt.NDArray[np.float64],
 ) -> lgb.Booster:
-    """One booster. Fitted on ``train``; ``monitor`` only chooses where to stop."""
+    """One booster. Fitted on ``train``; ``monitor`` only chooses where to stop.
+
+    ``monitor`` never carries a weight, whatever ``train`` carries. Early
+    stopping is asking how the fit does on the calibration window as that
+    window actually is — weighting it would change what "stop here" means
+    rather than what is fitted, and the two questions must not be conflated.
+    """
     if not len(train):
         raise TrainingError("a booster cannot be fitted on an empty block")
     contract = train.contract
@@ -1237,6 +1316,7 @@ def _fit(
     dataset = lgb.Dataset(
         train.matrix,
         label=label,
+        weight=_recency_weights(config, train),
         feature_name=names,
         categorical_feature=categorical,
         free_raw_data=False,
