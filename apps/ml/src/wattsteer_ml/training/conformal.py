@@ -1118,9 +1118,7 @@ class SubsystemCorrections:
                 "card saying so"
             )
         if set(self.per_subsystem) & set(self.declined):
-            raise ConformalError(
-                "a subsystem cannot be both fitted and declined"
-            )
+            raise ConformalError("a subsystem cannot be both fitted and declined")
 
     def delta_lo_for(self, subsystem: Subsystem) -> float:
         """This subsystem's own ``δ_lo``, or the pooled one if it declined."""

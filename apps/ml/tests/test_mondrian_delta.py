@@ -29,9 +29,7 @@ WINDOW = (date(2026, 1, 1), date(2026, 3, 31))
 
 #: Comfortably above τ and rising with alpha, so every hour states a P10 and
 #: the lower tail always has something to rank.
-QUANTILES = MagnitudeQuantiles.from_boosters(
-    q02=36.0, q10=40.0, q50=90.0, q90=200.0
-)
+QUANTILES = MagnitudeQuantiles.from_boosters(q02=36.0, q10=40.0, q50=90.0, q90=200.0)
 
 
 def _hour(

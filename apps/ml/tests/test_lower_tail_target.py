@@ -224,9 +224,7 @@ def test_the_rail_now_expects_what_the_served_law_actually_implies() -> None:
     longer serves — and would keep refusing every artifact for a reason that had
     been fixed.
     """
-    fitted = MagnitudeQuantiles.from_boosters(
-        q02=30.0, q10=40.0, q50=90.0, q90=200.0
-    )
+    fitted = MagnitudeQuantiles.from_boosters(q02=30.0, q10=40.0, q50=90.0, q90=200.0)
 
     # Still on the flat below the first knot: mass sits at the floor.
     assert implied_lower_clearance(0.905, fitted) == pytest.approx(0.905)
@@ -249,9 +247,7 @@ def test_a_repeated_knot_keeps_the_old_law_because_it_is_still_flat() -> None:
     ``u`` would have scored the whole ladder against a law it does not serve —
     the mirror of the defect this change fixes.
     """
-    repeated = MagnitudeQuantiles.from_boosters(
-        q02=40.0, q10=40.0, q50=90.0, q90=200.0
-    )
+    repeated = MagnitudeQuantiles.from_boosters(q02=40.0, q10=40.0, q50=90.0, q90=200.0)
 
     for p in (0.93, 0.95, 0.976, 0.99):
         assert implied_lower_clearance(p, repeated) == pytest.approx(p)
@@ -266,9 +262,7 @@ def test_the_two_targets_now_agree_on_the_rows_that_interpolate() -> None:
     marginal guardrail is untouched because the floor did not move — what moved
     is what the law claims about it.
     """
-    fitted = MagnitudeQuantiles.from_boosters(
-        q02=30.0, q10=40.0, q50=90.0, q90=200.0
-    )
+    fitted = MagnitudeQuantiles.from_boosters(q02=30.0, q10=40.0, q50=90.0, q90=200.0)
     for p in (0.93, 0.95, 0.976, 0.99):
         assert implied_lower_clearance(p, fitted) == pytest.approx(
             1.0 - NOMINAL_MISCOVERAGE

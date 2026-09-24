@@ -164,7 +164,7 @@ def _draw(
         true_hi = THRESHOLD_MW + math.exp(mu + z_hi * sigma)
         quantiles = MagnitudeQuantiles.from_boosters(
             q02=true_lo * lower_scale * 0.9,
-                        q10=true_lo * lower_scale,
+            q10=true_lo * lower_scale,
             q50=true_50,
             q90=true_hi * upper_scale,
         )
@@ -374,9 +374,7 @@ def test_conformal_narrows_a_band_that_was_too_wide() -> None:
 #: enough apart that the interpolant has room to attenuate a shift, and far
 #: enough above ``τ`` that the mixture's floor into ``F_pos``'s support never
 #: bites and so never flatters the measurement.
-_KNOTS = MagnitudeQuantiles.from_boosters(
-    q02=60.0 * 0.9, q10=60.0, q50=90.0, q90=140.0
-)
+_KNOTS = MagnitudeQuantiles.from_boosters(q02=60.0 * 0.9, q10=60.0, q50=90.0, q90=140.0)
 
 #: ``Q_pos(0.90) − Q_pos(0.10)`` for :data:`_KNOTS` — the scale ``δ_lo`` is a
 #: multiple of since forecaster 43. Named because every MWh figure in this file
@@ -1345,7 +1343,7 @@ def _mixed(
             )
         quantiles = MagnitudeQuantiles.from_boosters(
             q02=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * lower_scale * 0.9,
-                        q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * lower_scale,
+            q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * lower_scale,
             q50=THRESHOLD_MW + math.exp(mu),
             q90=THRESHOLD_MW + math.exp(mu + z_hi * sigma),
         )
@@ -1857,7 +1855,7 @@ def _heteroscedastic_block(
         observed = THRESHOLD_MW + math.exp(rng.gauss(mu, sigma))
         quantiles = MagnitudeQuantiles.from_boosters(
             q02=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * 0.35 * 0.9,
-                        q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * 0.35,
+            q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * 0.35,
             q50=THRESHOLD_MW + math.exp(mu),
             q90=THRESHOLD_MW + math.exp(mu + z_hi * sigma),
         )
