@@ -50,8 +50,7 @@ import math
 import statistics
 import sys
 from collections import defaultdict
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from itertools import pairwise
@@ -62,6 +61,10 @@ import asyncpg
 
 from wattsteer_ml.config import settings
 from wattsteer_ml.constants import SUBSYSTEM_CODES
+from wattsteer_ml.diagnostics import (
+    PLACEHOLDER_RISK_BINS,
+    tolerating_undetermined_risk_bins,
+)
 from wattsteer_ml.evaluation import materialize_fold_calendar
 from wattsteer_ml.evaluation.gate import (
     BAND_MEDIAN_RAIL,
@@ -83,12 +86,6 @@ from wattsteer_ml.retrain import (
 )
 from wattsteer_ml.threshold_sweep_run import DATA_FAILURES, reportable_folds
 from wattsteer_ml.training import ScoredHour, forecast_rows, train_fold
-from wattsteer_ml.training import calibration as calibration_module
-from wattsteer_ml.training.calibration import (
-    RiskBinDecision,
-    RiskBins,
-    RiskBinsUndeterminedError,
-)
 
 #: The lane the rail was failing in. A parameter of the request, defaulting here.
 DEFAULT_LANE = "dessem_free_v1__gate_late__thr5"
@@ -99,54 +96,6 @@ THIN_CELL_ROWS = 100
 #: Upper edges of the occurrence-probability bins. Rows that qualify have a P50
 #: off the point mass, i.e. ``p > 0.5``, so the first bin is open at the bottom.
 P_BIN_EDGES = (0.6, 0.7, 0.8, 0.9, 1.0)
-
-
-#: Edges used only when the real rule finds none and the caller asked to go on.
-#: Arbitrary on purpose: the P50 rail does not read risk classes, and a report
-#: field says every time that these were used.
-PLACEHOLDER_RISK_BINS = RiskBins.from_edges(0.3, 0.7)
-
-
-@contextmanager
-def tolerating_undetermined_risk_bins(enabled: bool) -> Iterator[list[str]]:
-    """Let ``train_fold`` finish on a pool the risk-class rule cannot split.
-
-    ``calibrate`` derives the three named risk classes from the pooled
-    out-of-fold predictions and **refuses** when no split satisfies the rule
-    (`RiskBinsUndeterminedError`), which is the right behaviour for a retrain: a
-    class edge nobody measured is not a fallback. On F2–F5 it refuses, so the
-    diagnostic could not fit them and could not say whether the P50 bias is a
-    property of the model or of the live edge.
-
-    The P50 rail reads nothing the edges touch, so for *this* driver only, when
-    ``enabled``, the derivation is wrapped to return a placeholder decision and
-    to record the refusal it swallowed. The patch lives for the ``with`` block and
-    is restored in a ``finally``; nothing in the retrain path imports this.
-    """
-    swallowed: list[str] = []
-    if not enabled:
-        yield swallowed
-        return
-    original = calibration_module.derive_risk_bins
-
-    def tolerant(predictions: Any, **kwargs: Any) -> RiskBinDecision:
-        try:
-            return original(predictions, **kwargs)
-        except RiskBinsUndeterminedError as undetermined:
-            swallowed.append(str(undetermined))
-            return RiskBinDecision(
-                bins=PLACEHOLDER_RISK_BINS,
-                changed=False,
-                reason=("diagnostic placeholder: the rule found no edges on this pool"),
-                incumbent=None,
-                check=calibration_module._check(predictions, PLACEHOLDER_RISK_BINS),
-            )
-
-    calibration_module.derive_risk_bins = tolerant
-    try:
-        yield swallowed
-    finally:
-        calibration_module.derive_risk_bins = original
 
 
 class P50BiasRunError(RuntimeError):

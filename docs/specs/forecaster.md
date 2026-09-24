@@ -281,7 +281,7 @@ On top of that spine:
 | | Estimator | Trained on | Output |
 |---|---|---|---|
 | **Model A — occurrence** | LightGBM binary, `objective=binary` | every feature row | `p_raw(x)`, calibrated to `p(x)` |
-| **Model B — magnitude** | Three LightGBM boosters, `objective=quantile`, `alpha ∈ {0.1, 0.5, 0.9}` | rows where `y_constrained_off_total_mwh > τ` | `q̂_pos^α(x)` |
+| **Model B — magnitude** | Four LightGBM boosters, `objective=quantile`, `alpha ∈ {0.02, 0.1, 0.5, 0.9}` | rows where `y_constrained_off_total_mwh > τ` | `q̂_pos^α(x)` |
 | **Model S — share** | LightGBM regression on `wind_mwh / total_mwh` | the same positive rows | `ŝ(x) ∈ [0,1]` |
 
 `τ` is `threshold_mw × 1 h`, default 5 MWh at subsystem grain, passed through
@@ -334,6 +334,15 @@ Four decisions are folded into those three lines:
   crossing rate above 1% of served hours is a guardrail veto — it means the
   quantile fits disagree about the shape and the interval is not describing one
   distribution.
+- **A fourth knot at `α = 0.02` gives the served P10 somewhere to interpolate
+  to.** Composition evaluates `Q_pos` at `u = (0.10 − (1 − p)) / p`, which is
+  below 0.10 for every `p < 1`. With only three fitted knots that `u` always
+  landed on the flat segment below `0.10`, so the served P10 was *always* the
+  flat value there rather than an interpolated quantile — `P(y ≥ P10) = p`
+  exactly, for every stated row. The 0.02 knot moves the flat's start down, so
+  a row with `p > 0.918` (`= 0.90 / 0.98`) gets a genuine interpolated tenth
+  percentile and clears at 0.90 like the rest of the band. `p10_calibration_excess`
+  is what reads the difference (`mixture.py`, `implied_lower_clearance`).
 
 **What falls out, and what it does to the optimizer.** Because `Q_Y(q) = 0` for
 `q ≤ 1 − p`:
@@ -525,13 +534,29 @@ that the lower tail needs, and the lower tail is the one the product promises.
 Two scalars per artifact instead of one is a trivially cheap way to keep them
 independent.
 
-**The correction is global, not per hour.** Conditional coverage is what one
-would want and it is not what the data supports: a per-`local_hour` correction
-would fit 24 scalars on a calibration window whose positive rows number in the
-low thousands, concentrated in a handful of hours. So one scalar per tail per
-artifact, with **per-hour and per-subsystem coverage reported and never
-corrected**. That asymmetry — correct marginally, report conditionally — is the
-honest position, and the report is what would justify a future refinement.
+**The correction is global, not per hour — and, since forecaster ticket 47,
+`δ_lo` is conditioned on one axis.** Conditional coverage is what one would
+want and it is not usually what the data supports: a per-`local_hour`
+correction would fit 24 scalars on a calibration window whose positive rows
+number in the low thousands, concentrated in a handful of hours. `δ_hi` stays
+exactly that — one scalar per artifact, with per-hour and per-subsystem
+coverage reported and never corrected.
+
+`δ_lo` is the one measured exception. The live P10 diagnostic
+(`p10_calibration_run.py`, 2026-09-23) found the pooled `δ_lo` reading almost
+entirely as whichever subsystem held most of the qualifying rows — NE was 68%
+of them on one fold — while N and S carried an opposite-signed bias entirely
+hidden underneath it (realised clearance 0.54 and 0.68 against an implied
+~0.90). Four subsystems is coarse enough, and the asymmetry large enough, that
+a per-subsystem `δ_lo` is supportable where a per-hour one is not:
+`conformalise_by_subsystem` re-ranks the lower tail once per subsystem at the
+pooled fit's own target, **declining** — not inventing a number for — any
+subsystem below `minimum_calibration_rows`, and falling back to the pooled
+`δ_lo` there. N and S decline on a 90-day calibration window (5–6 qualifying
+rows against a floor of 9); a longer window is what would change that, not a
+change to this rule. `δ_hi` is untouched by this ticket: nothing measured
+indicts the upper tail, and splitting it would halve an already-thin
+population for no measured gain.
 
 **The median gets no correction.** A median has no interval to cover. It is
 scored by pinball loss and by median-unbiasedness (`share of observations below
@@ -1306,8 +1331,17 @@ and not on the card it mostly describes.
    precisely so that a wrong constant blocks a swap rather than silently
    choosing one:
    - `pr_auc ≥ incumbent.pr_auc − 0.02`, pooled **and** in every subsystem;
-   - `coverage_p10 ∈ [0.85, 0.97]` and `coverage_p90 ∈ [0.85, 0.97]`;
-   - `p50_unbiasedness ∈ [0.45, 0.55]`;
+   - `coverage_p10_in_band`: marginal P10 coverage over curtailed hours whose
+     floor is a stated bound, `∈ [0.85, 0.97]`;
+   - `p10_calibration_excess`: the realised floor clearance minus the model's
+     own implied rate, over the same population, indistinguishable from zero
+     at the nominal 10% miscoverage (`evaluation/gate.py`,
+     `p10_calibration_excess` — see `implied_lower_clearance` above for why
+     this is not simply "coverage against 0.90");
+   - `p50_unbiasedness_in_band ∈ [0.45, 0.55]`, over curtailed hours whose P50
+     is a number the label could fall under (`states_a_falsifiable_median`);
+   - `coverage_p90 ∈ [0.80, 0.97]` (`PROMOTION_COVERAGE_WINDOW` — the
+     promotion floor is lower than `COVERAGE_GUARDRAIL`'s 0.85, forecaster 47);
    - `ece ≤ 0.05`;
    - `crossing_rate ≤ 0.01`, the rate over every settled hour — the row's
      attribute, never a card field, and never the curtailed-subset figure;

@@ -152,6 +152,29 @@ def test_a_bundle_missing_an_estimator_fails_to_load(
         )
 
 
+def test_a_bundle_missing_subsystem_calibration_fails_to_load(
+    trained: TrainedFold, volume: Path
+) -> None:
+    """The per-subsystem occurrence map is required, the same way the pooled
+    ``calibration`` and ``conformal``/``subsystem_conformal`` are.
+
+    Without it, serving would fall back to `HurdleBundle.calibration`'s pooled
+    map for every subsystem with no record that a finer one was ever fitted —
+    silently the distortion this field exists to undo for N and S. The loader
+    re-checks every field after `joblib.load` reconstructs the object without
+    running ``__init__``, so a truncated pickle is caught here rather than
+    served.
+    """
+    bundle_path, _ = written(trained, volume)
+    partial = joblib.load(bundle_path)
+    object.__setattr__(partial, "subsystem_calibration", None)
+    joblib.dump(partial, bundle_path)
+    with pytest.raises(PartialBundleError, match="subsystem_calibration"):
+        load_artifact(
+            root=volume, lane=trained.bundle.lane, artifact_id=trained.card.artifact_id
+        )
+
+
 def test_a_bundle_without_its_card_fails_to_load(
     trained: TrainedFold, volume: Path
 ) -> None:

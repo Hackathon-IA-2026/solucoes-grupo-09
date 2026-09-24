@@ -25,6 +25,20 @@ is handed ``Sequence[float]`` twice and never sees a
 :class:`~wattsteer_ml.evaluation.RowKey`, so it has nothing to condition on.
 :mod:`tests.test_conformal_quantiles` asserts that against this file's source.
 
+**One deliberate, structural exception, added for the lower tail only.** The
+live P10 diagnostic (`p10_calibration_run.py`, 2026-09-23) measured that a
+pooled ``δ_lo`` is dominated by whichever subsystem holds most of the
+qualifying rows — NE was 68% of them on one fold — and hides an opposite-signed
+bias in the minority subsystems underneath it. :func:`conformalise_by_subsystem`
+and :class:`SubsystemCorrections` condition the *lower* tail on
+``RowKey.subsystem`` for exactly this reason, at the cost this paragraph's
+"never fed back" no longer holds for ``δ_lo`` alone. It still holds absolutely
+for ``δ_hi`` — nothing measured indicts the upper tail, splitting it would
+halve an already-thin population for no measured gain, and
+:meth:`ConformalCorrection.fit` itself is untouched: it still cannot see a key,
+by construction, and it is what :class:`SubsystemCorrections` calls once per
+subsystem rather than a new route around it.
+
 **Where the correction is applied, and why it moved.** ``w_lo`` and ``w_hi``
 above are :class:`~wattsteer_ml.mixture.TailShift`: the two scalars written as a
 shift in the mixture's own ``q``, piecewise-linear through ``−δ_lo`` at 0.10,
@@ -261,7 +275,7 @@ from datetime import date
 from typing import Any
 
 from wattsteer_ml.caveated import CaveatedFigure
-from wattsteer_ml.constants import SUBSYSTEM_CODES
+from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
 from wattsteer_ml.mixture import (
@@ -936,6 +950,16 @@ class ConformalCorrection:
         """
         return TailShift(lower_spread_multiple=self.delta_lo, upper_mwh=self.delta_hi)
 
+    def shift_for(self, subsystem: Subsystem) -> TailShift:
+        """:meth:`shift`, under the interface :class:`SubsystemCorrections` shares.
+
+        Ignores ``subsystem`` — the correction is marginal — so
+        :func:`~wattsteer_ml.training.hurdle.compose_estimates` can call
+        ``correction.shift_for(key.subsystem)`` without knowing which of the
+        two correction types it was handed.
+        """
+        return self.shift()
+
     def card_fields(self) -> dict[str, Any]:
         population = (
             (
@@ -989,6 +1013,167 @@ class ConformalCorrection:
                 "mass at zero, and that excess is structure rather than slack."
             ),
         }
+
+
+@dataclass(frozen=True)
+class SubsystemDeltaLo:
+    """One subsystem's own lower-tail fit, or the record that it declined.
+
+    Built the same way :meth:`ConformalCorrection.fit` builds the pooled
+    ``delta_lo`` — the ``⌈(n+1)(1 − α)⌉``-th order statistic of that
+    subsystem's own qualifying residuals — but kept out of
+    :class:`ConformalCorrection` itself: that class's ``__post_init__`` couples
+    a ``delta_lo`` to a ``delta_hi`` fitted on the *same* window's full
+    population, and a subsystem's rows are never enough to support its own
+    upper-tail statement. This type states only what a subsystem's rows can
+    support: its own lower tail, or nothing.
+    """
+
+    subsystem: Subsystem
+    rows: int
+    rank: int
+    delta_lo: float
+    fitted: bool
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.delta_lo):
+            raise ConformalError(f"delta_lo is {self.delta_lo!r}, which is not MWh")
+        if self.rows < 0:
+            raise ConformalError(f"{self.rows} is not a row count")
+        if not self.fitted and (self.rank != 0 or self.delta_lo != 0.0):
+            raise ConformalError(
+                f"{self.subsystem}: {self.rows} rows is below the floor, so "
+                f"delta_lo is declined and must be 0.0 at rank 0; got "
+                f"delta_lo={self.delta_lo!r} at rank {self.rank!r}"
+            )
+
+    def card_fields(self) -> dict[str, Any]:
+        return {
+            "rows": self.rows,
+            "rank": self.rank,
+            "delta_lo": self.delta_lo,
+            "fitted": self.fitted,
+        }
+
+
+def _fit_subsystem_lower_tail(
+    subsystem: Subsystem, lower_residuals: Sequence[float], *, alpha_lo: float
+) -> SubsystemDeltaLo:
+    """:meth:`ConformalCorrection.fit`'s lower-tail arithmetic, for one subsystem.
+
+    Declines below :func:`minimum_calibration_rows` at the **same** ``alpha_lo``
+    the pooled correction used — the identical rule
+    :attr:`ConformalCorrection.lower_tail_fitted` already states, applied to a
+    smaller population rather than to a different one.
+    """
+    rows = len(lower_residuals)
+    floor = minimum_calibration_rows(alpha_lo)
+    fitted = rows >= floor
+    rank = conformal_rank(rows, alpha_lo) if fitted else 0
+    delta = (
+        _order_statistic(lower_residuals, rank, f"{subsystem} E_lo") if fitted else 0.0
+    )
+    return SubsystemDeltaLo(
+        subsystem=subsystem, rows=rows, rank=rank, delta_lo=delta, fitted=fitted
+    )
+
+
+@dataclass(frozen=True)
+class SubsystemCorrections:
+    """``δ_hi`` from the pooled fit; ``δ_lo`` split by subsystem where the rows
+    allow, falling back to the pooled ``δ_lo`` where they do not.
+
+    **Why ``δ_hi`` stays marginal on every subsystem.** The live P10
+    diagnostic that motivated this class (`p10_calibration_run.py`,
+    2026-09-23) measured a subsystem-conditional bias in the *lower* tail only
+    — gate_early F6 read NE +0.048, SE +0.053 against N −0.364, S −0.228, a
+    pooled rail almost entirely reading NE's 68% share of the rows. Nothing
+    measured indicts the upper tail, and splitting it would halve the rows
+    behind an already-thin population for no measured gain.
+
+    **Why some subsystems fall back.** N and S curtail roughly 0.7 h/day, so a
+    90-day calibration window holds 5–6 qualifying rows against
+    :func:`minimum_calibration_rows`'s floor of 9 at the nominal miscoverage —
+    below it at any model complexity, on that window. Declining and falling
+    back to the pooled ``δ_lo`` is the same discipline
+    :attr:`ConformalCorrection.lower_tail_fitted` already applies one level up;
+    inventing a number for five rows would not be a correction.
+    """
+
+    pooled: ConformalCorrection
+    #: Only the subsystems whose rows cleared the floor. A subsystem absent
+    #: here fell back to :attr:`pooled`'s ``delta_lo`` — see :attr:`declined`.
+    per_subsystem: Mapping[Subsystem, SubsystemDeltaLo]
+    #: The subsystems :attr:`per_subsystem` does not carry, named rather than
+    #: left for a reader to infer from a missing key.
+    declined: tuple[Subsystem, ...]
+
+    def __post_init__(self) -> None:
+        covered = set(self.per_subsystem) | set(self.declined)
+        if covered != set(SUBSYSTEM_CODES):
+            raise ConformalError(
+                f"{covered} does not account for every subsystem in "
+                f"{SUBSYSTEM_CODES}; a subsystem with no verdict at all would "
+                "silently fall back to the pooled delta_lo with nothing on the "
+                "card saying so"
+            )
+        if set(self.per_subsystem) & set(self.declined):
+            raise ConformalError(
+                "a subsystem cannot be both fitted and declined"
+            )
+
+    def delta_lo_for(self, subsystem: Subsystem) -> float:
+        """This subsystem's own ``δ_lo``, or the pooled one if it declined."""
+        fit = self.per_subsystem.get(subsystem)
+        return fit.delta_lo if fit is not None else self.pooled.delta_lo
+
+    def shift_for(self, subsystem: Subsystem) -> TailShift:
+        return TailShift(
+            lower_spread_multiple=self.delta_lo_for(subsystem),
+            upper_mwh=self.pooled.delta_hi,
+        )
+
+    def card_fields(self) -> dict[str, Any]:
+        return {
+            **self.pooled.card_fields(),
+            "subsystem_delta_lo": {
+                subsystem: fit.card_fields()
+                for subsystem, fit in self.per_subsystem.items()
+            },
+            "subsystem_delta_lo_declined": list(self.declined),
+        }
+
+
+def conformalise_by_subsystem(
+    hours: Sequence[ScoredHour],
+    *,
+    window: tuple[date, date],
+    miscoverage: float = NOMINAL_MISCOVERAGE,
+) -> SubsystemCorrections:
+    """The pooled correction, plus a per-subsystem ``δ_lo`` where the rows allow.
+
+    Fits the pooled :class:`ConformalCorrection` exactly as :func:`conformalise`
+    does — nothing about the marginal correction changes — and then re-ranks
+    the lower tail once per subsystem, at the pooled fit's own
+    ``lower_miscoverage``, so a subsystem's own residuals are judged against
+    the same target the pooled number was.
+    """
+    pooled = conformalise(hours, window=window, miscoverage=miscoverage)
+    per_subsystem: dict[Subsystem, SubsystemDeltaLo] = {}
+    declined: list[Subsystem] = []
+    for subsystem in SUBSYSTEM_CODES:
+        subset = [hour for hour in hours if hour.key.subsystem == subsystem]
+        lower, _upper = residuals(subset)
+        fit = _fit_subsystem_lower_tail(
+            subsystem, lower, alpha_lo=pooled.lower_miscoverage
+        )
+        if fit.fitted:
+            per_subsystem[subsystem] = fit
+        else:
+            declined.append(subsystem)
+    return SubsystemCorrections(
+        pooled=pooled, per_subsystem=per_subsystem, declined=tuple(declined)
+    )
 
 
 @dataclass(frozen=True)

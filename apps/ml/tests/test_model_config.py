@@ -23,6 +23,8 @@ import wattsteer_ml.training as training_package
 from wattsteer_ml.training import (
     ESTIMATOR_FAMILY,
     MODEL_CONFIG_V1,
+    MODEL_CONFIG_V2,
+    MODEL_CONFIG_VERSION,
     MODEL_CONFIGS,
     ModelConfig,
     UnknownModelConfigError,
@@ -132,6 +134,87 @@ def test_no_search_is_reachable_from_the_training_package(api: str) -> None:
         if name.endswith(".hyperparameters"):
             continue  # this module names them in a comment on purpose
         assert api not in source, f"{name} can reach {api}"
+
+
+def test_v2_is_the_current_default_and_v1_still_resolves() -> None:
+    """A card naming v1 must go on loading, whichever version trains today."""
+    assert MODEL_CONFIG_V2.version == MODEL_CONFIG_VERSION
+    assert MODEL_CONFIGS[MODEL_CONFIG_V1.version] is MODEL_CONFIG_V1
+    assert MODEL_CONFIGS[MODEL_CONFIG_V2.version] is MODEL_CONFIG_V2
+    assert model_config("lgbm_conservative_v1") is MODEL_CONFIG_V1
+    assert model_config("lgbm_conservative_v2") is MODEL_CONFIG_V2
+
+
+def test_v2_shares_every_v1_number_except_the_low_alpha_overrides() -> None:
+    """v2 changes one thing: the lowest booster's capacity.
+
+    Every other field — trees, learning rate, the fractions, the seed — is
+    identical to v1's, so a fold's v2 fit is comparable with v1's wherever the
+    two do not deliberately differ.
+    """
+    for name in (
+        "num_boost_round",
+        "learning_rate",
+        "num_leaves",
+        "min_data_in_leaf",
+        "feature_fraction",
+        "bagging_fraction",
+        "bagging_freq",
+        "early_stopping_rounds",
+        "seed",
+    ):
+        assert getattr(MODEL_CONFIG_V1, name) == getattr(MODEL_CONFIG_V2, name)
+    assert MODEL_CONFIG_V1.role_overrides == {}
+    assert MODEL_CONFIG_V1.recency_half_life_days is None
+    # Measured and dropped: the 180-day half-life refused gate_early F6 on
+    # `p50_unbiasedness_in_band` (0.5618 against [0.45, 0.55]) while adding 4%
+    # of the p10 repair. v2 fits unweighted, exactly as v1 does.
+    assert MODEL_CONFIG_V2.recency_half_life_days is None
+
+
+def test_the_low_alpha_overrides_land_on_the_two_lowest_boosters_and_no_other() -> None:
+    """`num_leaves` 63 → 15 on ``magnitude_q0.02`` and no other role.
+
+    Every other role — including ``magnitude_q0.10``, which the report's own
+    ranking left untouched — must come back with v1's shared shape unchanged.
+    """
+    for role in ("magnitude_q0.02",):
+        params = MODEL_CONFIG_V2.params(objective="quantile", role=role, alpha=0.02)
+        assert params["num_leaves"] == 15
+        assert params["min_data_in_leaf"] == 300
+        assert params["lambda_l2"] == 10.0
+    for role in ("magnitude_q0.10", "magnitude_q0.50", "magnitude_q0.90", "occurrence"):
+        params = MODEL_CONFIG_V2.params(objective="quantile", role=role, alpha=0.10)
+        assert params["num_leaves"] == MODEL_CONFIG_V1.num_leaves
+        assert params["min_data_in_leaf"] == MODEL_CONFIG_V1.min_data_in_leaf
+        assert "lambda_l2" not in params
+
+
+def test_the_card_records_which_roles_v2_treats_differently() -> None:
+    fields = MODEL_CONFIG_V2.card_fields()
+    assert fields["role_overrides"] == {
+        "magnitude_q0.02": {"num_leaves": 15, "min_data_in_leaf": 300, "lambda_l2": 10.0},
+    }
+    assert fields["recency_half_life_days"] is None
+    assert MODEL_CONFIG_V1.card_fields()["role_overrides"] == {}
+    assert MODEL_CONFIG_V1.card_fields()["recency_half_life_days"] is None
+
+
+def test_a_negative_half_life_cannot_be_constructed() -> None:
+    with pytest.raises(ValueError, match="recency_half_life_days"):
+        ModelConfig(
+            version="bad",
+            num_boost_round=10,
+            learning_rate=0.1,
+            num_leaves=3,
+            min_data_in_leaf=1,
+            feature_fraction=1.0,
+            bagging_fraction=1.0,
+            bagging_freq=0,
+            early_stopping_rounds=0,
+            seed=1,
+            recency_half_life_days=0,
+        )
 
 
 def test_a_nonsense_configuration_cannot_be_constructed() -> None:

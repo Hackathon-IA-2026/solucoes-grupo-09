@@ -48,6 +48,7 @@ from out_of_fold_fixtures import (
 )
 from out_of_fold_fixtures import pool as out_of_fold_pool
 from out_of_fold_fixtures import predictions as out_of_fold_predictions
+from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.evaluation import (
     Fold,
     FoldBlocks,
@@ -99,6 +100,42 @@ def calibration_window(blocks: FoldBlocks) -> tuple[date, date]:
 
 def curve_of(trained: TrainedFold) -> ReliabilityCurve:
     return trained.bundle.calibration.reliability
+
+
+def _without_docstring(source: str) -> str:
+    """The code of a function or module, with its own prose removed.
+
+    Copied from `test_conformal_quantiles.py`'s helper of the same name and
+    the same job: these assertions are about what the code *does*, and the
+    docstring explains at length what it deliberately does not do, which is
+    exactly the vocabulary a naive grep would trip over.
+    """
+    parts = source.split('"""')
+    return parts[0] + "".join(parts[2::2]) if len(parts) > 2 else source
+
+
+def test_the_fit_never_sees_a_key_to_condition_on() -> None:
+    """The primitive stays marginal; the subsystem split happens one level up.
+
+    Mirrors `test_conformal_quantiles.py`'s
+    ``test_the_fit_never_sees_a_key_to_condition_on`` for
+    ``ConformalCorrection.fit``. `training/calibration.py::calibrate_by_subsystem`
+    fits a per-subsystem occurrence map by slicing ``raw``/``observed`` before
+    calling :meth:`IsotonicCalibrator.fit` once per subsystem — the fit itself
+    must stay provably keyless, or a future edit could quietly make it read a
+    row's own subsystem out of a wider argument instead of being handed an
+    already-sliced sequence.
+    """
+    source = _without_docstring(inspect.getsource(IsotonicCalibrator.fit))
+    # Not bare "key": `sorted(..., key=lambda ...)` is this function's own sort
+    # key, nothing to do with a `RowKey`, and would be a false positive.
+    for forbidden in ("subsystem", "Subsystem", "RowKey", "SubsystemCalibration"):
+        assert forbidden not in source, (
+            f"IsotonicCalibrator.fit mentions {forbidden!r}; the fit is marginal "
+            "and has nothing to condition on"
+        )
+    parameters = inspect.signature(IsotonicCalibrator.fit).parameters
+    assert set(parameters) == {"raw", "observed"}
 
 
 # --- The fit: on the calibration window, and nothing refitted after it --------
@@ -585,6 +622,31 @@ def test_the_edges_are_written_to_the_card_and_are_what_the_bundle_holds(
     assert set(group["risk_bins_hour_counts"]) == {"low", "elevated", "high"}
 
 
+def test_the_card_publishes_the_subsystem_split_and_the_bundle_round_trips_it(
+    trained: TrainedFold,
+) -> None:
+    """The card's ``calibration`` group is built from the split, not the pooled map.
+
+    `training/bundle.py::ModelCard.to_dict` reads ``subsystem_calibration``, not
+    ``calibration``, for this group — the same choice ``quantiles`` already
+    makes for ``subsystem_conformal`` — so every subsystem that got its own
+    isotonic map is named on the card and every one that fell back to the
+    pooled map is named in ``subsystem_isotonic_declined``.
+    """
+    split = trained.bundle.subsystem_calibration
+    group = trained.card.to_dict()["calibration"]
+    assert set(group["subsystem_isotonic"]) == set(split.per_subsystem)
+    assert set(group["subsystem_isotonic_declined"]) == set(split.declined)
+    assert set(split.per_subsystem) | set(split.declined) == set(SUBSYSTEM_CODES)
+    for subsystem, fit in split.per_subsystem.items():
+        assert group["subsystem_isotonic"][subsystem]["fitted"] is True
+        assert group["subsystem_isotonic"][subsystem]["rows"] == fit.rows
+    # The pooled halves — ``reliability`` and ``risk_bins`` — are untouched by
+    # the split and still come from the same fields the plain ``Calibration``
+    # publishes.
+    assert group["risk_bins"] == trained.bundle.calibration.risk_bins.bins.card_fields()
+
+
 def test_the_named_classes_cover_every_probability_exactly_once() -> None:
     """A gap is a probability with no class; an overlap is one with two."""
     bins = RiskBins.from_edges(0.25, 0.60)
@@ -779,7 +841,14 @@ def test_calibrating_p_does_not_create_a_second_path_to_a_band(
 def test_the_served_probability_is_the_raw_output_put_through_the_map(
     trained: TrainedFold, test_rows: list[dict[str, Any]]
 ) -> None:
-    """One map, applied once. The raw score is never what reaches the screen."""
+    """One map per row's subsystem, applied once. The raw score never reaches the screen.
+
+    Not the pooled map alone any more: `_compose_block` reads
+    `bundle.subsystem_calibration.calibrate_for(key.subsystem)` per row, so this
+    test reproduces that choice rather than the pooled `bundle.calibration.\
+isotonic` on its own — otherwise a subsystem that got its own curve would make
+    this test fail for the right code and the wrong reason.
+    """
     from wattsteer_ml.training.design import FeatureBlock
 
     block = FeatureBlock.of(
@@ -790,12 +859,16 @@ def test_the_served_probability_is_the_raw_output_put_through_the_map(
         0.0,
         1.0,
     )
-    isotonic = trained.bundle.calibration.isotonic
+    split = trained.bundle.subsystem_calibration
     served = [
         hour.forecast.occurrence_probability
         for hour in forecast_rows(trained.bundle, test_rows)
     ]
-    assert served == [isotonic(float(value)) for value in raw]
+    expected = [
+        split.calibrate_for(key.subsystem)(float(value))
+        for key, value in zip(block.keys, raw, strict=True)
+    ]
+    assert served == expected
     assert any(
         served[index] != pytest.approx(float(raw[index])) for index in range(len(served))
     ), "the fixture should contain an hour the calibration actually moves"

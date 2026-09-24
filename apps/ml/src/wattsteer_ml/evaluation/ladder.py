@@ -121,7 +121,19 @@ from wattsteer_ml.training.hurdle import (
     partition_rows,
     train_fold,
 )
-from wattsteer_ml.training.hyperparameters import MODEL_CONFIG_V1, ModelConfig
+from wattsteer_ml.training.hyperparameters import MODEL_CONFIG_V2, ModelConfig
+
+#: Where 0.10, 0.50 and 0.90 sit inside `FITTED_ALPHAS`, looked up once rather
+#: than assumed to be positions 0, 1, 2. Every rung below fits (or reads a
+#: forest at) *every* fitted alpha — including the sub-0.10 knots that exist
+#: only to sharpen the served model's interpolation, and that a rung never
+#: claims its own estimate for — so the three the ladder actually serves
+#: (`SERVED_QUANTILES`) must be picked out by the alpha they were fitted at,
+#: not by their position in a tuple whose length has changed twice already
+#: (three knots, then four with 0.02, now five with 0.05).
+_Q10_INDEX = FITTED_ALPHAS.index(0.10)
+_Q50_INDEX = FITTED_ALPHAS.index(0.50)
+_Q90_INDEX = FITTED_ALPHAS.index(0.90)
 
 #: Rung 1's **occurrence** head. `docs/specs/feature-engineering.md` specifies
 #: it and migration 0036 emits it. See the module docstring for why the refusal
@@ -300,9 +312,9 @@ class BaselineConstants:
         quantiles = [float(np.quantile(totals, alpha)) for alpha in FITTED_ALPHAS]
         return cls(
             probability=len(positives) / len(labelled),
-            q10=quantiles[0],
-            q50=quantiles[1],
-            q90=quantiles[2],
+            q10=quantiles[_Q10_INDEX],
+            q50=quantiles[_Q50_INDEX],
+            q90=quantiles[_Q90_INDEX],
             positive_mean_mwh=float(np.mean(totals)),
             wind_share=_mean_wind_share(positives),
         )
@@ -600,9 +612,9 @@ class LinearFit:
             [
                 HourEstimates(
                     occurrence_probability=float(probability[index]),
-                    q10=float(knots[0][index]),
-                    q50=float(knots[1][index]),
-                    q90=float(knots[2][index]),
+                    q10=float(knots[_Q10_INDEX][index]),
+                    q50=float(knots[_Q50_INDEX][index]),
+                    q90=float(knots[_Q90_INDEX][index]),
                     positive_mean_mwh=float(mean[index]),
                     wind_share=self.wind_share,
                 )
@@ -782,9 +794,9 @@ class ForestFit:
             [
                 HourEstimates(
                     occurrence_probability=float(probability[index, positive_column]),
-                    q10=float(knots[index, 0]),
-                    q50=float(knots[index, 1]),
-                    q90=float(knots[index, 2]),
+                    q10=float(knots[index, _Q10_INDEX]),
+                    q50=float(knots[index, _Q50_INDEX]),
+                    q90=float(knots[index, _Q90_INDEX]),
                     positive_mean_mwh=float(mean[index]),
                     wind_share=self.wind_share,
                 )
@@ -881,7 +893,7 @@ class LightGbmRung:
     #: Pooled out-of-fold predictions, for the reliability curve and the risk
     #: edges. :func:`train_fold` requires it and this rung does not fabricate one.
     pool: OutOfFoldPool
-    config: ModelConfig = MODEL_CONFIG_V1
+    config: ModelConfig = MODEL_CONFIG_V2
     #: ``|B(s, h)|`` for the matched background :func:`train_fold` freezes into
     #: the bundle. The ladder scores forecasts and never attributions, so this
     #: rung has no use for the sample — but the artifact it fits is the served

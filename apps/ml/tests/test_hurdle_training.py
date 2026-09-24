@@ -253,11 +253,13 @@ def test_all_seven_estimators_and_mu_sub_are_fitted(trained: TrainedFold) -> Non
     """Seven, not two.
 
     `magnitude_mean` exists so the expectation is not the median. `magnitude_p02`
-    exists so the *composed* P10 is an interpolated quantile rather than the flat
-    below the first knot — composition asks ``Q_pos`` for
-    ``(0.10 − (1 − p)) / p``, which is under 0.10 on every row that states a
-    floor, so with 0.10 as the first knot the served floor never interpolated at
-    all. `mixture.FITTED_ALPHAS` carries the argument.
+    exists so the *composed* P10 is an interpolated quantile rather than a flat —
+    composition asks ``Q_pos`` for ``(0.10 − (1 − p)) / p``, which is under 0.10
+    on every row that states a floor, so with 0.10 as the first knot the served
+    floor never interpolated at all. A second sub-knot at 0.05 was tried and
+    removed: it cost `p10_calibration_excess` accuracy rather than buying it
+    (0.0025 without it against 0.0136 with it, gate_early F6).
+    `mixture.FITTED_ALPHAS` carries the argument.
     """
     estimators = trained.bundle.estimators()
     assert tuple(estimators) == ESTIMATOR_FIELDS

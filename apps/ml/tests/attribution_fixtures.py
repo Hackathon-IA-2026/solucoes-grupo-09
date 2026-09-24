@@ -235,7 +235,7 @@ class FixtureComposition:
             centre = self.threshold_mw + abs(score)
             quantiles = MagnitudeQuantiles.from_boosters(
                 q02=max(0.0, centre - 4.0),
-                q10=max(0.0, centre - 3.0),
+                                q10=max(0.0, centre - 3.0),
                 q50=centre,
                 q90=centre + 5.0,
             )
