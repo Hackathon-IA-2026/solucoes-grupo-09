@@ -15,6 +15,7 @@
  * export is fixed for the life of the process and visitors are waiting.
  */
 import { join, normalize } from "node:path";
+import { basicAuthChallenge, basicAuthFrom, basicAuthorized } from "./scripts/basic-auth";
 import { candidatesFor, statusFor } from "./scripts/static-routing";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -26,6 +27,12 @@ const COMPRESSIBLE =
 
 /** Hashed build output — safe to cache forever. */
 const IMMUTABLE = /^\/(?:_expo|assets)\//;
+
+/** Set while the event runs; see `scripts/basic-auth.ts`. */
+const AUTH = basicAuthFrom(process.env);
+
+/** Behind a password, no shared cache (Cloudflare) may keep a copy. */
+const CACHE_SCOPE = AUTH ? "private" : "public";
 
 /**
  * Compressed bodies, computed **once** rather than once per request.
@@ -87,6 +94,10 @@ Bun.serve({
       });
     }
 
+    if (AUTH && !basicAuthorized(request.headers.get("authorization"), AUTH)) {
+      return basicAuthChallenge();
+    }
+
     // Prevent path traversal, then hand the cleaned path to the one place that
     // decides which file answers it and with what status —
     // `scripts/static-routing.ts`, which `e2e/serve-dist.ts` reads too.
@@ -107,8 +118,8 @@ Bun.serve({
           // fallback can answer an /_expo/... request with index.html, which
           // must never be cached as immutable.
           IMMUTABLE.test(`/${candidate}`)
-            ? "public, max-age=31536000, immutable"
-            : "public, max-age=0, must-revalidate",
+            ? `${CACHE_SCOPE}, max-age=31536000, immutable`
+            : `${CACHE_SCOPE}, max-age=0, must-revalidate`,
         );
         // `String.prototype.includes` on one header value, not an array scan
         // in a loop — the rule is about `array.includes()` inside iteration and
@@ -127,4 +138,4 @@ Bun.serve({
   },
 });
 
-console.log(`serving dist/ on http://0.0.0.0:${PORT}`);
+console.log(`serving dist/ on http://0.0.0.0:${PORT}${AUTH ? " behind basic auth" : ""}`);

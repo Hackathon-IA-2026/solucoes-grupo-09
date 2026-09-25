@@ -205,6 +205,9 @@ export default defineRailway(() => {
       EXPO_PUBLIC_SITE_URL: preserve(),
       PORT: preserve(),
       RAILWAY_DOCKERFILE_PATH: preserve(),
+      // The event's password; unset both to open the site again.
+      WATTSTEER_WEB_PASSWORD: preserve(),
+      WATTSTEER_WEB_USER: preserve(),
     },
   });
 
