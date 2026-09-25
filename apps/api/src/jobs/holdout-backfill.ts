@@ -81,8 +81,44 @@ export const HOLDOUT_BACKFILL_JOB_ID = "holdout-backfill:newest-frozen-fold";
  * status reads rather than one held-open request — see the poll loop below.
  * Under the old shape three hours would have been three hours of a connection
  * this deployment cuts at 300 s.
+ *
+ * **Twelve hours, and it was three.** The same failure, a second time, and that
+ * is the reason this number is now written against a measurement rather than
+ * against an argument about how much work a fold is. Measured on production
+ * 2026-09-24/25: jobs 978 and 979 were enqueued at 22:06 and failed at 01:06
+ * with `the backfill did not finish inside 10800000 ms`, while
+ * `/internal/backfill/holdout/{latest,F4}` still answered `running` at
+ * **11 015 s** — three hours and four minutes — and went on to finish. Its
+ * report carries ninety-one publications with `incomplete_days: []`, and the
+ * picker's own 120-day window went from seven replayable days to forty-one.
+ * So the run was healthy at every moment the queue called it failed.
+ *
+ * `HOLDOUT_BACKFILL_LONGEST_HEALTHY_MS` below is that observation, and the
+ * job's test asserts this ceiling clears it with a factor of two. The factor
+ * is the point: 11 015 s is a **lower bound**, not a duration — the run was
+ * still going when the reading was taken and nothing recorded the instant it
+ * stopped, so its true length is somewhere above that and was not measured.
+ * A ceiling set just over the observation would be a third guess dressed as
+ * evidence. Twelve hours is still deep inside a weekly cadence, and the wait
+ * costs a status read every thirty seconds.
+ *
+ * **If this fires again, raise the shape and not the number.** Twice now a
+ * wall-clock ceiling has recorded work that was running and would complete as
+ * a failure, and a third repeat is that pattern rather than a fold that got
+ * bigger. The run is attachable — `apps/ml` answers
+ * `HOLDOUT_BACKFILL_IN_PROGRESS` and the status route keeps serving it — so
+ * what a longer run actually wants is a hand-off the queue can express, not
+ * another hour.
  */
-export const HOLDOUT_BACKFILL_TIMEOUT_MS = 3 * 60 * 60_000;
+export const HOLDOUT_BACKFILL_TIMEOUT_MS = 12 * 60 * 60_000;
+
+/**
+ * The longest run observed still healthy, in milliseconds.
+ *
+ * Not a tuning knob — a recorded measurement, kept beside the ceiling so the
+ * test can compare the two. See the paragraph above for where it comes from.
+ */
+export const HOLDOUT_BACKFILL_LONGEST_HEALTHY_MS = 11_015_000;
 
 /**
  * How long any single call to the modelling service may take.

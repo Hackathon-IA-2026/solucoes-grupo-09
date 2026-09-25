@@ -6,6 +6,7 @@ import type { HoldoutBackfill } from "../src/forecast/backfill.js";
 import {
   createHoldoutBackfiller,
   HOLDOUT_BACKFILL_JOB_ID,
+  HOLDOUT_BACKFILL_LONGEST_HEALTHY_MS,
   HOLDOUT_BACKFILL_PATH,
   HOLDOUT_BACKFILL_PATTERN,
   HOLDOUT_BACKFILL_TIME_ZONE,
@@ -374,11 +375,26 @@ describe("the schedule", () => {
     expect(schedules[0]?.payload).toEqual({ kind: "holdout_backfill", payload: {} });
   });
 
-  it("waits long enough for a fold to be fitted", () => {
-    // A fold is six LightGBM fits over two and a half years of hourly rows for
-    // four subsystems, twice. Five seconds is the interactive budget and would
-    // report a working backfill as an outage every week.
-    expect(HOLDOUT_BACKFILL_TIMEOUT_MS).toBeGreaterThanOrEqual(30 * 60_000);
+  it("waits longer than the longest run measured still healthy", () => {
+    /*
+      This asserted `>= 30 min`, which both ceilings that have since been
+      raised satisfied — forty minutes and three hours — so it could not catch
+      the only defect this constant has ever had: being shorter than a run that
+      was working. It compares against the measurement now.
+
+      `HOLDOUT_BACKFILL_LONGEST_HEALTHY_MS` is production 2026-09-24/25: still
+      `running` at 11 015 s, against a ceiling of 10 800 s, and it finished.
+      A ceiling at or below that is one the queue has already been observed
+      to fail a healthy run at.
+    */
+    expect(HOLDOUT_BACKFILL_TIMEOUT_MS).toBeGreaterThan(
+      HOLDOUT_BACKFILL_LONGEST_HEALTHY_MS,
+    );
+    // And headroom, because the observation is a lower bound: the run was
+    // still going when it was taken, so its true length is longer than this.
+    expect(HOLDOUT_BACKFILL_TIMEOUT_MS).toBeGreaterThanOrEqual(
+      2 * HOLDOUT_BACKFILL_LONGEST_HEALTHY_MS,
+    );
   });
 
   it("is a task the worker's one dispatcher carries", async () => {
