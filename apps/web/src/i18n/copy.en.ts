@@ -1718,11 +1718,6 @@ export const en = {
       fewerDays: "Show fewer",
       noDays: "No day on this list has a recorded forecast the gateway can replay today.",
       // --- forecast accuracy: item 3 of the Time Machine brief ---
-      accuracyTitle: "Did the forecast hold?",
-      accuracySubtitle: "What the system said the day before, against what ONS settled",
-      accuracyForecast: "Forecast (P50)",
-      accuracySettled: "Settled",
-      accuracyError: "Error",
       accuracyPlacement: {
         inside:
           "The day settled inside the P10–P90 band ({p10}–{p90} MWh), which is where the forecast said it would land.",

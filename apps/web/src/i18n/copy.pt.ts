@@ -1455,11 +1455,6 @@ export const pt: Copy = {
       noDays:
         "Nenhum dia desta lista tem previsão gravada que o gateway possa reproduzir hoje.",
       // --- a acurácia da previsão, item 3 do briefing da máquina do tempo ---
-      accuracyTitle: "A previsão se sustentou?",
-      accuracySubtitle: "O que o sistema dizia na véspera, contra o que o ONS liquidou",
-      accuracyForecast: "Previsto (P50)",
-      accuracySettled: "Liquidado",
-      accuracyError: "Erro",
       accuracyPlacement: {
         inside:
           "O dia liquidou dentro da faixa P10–P90 ({p10}–{p90} MWh), que é onde a previsão dizia que cairia.",

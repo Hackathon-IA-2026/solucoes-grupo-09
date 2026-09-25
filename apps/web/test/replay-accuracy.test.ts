@@ -1,9 +1,17 @@
 /**
- * The Time Machine's accuracy panel, and the statistic it refuses to invent.
+ * The Time Machine's deviation card, and the statistic it refuses to invent.
  *
  * The brief asks for "Acurácia: 49%". One day cannot produce one, and the
  * interesting half of this feature is the arithmetic it does *not* do — so the
  * placement function and the refusal are both pinned here.
+ *
+ * The surface used to be `components/app/replay/accuracy-panel.tsx`, which the
+ * deleted `/app/replay` screen rendered. The dashboard states the same three
+ * figures on its `kpi-deviation` card, so that card is what this guard reads
+ * now — **its slice**, not the whole screen. Scoped deliberately: the row
+ * beside it prints coverage through `f.percent`, which is a fraction the gate
+ * measured over a fold and is exactly the honest statistic this file argues
+ * for. A guard over the whole file would fire on the good number.
  */
 
 import { describe, expect, it } from "bun:test";
@@ -45,20 +53,34 @@ describe("where a settled day fell against its band", () => {
 describe("the panel invents no accuracy percentage", () => {
   // Both halves: the view and the arithmetic it delegates to. A division moved
   // from one into the other would otherwise slip past this.
+  const screen = readFileSync(
+    join(import.meta.dir, "..", "src", "app", "app", "time-machine.tsx"),
+    "utf8",
+  );
+  /*
+    From the start of `Headline` to the card *after* the deviation one. Both
+    ends are load-bearing: the arithmetic (`placementOf`, `forecastError`) runs
+    in the function body above the JSX, so a slice of the card alone would read
+    the rendering and miss the division it is looking for; and stopping at
+    `kpi-coverage` keeps the honest `f.percent` out, since that card's figure
+    is the gate's measured coverage.
+  */
+  const opens = screen.indexOf("function Headline(");
+  const card = screen.slice(opens, screen.indexOf('testID="kpi-coverage"', opens));
   const source = [
-    join(
-      import.meta.dir,
-      "..",
-      "src",
-      "components",
-      "app",
-      "replay",
-      "accuracy-panel.tsx",
-    ),
-    join(import.meta.dir, "..", "src", "lib", "replay-accuracy.ts"),
-  ]
-    .map((path) => readFileSync(path, "utf8"))
-    .join("\n");
+    card,
+    readFileSync(join(import.meta.dir, "..", "src", "lib", "replay-accuracy.ts"), "utf8"),
+  ].join("\n");
+
+  it("found the card it is guarding", () => {
+    // The slice is taken by string search, so a renamed testID would silently
+    // leave `card` empty and every assertion below would pass over nothing.
+    expect(opens).toBeGreaterThan(-1);
+    expect(card).toContain("placementOf");
+    expect(card).toContain("forecastError");
+    expect(card).toContain("accuracyPlacement");
+    expect(card).not.toContain("kpi-coverage");
+  });
 
   it("divides nothing to make a score", () => {
     /*
