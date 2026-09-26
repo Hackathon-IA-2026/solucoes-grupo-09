@@ -93,3 +93,27 @@ describe("weather · the free tier's allowance is counted, not discovered", () =
     expect(weighted.weightedUnits).toBeGreaterThan(unweighted.weightedUnits);
   });
 });
+
+describe("a backfill walks its window oldest first", () => {
+  // `writeWeatherForecast` never lets a key's publication time go backwards,
+  // so the order slots are fetched in decides which runs survive: newest
+  // first keeps one run per hour and drops every older vintage the gate would
+  // read. The backfill therefore asks for the other order, and the default
+  // stays the live sweep's.
+  it("puts the oldest scheduled run first and the newest last", () => {
+    const days = targetDays("2026-07-01", "2026-07-03");
+    const slots = plannedSlots(days, ["00Z", "12Z"], "oldest_first");
+    const times = slots.map((slot) => slot.scheduled.getTime());
+    expect([...times].sort((a, b) => a - b)).toEqual(times);
+    expect(slots.at(0)?.scheduled.getTime()).toBeLessThan(slots.at(-1)?.scheduled.getTime() ?? 0);
+  });
+
+  it("is the exact reverse of the live sweep's order", () => {
+    const days = targetDays("2026-07-01", "2026-07-03");
+    const newest = plannedSlots(days, ["00Z", "12Z"]);
+    const oldest = plannedSlots(days, ["00Z", "12Z"], "oldest_first");
+    expect(oldest.map((slot) => slot.scheduled.getTime())).toEqual(
+      [...newest].reverse().map((slot) => slot.scheduled.getTime()),
+    );
+  });
+});
