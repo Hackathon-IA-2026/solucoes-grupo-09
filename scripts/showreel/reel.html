@@ -1,0 +1,459 @@
+<!doctype html>
+<!--
+  WattSteer — 30-second showreel.
+
+  Every frame is a pure function of `t`: `window.render(t)` places the camera,
+  the layers and the type, and render.mjs steps it at 60 fps and screenshots
+  each frame. No CSS animation and no timers, because a real-time animation
+  recorded by a screenshot loop drifts with the machine's load, and a reel
+  whose cuts land a frame late on a busy laptop is not one you can iterate on.
+
+  The screens are real captures of the live product (capture.mjs), in CSS
+  pixels of a 1600×900 viewport: the camera works in those coordinates, and
+  boxes.json carries the measured rects of every card it lands on, so a layout
+  change moves the camera with it instead of pointing at the wrong card.
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=block" rel="stylesheet">
+<style>
+  :root { --bg:#131316; --lime:#d4f54a; --violet:#8b6cf6; --red:#ef6b5b; --ink:#f4f4f5; --mute:#8a8a93; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--bg); }
+  body { font-family:"Inter Tight",system-ui,sans-serif; color:var(--ink); -webkit-font-smoothing:antialiased; }
+  #stage { position:absolute; inset:0; overflow:hidden; background:var(--bg); }
+  .persp { position:absolute; inset:0; perspective:2200px; }
+  .shot { position:absolute; left:0; top:0; width:1600px; height:900px; transform-origin:0 0; will-change:transform,opacity; }
+  .shot img { width:100%; height:100%; display:block; }
+  .frame3d { position:absolute; inset:0; transform-style:preserve-3d; }
+  .abs { position:absolute; }
+  .type { position:absolute; left:0; right:0; text-align:center; font-weight:800; letter-spacing:-0.045em; line-height:.95; }
+  /* the top padding keeps capital accents (É, Ã) inside the clip */
+  .mask { display:inline-block; overflow:hidden; vertical-align:bottom; padding:.2em .04em .08em; margin-top:-.2em; }
+  .mask > span { display:inline-block; will-change:transform; }
+  .tag { font-family:"JetBrains Mono",monospace; font-weight:700; font-size:18px; letter-spacing:.18em; text-transform:uppercase; }
+  #spot { position:absolute; border-radius:18px; box-shadow:0 0 0 4000px rgba(8,8,10,.62); border:2px solid var(--lime); pointer-events:none; }
+  #ripple { position:absolute; border-radius:50%; border:3px solid var(--lime); }
+  #cursor { position:absolute; width:26px; height:26px; }
+  #grain { position:absolute; inset:-50%; opacity:.07; mix-blend-mode:overlay; pointer-events:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+  #vignette { position:absolute; inset:0; pointer-events:none; background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%); }
+  .hud { position:absolute; font-family:"JetBrains Mono",monospace; font-size:15px; letter-spacing:.14em; color:rgba(244,244,245,.72); text-transform:uppercase; }
+  .crop { position:absolute; width:28px; height:28px; border-color:rgba(244,244,245,.45); border-style:solid; }
+  #bar { position:absolute; left:64px; right:64px; bottom:44px; height:3px; background:rgba(255,255,255,.12); border-radius:2px; }
+  #barFill { position:absolute; left:0; top:0; bottom:0; background:var(--lime); border-radius:2px; }
+  .tick { position:absolute; top:-4px; width:2px; height:11px; background:rgba(255,255,255,.35); }
+  #sweep { position:absolute; inset:0; pointer-events:none; mix-blend-mode:screen; }
+  .chip { position:absolute; display:flex; align-items:baseline; gap:18px; padding:18px 28px; border-radius:20px;
+    background:rgba(14,14,16,.86); border:1px solid rgba(212,245,74,.35); backdrop-filter:blur(12px); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="persp"><div class="frame3d" id="rig"></div></div>
+  <div id="spot"></div>
+  <div id="ripple"></div>
+  <svg id="cursor" viewBox="0 0 26 26"><title>Cursor</title><path d="M3 2 L3 21 L8 16 L11.5 24 L15 22.5 L11.5 14.8 L18.5 14.8 Z" fill="#fff" stroke="#0e0e10" stroke-width="1.6" stroke-linejoin="round"/></svg>
+  <div id="typeLayer"></div>
+  <div id="sweep"></div>
+  <div id="vignette"></div>
+  <div id="grain"></div>
+  <div id="hud">
+    <div class="crop" style="left:40px;top:40px;border-width:2px 0 0 2px"></div>
+    <div class="crop" style="right:40px;top:40px;border-width:2px 2px 0 0"></div>
+    <div class="crop" style="left:40px;bottom:40px;border-width:0 0 2px 2px"></div>
+    <div class="crop" style="right:40px;bottom:40px;border-width:0 2px 2px 0"></div>
+    <div class="hud" id="chapter" style="left:84px;top:52px"></div>
+    <div class="hud" id="tc" style="right:84px;top:52px"></div>
+    <div id="bar"><div id="barFill"></div></div>
+  </div>
+</div>
+<script>"use strict";
+const W = 1920, H = 1080, BASE = W / 1600;
+const B = window.BOXES;           // injected by render.mjs from boxes.json
+const $ = (id) => document.getElementById(id);
+
+// ── maths ────────────────────────────────────────────────────────────────
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const E = {
+  lin: (k) => k,
+  outExpo: (k) => (k >= 1 ? 1 : 1 - 2 ** (-10 * k)),
+  inExpo: (k) => (k <= 0 ? 0 : 2 ** (10 * k - 10)),
+  inOutCubic: (k) => (k < .5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2),
+  inOutQuint: (k) => (k < .5 ? 16 * k ** 5 : 1 - (-2 * k + 2) ** 5 / 2),
+  inOutExpo: (k) => (k <= 0 ? 0 : k >= 1 ? 1 : k < .5 ? 2 ** (20 * k - 10) / 2 : (2 - 2 ** (-20 * k + 10)) / 2),
+  outBack: (k) => { const c = 1.9; return 1 + (c + 1) * (k - 1) ** 3 + c * (k - 1) ** 2; },
+};
+
+// ── the camera: a centre (x, y) in page CSS px and a zoom over full-frame ──
+const cx = (r) => r.x + r.width / 2, cy = (r) => r.y + r.height / 2;
+function camOn(r, pad = 1.25) {
+  const z = Math.max(1, Math.min(1600 / (r.width * pad), 900 / (r.height * pad)));
+  return { x: cx(r), y: cy(r), z };
+}
+const FULL = { x: 800, y: 450, z: 1 };
+function mixCam(a, b, k) {
+  // Zoom interpolates in log space, so a 1× → 4× move feels even across its length.
+  return { x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k), z: Math.exp(lerp(Math.log(a.z), Math.log(b.z), k)) };
+}
+// The camera may run past the page edge by SLACK: the drawer buttons sit 13 px
+// above the viewport's bottom, and a hard clamp left them cut off at 3× zoom
+// with the cursor clicking off-screen. The stage colour matches the app's.
+const SLACK = 110;
+function bounded(c) {
+  const hw = 800 / c.z, hh = 450 / c.z;
+  return { x: clamp(c.x, hw - SLACK, 1600 - hw + SLACK), y: clamp(c.y, hh - SLACK, 900 - hh + SLACK), z: c.z };
+}
+const pageToScreen = (c, px, py) => ({ x: W / 2 + (px - c.x) * BASE * c.z, y: H / 2 + (py - c.y) * BASE * c.z });
+
+// ── layers: a pool of <div class=shot>, one per source image ────────────
+const SRC = ["landing", "map-N", "map-NE", "map-SE", "map-S", "app-NE", "app-NE-btn", "explain", "mitigate", "tm"];
+const layers = {};
+for (const s of SRC) {
+  const d = document.createElement("div");
+  d.className = "shot";
+  d.innerHTML = `<img src="output/shots/${s}.png">`;
+  $("rig").appendChild(d);
+  layers[s] = d;
+}
+function place(name, cam, { opacity = 1, extra = "", blur = 0, clip = "" } = {}) {
+  const el = layers[name];
+  el.style.display = opacity > 0 ? "block" : "none";
+  if (opacity <= 0) return;
+  const c = bounded(cam);
+  el.style.opacity = opacity;
+  el.style.transform = `translate(${W / 2}px,${H / 2}px) ${extra} scale(${BASE * c.z}) translate(${-c.x}px,${-c.y}px)`;
+  el.style.filter = blur > 0.05 ? `blur(${blur}px)` : "none";
+  el.style.clipPath = clip;
+  el.style.zIndex = Math.round(opacity * 10) + (clip ? 20 : 0);
+}
+
+// ── type ─────────────────────────────────────────────────────────────────
+// Lines are built once and only transformed per frame.
+function line(html, style) {
+  const d = document.createElement("div");
+  d.className = "type";
+  d.setAttribute("style", style);
+  d.innerHTML = html;
+  $("typeLayer").appendChild(d);
+  return d;
+}
+const words = (s, cls = "") => s.split(" ").map((w) => `<span class="mask"><span class="${cls}">${w}</span></span>`).join(" ");
+// Mask reveal: each word rises out of its own clip, staggered.
+function reveal(el, t, a, b, { stagger = 0.045, dur = 0.5, out = null } = {}) {
+  const inner = el.querySelectorAll(".mask > span");
+  const vis = t >= a - 0.01 && t <= b;
+  el.style.display = vis ? "block" : "none";
+  if (!vis) return;
+  inner.forEach((s, i) => {
+    const kIn = E.outExpo(seg(t, a + i * stagger, a + i * stagger + dur));
+    const kOut = out ? E.inExpo(seg(t, b - out, b)) : 0;
+    s.style.transform = `translateY(${(1 - kIn) * 110 - kOut * 110}%)`;
+  });
+}
+
+// ── the beats ────────────────────────────────────────────────────────────
+// One table, in seconds. Every section below reads its window from here, so
+// retiming the reel is editing a duration, not hunting for constants — the
+// first cut was 15 s with 0.46 s per card, too fast to read a figure.
+const BEATS = [
+  ["problem", 3.4, "01 · Problema"],
+  ["solution", 3.0, "02 · Solução"],
+  ["map", 4.2, "03 · Mapa"],
+  ["cards", 5.6, "04 · Cinco perguntas"],
+  ["drawers", 4.4, "05 · Explicar · O que fazer"],
+  ["replay", 6.2, "06 · Máquina do tempo"],
+  ["outro", 3.2, "07 · WattSteer"],
+];
+const AT = {};
+{ let s = 0; for (const [k, d, label] of BEATS) { AT[k] = { a: s, b: s + d, d, label }; s += d; } }
+const DUR = Object.values(AT).at(-1).b;
+window.DUR = DUR;
+
+const T = {
+  pTag: line(`<span class="tag" style="color:#ef6b5b">01 · Problema</span>`, "top:300px"),
+  p1: line(words("O ONS corta vento e sol."), "top:380px;font-size:132px"),
+  p2: line(words("Você descobre depois."), "top:540px;font-size:132px;color:#ef6b5b"),
+  num: line("", "top:340px;font-size:230px;font-variant-numeric:tabular-nums;color:#d4f54a"),
+  numSub: line(words("MWh esperados em corte amanhã."), "top:610px;font-size:52px;font-weight:600;letter-spacing:-0.02em"),
+  numQ: line(words("Vai cortar? Quanto? Quando? Por quê? Onde?"), "top:690px;font-size:40px;font-weight:600;letter-spacing:-0.02em;color:#8a8a93"),
+  sTag: line(`<span class="tag" style="color:#d4f54a">02 · Solução</span>`, "top:108px"),
+  v1: line(words("Não é vitamina."), "top:330px;font-size:150px;color:#8a8a93"),
+  v2: line(words("É analgésico."), "top:500px;font-size:150px;color:#d4f54a"),
+  goTag: line(`<span class="tag" style="color:#d4f54a">Onde queremos chegar</span>`, "top:380px"),
+  go: line(words("Nenhum MWh cortado sem aviso."), "top:450px;font-size:104px"),
+  logo: line(`<img src="output/shots/logo.png" style="height:120px">`, "top:390px"),
+  url: line(words("wattsteer.com"), "top:560px;font-size:56px;font-weight:600;letter-spacing:-0.02em"),
+  claim: line(words("Curtailment do dia seguinte · rede brasileira"), "top:650px;font-size:30px;font-weight:500;letter-spacing:0;color:#8a8a93"),
+};
+const strike = document.createElement("div");
+strike.className = "abs";
+strike.style.cssText = "height:12px;background:#ef6b5b;border-radius:6px;transform-origin:left center";
+$("typeLayer").appendChild(strike);
+
+const chip = document.createElement("div");
+chip.className = "chip";
+chip.innerHTML = `<span id="chipCode" style="font-size:64px;font-weight:800;letter-spacing:-.04em;color:#d4f54a"></span><span id="chipName" class="tag" style="color:#f4f4f5"></span><span id="chipVal" style="font-size:40px;font-weight:700;font-variant-numeric:tabular-nums"></span>`;
+$("typeLayer").appendChild(chip);
+const bigQ = line("", "top:0;left:auto;right:auto;text-align:left;font-size:120px;color:#d4f54a;text-shadow:0 6px 40px rgba(0,0,0,.9),0 2px 8px rgba(0,0,0,.8)");
+
+BEATS.slice(1).forEach(([k]) => {
+  const d = document.createElement("div");
+  d.className = "tick"; d.style.left = `${(AT[k].a / DUR) * 100}%`; $("bar").appendChild(d);
+});
+
+// The value is the day's median — the QUANTO? card's figure — and says so:
+// unlabelled, "200,1k" beside the list's expectation of 197,1k reads as the
+// same quantity disagreeing with itself.
+const REGIONS = [
+  ["map-N", "N", "Norte", "P50 3.213 MWh"], ["map-NE", "NE", "Nordeste", "P50 200,1k MWh"],
+  ["map-SE", "SE/CO", "Sudeste/Centro-Oeste", "P50 42,9k MWh"], ["map-S", "S", "Sul", "P50 24,5k MWh"],
+];
+const CARDS = ["VAI CORTAR?", "QUANTO?", "QUANDO?", "POR QUÊ?", "ONDE?"];
+const KPIS = [
+  ["kpi-forecast", "O que previmos"], ["kpi-settled", "O que aconteceu"], ["kpi-deviation", "Desvio"],
+  ["kpi-coverage", "Histórico"], ["kpi-fleet", "A frota"],
+];
+const pad2 = (n) => String(n).padStart(2, "0");
+const WHIP = 0.34;   // every card-to-card move, whatever the hold around it
+
+function spotlight(cam, r, opacity) {
+  const c = bounded(cam), a = pageToScreen(c, r.x, r.y), b = pageToScreen(c, r.x + r.width, r.y + r.height);
+  const s = $("spot");
+  s.style.display = "block"; s.style.opacity = opacity;
+  s.style.left = `${a.x - 8}px`; s.style.top = `${a.y - 8}px`;
+  s.style.width = `${b.x - a.x + 16}px`; s.style.height = `${b.y - a.y + 16}px`;
+}
+function label(text, local, size, top) {
+  bigQ.style.display = "block";
+  bigQ.innerHTML = `<span class="mask"><span>${text}</span></span>`;
+  bigQ.style.left = "96px"; bigQ.style.top = `${top}px`; bigQ.style.fontSize = `${size}px`;
+  bigQ.querySelector(".mask > span").style.transform = `translateY(${(1 - E.outExpo(clamp((local - 0.12) / 0.35))) * 110}%)`;
+}
+// A tour of rects: hold on each for `slot`, whip between them in WHIP.
+function tour(t, a, slot, rects, pad, from) {
+  const i = clamp(Math.floor((t - a) / slot), 0, rects.length - 1);
+  const local = clamp(t - (a + i * slot), 0, slot);
+  const src = i === 0 ? from : camOn(rects[i - 1], pad);
+  const cam = mixCam(src, camOn(rects[i], pad), E.inOutExpo(clamp(local / WHIP)));
+  // a slow push through the hold keeps a still card alive
+  cam.z *= 1 + 0.05 * E.inOutCubic(clamp((local - WHIP) / (slot - WHIP)));
+  return { i, local, cam };
+}
+
+let prevCam = null;
+function render(t) {
+  for (const s of SRC) layers[s].style.display = "none";
+  for (const k in T) T[k].style.display = "none";
+  for (const el of [bigQ, strike, chip, $("spot"), $("ripple"), $("cursor")]) el.style.display = "none";
+  $("sweep").style.background = "none";
+
+  let cam = null, camLayer = null;
+
+  // 01 PROBLEMA — two lines, then the figure the app printed for tomorrow
+  { const { a, b } = AT.problem;
+    if (t < b) {
+      reveal(T.pTag, t, a + 0.05, a + 1.7, { out: 0.2 });
+      reveal(T.p1, t, a + 0.1, a + 1.7, { out: 0.25 });
+      reveal(T.p2, t, a + 0.6, a + 1.7, { out: 0.25 });
+      T.p1.style.transform = T.p2.style.transform = `scale(${1 + (t - a) * 0.025})`;
+      const n0 = a + 1.7;
+      if (t >= n0) {
+        T.num.style.display = "block";
+        const k = E.outExpo(seg(t, n0, n0 + 0.9)), out = E.inExpo(seg(t, b - 0.25, b));
+        T.num.textContent = `${(271.7 * k).toFixed(1).replace(".", ",")}k`;
+        T.num.style.opacity = 1 - out;
+        T.num.style.transform = `translateY(${(1 - E.outExpo(seg(t, n0, n0 + 0.4))) * 60}px) scale(${1 + out * 0.4})`;
+        T.num.style.filter = `blur(${out * 14}px)`;
+        reveal(T.numSub, t, n0 + 0.2, b, { stagger: 0.03, out: 0.18 });
+        reveal(T.numQ, t, n0 + 0.55, b, { stagger: 0.05, out: 0.18 });
+      }
+    } }
+
+  // 02 SOLUÇÃO — the landing hero swings in from 3D and settles, then pushes in
+  { const { a, b } = AT.solution;
+    if (t >= a - 0.1 && t < b + 0.1) {
+      const k = E.outExpo(seg(t, a - 0.1, a + 1.0));
+      const push = E.inOutCubic(seg(t, a + 0.8, b + 0.1));
+      const c = mixCam(FULL, { x: 800, y: 330, z: 1.6 }, push);
+      place("landing", c, {
+        opacity: seg(t, a - 0.1, a + 0.2),
+        extra: `translateZ(${lerp(-900, 0, k)}px) rotateX(${lerp(38, 0, k)}deg) rotateY(${lerp(-24, 0, k)}deg)`,
+        blur: E.inExpo(seg(t, b - 0.2, b + 0.1)) * 18,
+      });
+      reveal(T.sTag, t, a + 0.35, b - 0.1, { out: 0.2 });
+      const sw = seg(t, a + 1.1, a + 2.0);
+      if (sw > 0 && sw < 1) $("sweep").style.background = `linear-gradient(105deg, transparent ${sw * 140 - 30}%, rgba(212,245,74,.16) ${sw * 140 - 12}%, transparent ${sw * 140}%)`;
+    } }
+
+  // 03 MAPA — N → NE → SE/CO → S; the five cards re-scope with the map
+  { const { a, b } = AT.map;
+    if (t >= a && t < b) {
+      const k = E.outExpo(seg(t, a, a + 0.6)), drift = seg(t, a, b);
+      // Wide on purpose: the cards above re-scope with each region, and at 1.3×
+      // they were cropped out of the very beat that is about them.
+      const c = mixCam({ x: 800, y: 450, z: 1.7 }, { x: 800, y: lerp(450, 470, drift), z: lerp(1.0, 1.08, drift) }, k);
+      const t0 = a + 0.25, slot = (b - t0 - 0.1) / 4;
+      const i = clamp(Math.floor((t - t0) / slot), 0, 3), local = t - (t0 + i * slot);
+      if (t < t0) place("map-N", c, { blur: (1 - k) * 12 });
+      else REGIONS.forEach(([src], j) => {
+        const o = j === i ? 1 : j === i - 1 && local < 0.1 ? 1 - local / 0.1 : 0;
+        if (o > 0) place(src, c, { opacity: o, blur: (1 - k) * 12 });
+      });
+      const f = t >= t0 ? Math.max(0, 1 - local / 0.18) : 0;
+      if (f > 0) $("sweep").style.background = `radial-gradient(circle at 52% 55%, rgba(212,245,74,${0.2 * f}), transparent 55%)`;
+      const [, code, name, val] = REGIONS[i];
+      const ci = E.outBack(seg(t, a + 0.3, a + 0.65)), co = E.inExpo(seg(t, b - 0.2, b));
+      chip.style.display = "flex";
+      chip.style.left = "96px"; chip.style.top = "860px";
+      chip.style.opacity = ci * (1 - co);
+      chip.style.transform = `translateY(${(1 - ci) * 40}px) scale(${1 + f * 0.04})`;
+      $("chipCode").textContent = code; $("chipName").textContent = name; $("chipVal").textContent = val;
+    } }
+
+  // 04 CINCO PERGUNTAS — a tour of the cards under a spotlight
+  { const { a, b } = AT.cards;
+    const out = 0.35;                                    // the whip down to the buttons
+    if (t >= a && t < b) {
+      const t0 = a + 0.1, slot = (b - out - t0) / 5;
+      const from = { x: 790, y: 540, z: 1.45 };
+      const { i, local, cam: c } = tour(t, t0, slot, CARDS.map((k) => B[k]), 1.6, from);
+      cam = t < t0 ? from : c; camLayer = "app-NE";
+      if (t >= t0 && t < b - out) {
+        spotlight(cam, B[CARDS[i]], seg(t, t0, t0 + 0.15));
+        label(CARDS[i], local, 132, 812);
+      }
+      if (t >= b - out) {
+        const k = E.inOutExpo(seg(t, b - out, b));
+        cam = mixCam(camOn(B["ONDE?"], 1.6), camOn(B.explainBtn, 3.2), k);
+        camLayer = k > 0.5 ? "app-NE-btn" : "app-NE";
+      }
+    } }
+
+  // 05 EXPLICAR · O QUE FAZER — click, the drawer opens as a circle from the
+  // button, the camera eases back and drifts down through it
+  { const { a, b } = AT.drawers;
+    if (t >= a && t < b) {
+      const half = (b - a) / 2;
+      const beats = [["explainBtn", "explain", "Explicar", 3.2], ["mitigateBtn", "mitigate", "O que fazer?", 3.4]];
+      const j = t < a + half ? 0 : 1;
+      const [btnKey, shotName, text, z] = beats[j];
+      const s0 = a + j * half, open = s0 + 0.3, btn = B[btnKey];
+      if (t < open) {
+        cam = j === 0 ? camOn(btn, z) : mixCam({ x: 800, y: 560, z: 1.3 }, camOn(btn, z), E.inOutExpo(seg(t, s0, s0 + 0.2)));
+        camLayer = "app-NE-btn";
+        if (t >= s0 + 0.08) click(cam, btn, t, open - 0.12);
+      } else {
+        const k = E.inOutQuint(seg(t, open, open + 0.5));
+        const read = E.inOutCubic(seg(t, open + 0.4, s0 + half));
+        const c = mixCam(camOn(btn, z), { x: 800, y: lerp(400, 560, read), z: lerp(1.15, 1.3, read) }, k);
+        place("app-NE-btn", c, {});
+        const o = pageToScreen(bounded(c), cx(btn), cy(btn));
+        place(shotName, c, { clip: `circle(${E.outExpo(seg(t, open, open + 0.55)) * 2400}px at ${o.x}px ${o.y}px)` });
+        label(text, t - open, 96, 900);
+      }
+    } }
+
+  // 06 MÁQUINA DO TEMPO — the tab, a zoom-through, then the five figures
+  { const { a, b } = AT.replay;
+    if (t >= a && t < b) {
+      const tab = B.tmTab, dive = a + 0.55, land = a + 0.75, t0 = a + 1.15, back = b - 0.45;
+      if (t < land) {
+        const k = E.inOutExpo(seg(t, a, a + 0.3));
+        const c = mixCam({ x: 800, y: 560, z: 1.3 }, camOn(tab, 4.2), k);
+        const z = E.inExpo(seg(t, dive, land));
+        const c2 = z > 0 ? mixCam(camOn(tab, 4.2), { x: cx(tab), y: 60, z: 14 }, z) : c;
+        place(k < 0.5 ? "mitigate" : "app-NE", c2, { opacity: 1 - z, blur: z * 20 });
+        if (t >= a + 0.25) click(bounded(c2), tab, t, a + 0.42);
+      }
+      if (t >= land - 0.1) {
+        const first = camOn(B["kpi-forecast"], 1.7);
+        let c = mixCam({ x: 800, y: 380, z: 1.0 }, first, E.outExpo(seg(t, land, t0)));
+        const slot = (back - t0) / 5;
+        let i = 0, local = 0;
+        if (t >= t0) ({ i, local, cam: c } = tour(t, t0, slot, KPIS.map(([k]) => B[k]), 1.7, first));
+        if (t >= back) c = mixCam(camOn(B["kpi-fleet"], 1.7), FULL, E.inOutCubic(seg(t, back, b)));
+        place("tm", c, { opacity: seg(t, land - 0.1, land + 0.05), blur: (1 - seg(t, land - 0.1, land + 0.15)) * 16 });
+        if (t >= t0 && t < back) {
+          spotlight(c, B[KPIS[i][0]], seg(t, t0, t0 + 0.12));
+          label(KPIS[i][1], local, 110, 830);
+        }
+      }
+    } }
+
+  // 07 — painkiller, where we are going, the lockup
+  { const { a, b } = AT.outro;
+    if (t >= a) {
+      const wipe = E.inOutExpo(seg(t, a, a + 0.25));
+      if (t < a + 0.25) place("tm", { x: 800, y: 450, z: 1 + wipe * 0.3 }, { opacity: 1 - wipe, blur: wipe * 20 });
+      const v = a + 0.15, g = a + 1.25, l = a + 2.1;
+      reveal(T.v1, t, v, g, { out: 0.15 });
+      reveal(T.v2, t, v + 0.2, g, { out: 0.15 });
+      if (t >= v + 0.4 && t < g) {
+        strike.style.display = "block";
+        strike.style.left = "900px"; strike.style.width = "560px"; strike.style.top = "405px";
+        strike.style.transform = `scaleX(${E.outExpo(seg(t, v + 0.4, v + 0.65))})`;
+        strike.style.opacity = 1 - E.inExpo(seg(t, g - 0.15, g));
+      }
+      reveal(T.goTag, t, g + 0.05, l, { out: 0.15 });
+      reveal(T.go, t, g + 0.1, l, { out: 0.15, stagger: 0.05 });
+      if (t >= l) {
+        const k = E.outBack(seg(t, l, l + 0.4));
+        T.logo.style.display = "block";
+        T.logo.style.opacity = seg(t, l, l + 0.15);
+        T.logo.style.transform = `scale(${lerp(0.7, 1, k)})`;
+        reveal(T.url, t, l + 0.15, b + 1);
+        reveal(T.claim, t, l + 0.25, b + 1, { stagger: 0.02 });
+        $("sweep").style.background = `radial-gradient(circle at 50% 44%, rgba(212,245,74,${0.1 * (1 - seg(t, l, b) * 0.5)}), transparent 45%)`;
+      }
+    } }
+
+  if (cam && camLayer) {
+    // motion blur proportional to camera speed between consecutive frames
+    let blur = 0;
+    if (prevCam) {
+      const c = bounded(cam), p = bounded(prevCam);
+      blur = clamp((Math.hypot((c.x - p.x) * c.z, (c.y - p.y) * c.z) + Math.abs(Math.log(c.z / p.z)) * 400) / 14, 0, 7);
+    }
+    place(camLayer, cam, { blur });
+    prevCam = cam;
+  } else prevCam = null;
+
+  // HUD
+  const beat = BEATS.map(([k]) => AT[k]).filter((x) => t >= x.a).pop();
+  $("chapter").textContent = `WattSteer — ${beat.label}`;
+  const f = Math.floor(t * 60);
+  $("tc").textContent = `00:${pad2(Math.floor(t))}:${pad2(Math.floor((t % 1) * 60))} · 60fps`;
+  $("barFill").style.width = `${(t / DUR) * 100}%`;
+  $("grain").style.transform = `translate(${(f * 37) % 120 - 60}px,${(f * 53) % 120 - 60}px)`;
+  $("hud").style.opacity = t > AT.outro.a ? 1 - seg(t, AT.outro.a, AT.outro.a + 0.2) : seg(t, 0, 0.3);
+  $("stage").style.opacity = 1 - E.inExpo(seg(t, DUR - 0.2, DUR));
+}
+
+function click(cam, r, t, at) {
+  const c = bounded(cam), p = pageToScreen(c, cx(r), cy(r));
+  const cur = $("cursor");
+  const k = E.outExpo(seg(t, at - 0.12, at + 0.05));
+  cur.style.display = "block";
+  cur.style.left = `${p.x + lerp(90, 6, k)}px`;
+  cur.style.top = `${p.y + lerp(70, 6, k)}px`;
+  const press = seg(t, at + 0.05, at + 0.12);
+  cur.style.transform = `scale(${1 - Math.sin(press * Math.PI) * 0.18})`;
+  const rk = seg(t, at + 0.06, at + 0.4);
+  if (rk > 0 && rk < 1) {
+    const rp = $("ripple"), R = lerp(10, 90, E.outExpo(rk));
+    rp.style.display = "block";
+    rp.style.left = `${p.x - R}px`; rp.style.top = `${p.y - R}px`;
+    rp.style.width = rp.style.height = `${R * 2}px`;
+    rp.style.opacity = 1 - rk;
+  }
+}
+window.render = render;
+window.ready = Promise.all([document.fonts.ready, ...[...document.images].map((i) => i.decode().catch(() => {}))]);
+</script>
+</body>
+</html>

@@ -11,12 +11,14 @@ the grid could not take it. Brazil curtails a great deal of it, the data is
 public, and nobody was turning that data into a number an operator could act on
 the day before.
 
-![WattSteer: the landing page beside Visão da rede, Explicar and Mitigar](.github/images/wattsteer.png)
+[![WattSteer in 30 seconds: the Visão da rede map with Nordeste selected — click to play](.github/media/wattsteer-reel.jpg)](.github/media/wattsteer-reel.mp4)
 
-The screens above are a real build reading the live gateway, which is why three
-of them say no model is promoted. That is the product working: a forecast panel
-is **absent** when there is nothing to forecast with, and the screen names the
-clause that refused rather than drawing a zero.
+Thirty seconds, captured from the live site on 26 September 2026: tomorrow's
+forecast across the four subsystems, the five questions it answers, Explicar
+and O que fazer, and the Máquina do tempo replaying 18 September in the
+Nordeste against what ONS settled. Every figure in it is one the product
+printed; [`scripts/showreel/`](scripts/showreel/) rebuilds the reel from a
+fresh capture.
 
 ## Demo
 
