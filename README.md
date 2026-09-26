@@ -11,6 +11,8 @@ the grid could not take it. Brazil curtails a great deal of it, the data is
 public, and nobody was turning that data into a number an operator could act on
 the day before.
 
+[![WattSteer em 30 segundos — clique para tocar](.github/media/wattsteer-reel.jpg)](.github/media/wattsteer-reel.mp4)
+
 ## Demo
 
 - **Live application:** https://www.wattsteer.com
