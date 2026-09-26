@@ -52,9 +52,11 @@ infra/aws/backfill.sh            # starts the background ingestion on the instan
 infra/aws/backfill.sh --status   # its last log lines
 ```
 
-ONS takes minutes. Weather is bounded by Open-Meteo's free quota: 10 to 35
-hours for the whole window from one address. The loop asks again for what the
-quota cut short, an hour later; it never works around the quota.
+ONS takes minutes (870 s for the live sweep). Weather does not fit the free
+quota: each task stops at 138 weighted units (one target day and cycle) and the
+whole history is about 1,800 of them, against 10,000 units a day. The history
+sweep fetches one slice per pass within that budget; the weather history comes
+from a dump of a database that already holds it.
 
 ## Training on the big machine
 
