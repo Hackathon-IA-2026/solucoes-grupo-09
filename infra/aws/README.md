@@ -29,6 +29,8 @@ viewer ─▶ CloudFront (HTTPS) ─▶ EC2 m7g.xlarge: Caddy ─▶ web · api 
 | `jobs/campaign.sh`, `jobs/fit_speed.py` | the arms a training run parallelises, and the benchmark that says why |
 | `dump-db.sh` | the instance's database into the bucket, for `train.sh` |
 | `install-models.sh` | a training run's artifacts (or one campaign arm's) onto the instance, keeping the previous ones |
+| `restore-state.sh` | a state release (artifacts and forecast rows, optionally the RAG corpus) onto the running instance |
+| `publish.sh` | one day-ahead publication now, outside the schedule (after installing a model between gates) |
 
 ## A new account, from nothing
 
