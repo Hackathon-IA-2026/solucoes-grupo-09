@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pillow>=10"]
+# ///
 """Publish the rendered reel as the README's media.
 
 Re-encodes output/wattsteer-reel.mp4 at CRF 23 for the repository (32 MB → 10 MB,
@@ -5,7 +9,7 @@ no visible loss on the screen captures) and cuts a poster from the map beat
 with a play button, because GitHub plays a repository video only from its blob
 view: the README shows the poster and links to the file.
 
-    python3 scripts/showreel/publish.py
+    uv run scripts/showreel/publish.py
 """
 
 import subprocess
@@ -21,7 +25,7 @@ POSTER_FRAME = HERE / "output" / "frames" / "0490.jpg"  # t = 8.17 s, NE selecte
 MEDIA.mkdir(parents=True, exist_ok=True)
 subprocess.run(
     ["ffmpeg", "-loglevel", "error", "-y", "-i", str(HERE / "output" / "wattsteer-reel.mp4"),
-     "-c:v", "libx264", "-preset", "veryslow", "-crf", "23", "-pix_fmt", "yuv420p",
+     "-c:v", "libx264", "-preset", "veryslow", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "copy",
      "-movflags", "+faststart", str(MEDIA / "wattsteer-reel.mp4")],
     check=True,
 )
