@@ -172,7 +172,8 @@ const BEATS = [
   ["cards", 5.6, "04 · Cinco perguntas"],
   ["drawers", 4.4, "05 · Explicar · O que fazer"],
   ["replay", 6.2, "06 · Máquina do tempo"],
-  ["outro", 3.2, "07 · WattSteer"],
+  ["thesis", 3.4, "07 · Tese"],
+  ["outro", 3.2, "08 · WattSteer"],
 ];
 const AT = {};
 { let s = 0; for (const [k, d, label] of BEATS) { AT[k] = { a: s, b: s + d, d, label }; s += d; } }
@@ -183,7 +184,7 @@ window.DUR = DUR;
 // score.py hears them (render.mjs writes them to output/score.json), so the
 // soundtrack cannot drift from a cut when a beat is retimed.
 const SCHED = (() => {
-  const p = AT.problem, so = AT.solution, m = AT.map, c = AT.cards, d = AT.drawers, r = AT.replay, o = AT.outro;
+  const p = AT.problem, so = AT.solution, m = AT.map, c = AT.cards, d = AT.drawers, r = AT.replay, th = AT.thesis, o = AT.outro;
   const mapT0 = m.a + 0.25, cardsOut = 0.35, cardsT0 = c.a + 0.1, half = d.d / 2;
   const rT0 = r.a + 1.15, rBack = r.b - 0.45;
   return {
@@ -193,6 +194,9 @@ const SCHED = (() => {
     cards: { t0: cardsT0, out: cardsOut, slot: (c.b - cardsOut - cardsT0) / 5, n: 5 },
     drawers: { half, opens: [0, 1].map((j) => d.a + j * half + 0.3) },
     replay: { press: r.a + 0.42, dive: r.a + 0.55, land: r.a + 0.75, t0: rT0, back: rBack, slot: (rBack - rT0) / 5, n: 5 },
+    // One cue per clause. The three land in order and the last one holds:
+    // the sentence is an escalation and the music should arrive with it.
+    thesis: { l1: th.a + 0.25, l2: th.a + 0.95, l3: th.a + 1.7 },
     outro: { v: o.a + 0.15, g: o.a + 1.25, l: o.a + 2.1 },
     whip: 0.34,
   };
@@ -209,6 +213,10 @@ const T = {
   sTag: line(`<span class="tag" style="color:#d4f54a">02 · Solução</span>`, "top:108px"),
   v1: line(words("Não é vitamina."), "top:330px;font-size:150px;color:#8a8a93"),
   v2: line(words("É analgésico."), "top:500px;font-size:150px;color:#d4f54a"),
+  thTag: line(`<span class="tag" style="color:#d4f54a">07 · Tese</span>`, "top:250px"),
+  th1: line(words("Os modelos estimam."), "top:330px;font-size:118px;color:#8a8a93"),
+  th2: line(words("A IA explica."), "top:470px;font-size:118px"),
+  th3: line(words("O operador decide."), "top:610px;font-size:118px;color:#d4f54a"),
   goTag: line(`<span class="tag" style="color:#d4f54a">Onde queremos chegar</span>`, "top:380px"),
   go: line(words("Nenhum MWh cortado sem aviso."), "top:450px;font-size:104px"),
   logo: line(`<img src="output/shots/logo.png" style="height:120px">`, "top:390px"),
@@ -412,11 +420,26 @@ function render(t) {
       }
     } }
 
-  // 07 — painkiller, where we are going, the lockup
+  // 07 TESE — three clauses, in the order the reel just showed them: the
+  // forecast, Explicar, O que fazer. Each holds once it lands, because the
+  // sentence only means something whole.
+  { const { a, b } = AT.thesis;
+    if (t >= a && t < b) {
+      const wipe = E.inOutExpo(seg(t, a, a + 0.3));
+      if (t < a + 0.3) place("tm", { x: 800, y: 450, z: 1 + wipe * 0.25 }, { opacity: 1 - wipe, blur: wipe * 18 });
+      const { l1, l2, l3 } = SCHED.thesis;
+      reveal(T.thTag, t, a + 0.1, b - 0.1, { out: 0.2 });
+      reveal(T.th1, t, l1, b - 0.1, { out: 0.18 });
+      reveal(T.th2, t, l2, b - 0.1, { out: 0.18 });
+      reveal(T.th3, t, l3, b - 0.1, { out: 0.18 });
+      // The glow arrives with the third clause, which is the one that lands.
+      const f = seg(t, l3, l3 + 0.5);
+      if (f > 0) $("sweep").style.background = `radial-gradient(circle at 50% 62%, rgba(212,245,74,${0.13 * f}), transparent 50%)`;
+    } }
+
+  // 08 — painkiller, where we are going, the lockup
   { const { a, b } = AT.outro;
     if (t >= a) {
-      const wipe = E.inOutExpo(seg(t, a, a + 0.25));
-      if (t < a + 0.25) place("tm", { x: 800, y: 450, z: 1 + wipe * 0.3 }, { opacity: 1 - wipe, blur: wipe * 20 });
       const { v, g, l } = SCHED.outro;
       reveal(T.v1, t, v, g, { out: 0.15 });
       reveal(T.v2, t, v + 0.2, g, { out: 0.15 });

@@ -341,7 +341,22 @@ riser(sr_["back"] - 0.9, 0.9 + (r["b"] - sr_["back"]), 0.55)
 rev_cymbal(r["b"] - 0.5, 0.5, 0.55)
 whoosh(sr_["back"], r["b"] - sr_["back"], 0.45, up=False)
 
-# 07 — everything drops, "Não é vitamina", the strike, "É analgésico",
+# 07 Tese — three clauses, and the harmony climbs with them: F under the
+# estimate, C under the explanation, G under the decision, so the chord that
+# resolves to A minor is the one the operator is standing on. Sparse on
+# purpose — the card is read, not danced to.
+th, sth = AT["thesis"], S["thesis"]
+impact(th["a"], 0.85, 2.0)
+whoosh(th["a"] - 0.1, 0.7, 0.45)
+for key, cue in (("F", sth["l1"]), ("C", sth["l2"]), ("G", sth["l3"])):
+    nxt = {"F": sth["l2"], "C": sth["l3"], "G": th["b"]}[key]
+    chord(cue, nxt - cue, PROG[key], 0.13, 1500, 0.25, 0.3)
+    tick(cue, 3400, 0.16)
+    pluck(cue, note(ARP[key][0]), 0.14, 1.1)
+bassline(sth["l1"], th["b"], ROOT["F"], 0.55, 0.3)
+riser(th["b"] - 0.7, 0.7, 0.3)
+
+# 08 — everything drops, "Não é vitamina", the strike, "É analgésico",
 # a breath, then the resolution to A major under the logo
 o, so_ = AT["outro"], S["outro"]
 impact(o["a"], 1.0, 2.2)
