@@ -105,7 +105,9 @@ describe("a backfill walks its window oldest first", () => {
     const slots = plannedSlots(days, ["00Z", "12Z"], "oldest_first");
     const times = slots.map((slot) => slot.scheduled.getTime());
     expect([...times].sort((a, b) => a - b)).toEqual(times);
-    expect(slots.at(0)?.scheduled.getTime()).toBeLessThan(slots.at(-1)?.scheduled.getTime() ?? 0);
+    expect(slots.at(0)?.scheduled.getTime()).toBeLessThan(
+      slots.at(-1)?.scheduled.getTime() ?? 0,
+    );
   });
 
   it("is the exact reverse of the live sweep's order", () => {
