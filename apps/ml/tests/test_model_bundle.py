@@ -175,6 +175,47 @@ def test_a_bundle_missing_subsystem_calibration_fails_to_load(
         )
 
 
+def test_a_bundle_pickled_before_the_subsystem_split_serves_every_subsystem_pooled(
+    trained: TrainedFold, volume: Path
+) -> None:
+    """A bundle from before #49 has neither per-subsystem field **at all**.
+
+    That is not the truncated bundle the test above refuses, whose field is
+    present and ``None``: it is a bundle that served every subsystem from the
+    pooled maps, and it loads as exactly that, every subsystem declined. The
+    promoted 2026-09-21 artifact has this shape, and refusing it took every
+    deployment of main off the air.
+    """
+    bundle_path, _ = written(trained, volume)
+    legacy = joblib.load(bundle_path)
+    for name in ("subsystem_calibration", "subsystem_conformal"):
+        del vars(legacy)[name]
+    joblib.dump(legacy, bundle_path)
+    loaded = load_artifact(
+        root=volume, lane=trained.bundle.lane, artifact_id=trained.card.artifact_id
+    ).bundle
+    assert loaded.subsystem_calibration.pooled == loaded.calibration
+    assert dict(loaded.subsystem_calibration.per_subsystem) == {}
+    assert set(loaded.subsystem_calibration.declined) == set(SUBSYSTEM_CODES)
+    assert loaded.subsystem_conformal.pooled == loaded.conformal
+    assert dict(loaded.subsystem_conformal.per_subsystem) == {}
+    assert set(loaded.subsystem_conformal.declined) == set(SUBSYSTEM_CODES)
+
+
+def test_a_bundle_missing_only_one_split_field_still_fails_to_load(
+    trained: TrainedFold, volume: Path
+) -> None:
+    """One field absent and the other present is no bundle any version wrote."""
+    bundle_path, _ = written(trained, volume)
+    partial = joblib.load(bundle_path)
+    del vars(partial)["subsystem_conformal"]
+    joblib.dump(partial, bundle_path)
+    with pytest.raises(PartialBundleError, match="subsystem_conformal"):
+        load_artifact(
+            root=volume, lane=trained.bundle.lane, artifact_id=trained.card.artifact_id
+        )
+
+
 def test_a_bundle_without_its_card_fails_to_load(
     trained: TrainedFold, volume: Path
 ) -> None:
