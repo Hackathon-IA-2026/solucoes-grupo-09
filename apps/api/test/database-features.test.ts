@@ -1737,11 +1737,20 @@ suite("the gate, end to end (real Postgres)", () => {
     // rolled-back transaction on the same pooled connection leaves its own
     // scans in them. Measured as a difference, the only scans left are the
     // statement's own.
+    //
+    // A table's scans are its sequential scans **plus its indexes' scans**.
+    // Counting the first alone went blind the day `0056` indexed every go-live
+    // source on `ingested_at`: the build's `min(ingested_at)` became an index
+    // probe, the tables' own counter stayed still, and "touched" came back
+    // empty on a database with rows in it.
     const counters = async (): Promise<Map<string, number>> =>
       new Map(
         [
           ...(await scope.execute<{ relname: string; scans: number }>(sql`
-            select c.relname, pg_stat_get_xact_numscans(c.oid)::int as scans
+            select c.relname,
+                   (pg_stat_get_xact_numscans(c.oid)
+                    + coalesce((select sum(pg_stat_get_xact_numscans(i.indexrelid))
+                                from pg_index i where i.indrelid = c.oid), 0))::int as scans
             from pg_class c
             where c.relkind = 'r'
               and c.relnamespace = 'public'::regnamespace
