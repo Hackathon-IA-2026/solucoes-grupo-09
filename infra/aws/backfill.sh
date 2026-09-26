@@ -16,11 +16,13 @@
 #      and one year of load; every other dataset is fetched whole on the first
 #      pass and costs one HEAD after that.
 #
-# ONS is minutes. Weather is bounded by Open-Meteo's free quota, measured at
-# 10 to 35 hours for the whole window from one address, and it is left to take
-# them: a slice the quota cut short is simply asked again on the next round,
-# and what was already fetched is not fetched twice. Nothing here goes around
-# the quota.
+# ONS is minutes (the live sweep took 870 s). Weather is not: on the free tier
+# each weather task stops at 138 weighted units, which is one target day and
+# cycle, and the whole history is about 1,800 of them against 10,000 units a
+# day, weeks rather than hours (measured 26/09, see the commit that removed the
+# --weather mode). So this fills ONS completely and weather only for the slice
+# each history pass asks for; the weather history comes from a dump of a
+# database that already holds it.
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
