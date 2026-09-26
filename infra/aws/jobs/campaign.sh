@@ -31,8 +31,12 @@ arm() {
   shift
   copy_seed "$name"
   echo "$(date -u +%H:%M:%S) start $name"
-  "$@" > "$OUT/$name.json" 2> "$OUT/$name.err"
-  echo "$(date -u +%H:%M:%S) end $name exit $?"
+  # The report goes to its file; progress (stderr) goes to both the arm's
+  # .err and the build log, prefixed, so a run cut off by its timeout still
+  # says how far each arm got.
+  { "$@" 2>&1 >"$OUT/$name.json"; echo "exit $?" >"$OUT/$name.status"; } |
+    tee "$OUT/$name.err" | sed -u "s/^/[$name] /"
+  echo "$(date -u +%H:%M:%S) end $name $(cat "$OUT/$name.status")"
 }
 
 for name in $ARMS; do
