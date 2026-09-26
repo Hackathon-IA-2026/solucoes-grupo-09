@@ -6,7 +6,7 @@
 #   TRAIN_COMMAND  what to run inside the ml image, e.g.
 #                  "python -m wattsteer_ml.retrain --root /data/models ..."
 #   RUN_ID         where the results go: s3://$BUCKET/training/$RUN_ID/
-#   DB_STATE       the dump to restore (default state/db.sql.gz)
+#   DB_STATE       the dump to restore (default state/db.sql.gz; "none" for no data)
 #   MODELS_STATE   the artifacts to start from, so the gate has an incumbent
 #                  (default state/models.tgz; "none" to start empty)
 #
@@ -33,10 +33,20 @@ docker run -d --name pg --network host --shm-size=8g -e POSTGRES_USER=wattsteer 
   -c shared_buffers=16GB -c work_mem=256MB -c maintenance_work_mem=4GB \
   -c max_connections=300 >/dev/null
 until docker exec pg pg_isready -U wattsteer -d wattsteer >/dev/null 2>&1; do sleep 1; done
-aws s3 cp --quiet "s3://$BUCKET/$DB_STATE" - | gunzip | sed '/^SET transaction_timeout/d' |
-  docker exec -i pg psql -U wattsteer -d wattsteer -q -v ON_ERROR_STOP=1 >/dev/null
+# DB_STATE=none runs the command on an empty database (a benchmark needs none).
+if [ "$DB_STATE" != none ]; then
+  aws s3 cp --quiet "s3://$BUCKET/$DB_STATE" - | gunzip | sed '/^SET transaction_timeout/d' |
+    docker exec -i pg psql -U wattsteer -d wattsteer -q -v ON_ERROR_STOP=1 >/dev/null
+fi
+# Bring the restored schema to this commit's migrations: a dump taken from
+# the instance is at main's, and a branch that adds a feature column trains
+# against the new feature_row only once its migration has run.
+docker build -q -t local/wattsteer-migrate -f infra/aws/docker/migrate.Dockerfile . >/dev/null
+docker run --rm --network host \
+  -e DATABASE_URL=postgres://wattsteer:wattsteer@127.0.0.1:5432/wattsteer \
+  local/wattsteer-migrate 2>&1 | tail -1
 took[restore]=$(($(now) - start))
-echo "== restored $DB_STATE in ${took[restore]} s"
+echo "== restored $DB_STATE and migrated in ${took[restore]} s"
 
 start=$(now)
 docker build -q -t local/wattsteer-ml apps/ml >/dev/null
@@ -51,7 +61,8 @@ status=0
 docker run --rm --network host --user root \
   -e DATABASE_URL=postgres://wattsteer:wattsteer@127.0.0.1:5432/wattsteer \
   -e WATTSTEER_ML_ARTIFACT_DIR=/data/models \
-  -v "$WORK/models:/data/models" --entrypoint sh local/wattsteer-ml -c "$TRAIN_COMMAND" \
+  -v "$WORK/models:/data/models" -v "$PWD/infra/aws/jobs:/jobs:ro" \
+  --entrypoint sh local/wattsteer-ml -c "$TRAIN_COMMAND" \
   2>&1 | tee "$WORK/train.log" || status=$?
 took[train]=$(($(now) - start))
 echo "== TRAIN_COMMAND exited $status after ${took[train]} s"
