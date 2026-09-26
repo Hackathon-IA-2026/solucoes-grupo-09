@@ -55,6 +55,7 @@ from wattsteer_ml.retrain import (
     RetrainRequest,
     Stopwatch,
     decided_in_run,
+    lanes_from_names,
     main,
     run_retrain,
 )
@@ -90,6 +91,24 @@ def line(root: Path, lane: Lane, *, decision: str, artifact_id: str = RUN_ID) ->
 
 
 # --- the run's identity -------------------------------------------------------
+
+
+def test_lane_names_select_served_lanes_and_nothing_else() -> None:
+    """`--lane` is for an hour that cannot hold both lanes; it still cannot
+    gate a lane nobody serves, or one lane twice."""
+    assert lanes_from_names(None) == SERVING_LANES
+    assert lanes_from_names([]) == SERVING_LANES
+    assert lanes_from_names([EARLY_LANE.directory_name]) == (EARLY_LANE,)
+    assert lanes_from_names([LATE_LANE.directory_name, EARLY_LANE.directory_name]) == (
+        LATE_LANE,
+        EARLY_LANE,
+    )
+    with pytest.raises(ValueError, match="not a served lane"):
+        lanes_from_names(["dessem_free_v1__gate_early__thr1"])
+    with pytest.raises(ValueError, match="twice"):
+        lanes_from_names([EARLY_LANE.directory_name, EARLY_LANE.directory_name])
+    with pytest.raises(Exception, match="thr5"):
+        lanes_from_names(["dessem_free_v1__gate_early__thr05"])
 
 
 def test_the_run_id_is_the_artifact_stem() -> None:

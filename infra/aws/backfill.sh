@@ -11,7 +11,8 @@
 # at most 138 weighted units) every WATTSTEER_WEATHER_PACE_S seconds (default
 # 2400: about 5,000 units a day, half the free 10,000; the live sweep uses
 # about 3,300), waits an hour on a 429, and moves to the next window when a
-# task reports `complete`. The windows are the holes measured on 26/09 in the
+# task reports `complete`. WATTSTEER_WEATHER_WINDOWS overrides the windows
+# (space-separated from:to), for a day when one month matters more. The windows are the holes measured on 26/09 in the
 # history state-2026-09-26 brought, the fold the gate decides on first: July
 # 2026 had no weather at all and August eight days.
 #
@@ -95,7 +96,7 @@ if [ "${1:-}" = --weather ]; then
   read -r -d '' LOOP <<EOF || true
 set -u
 log() { echo "\$(date -u +%FT%TZ) \$*"; }
-for window in 2026-07-01:2026-09-12 2026-06-01:2026-06-30 2025-11-01:2026-03-31 2025-06-01:2025-10-31 2024-03-15:2025-05-31; do
+for window in ${WATTSTEER_WEATHER_WINDOWS:-2026-07-01:2026-09-12 2026-06-01:2026-06-30 2025-11-01:2026-03-31 2025-06-01:2025-10-31 2024-03-15:2025-05-31}; do
   from="\${window%%:*}"; to="\${window##*:}"
   while :; do
     out="\$(bun run src/scripts/ingest.ts task "{\\"kind\\":\\"weather\\",\\"payload\\":{\\"from\\":\\"\$from\\",\\"to\\":\\"\$to\\",\\"runCycles\\":[\\"00Z\\",\\"12Z\\"]}}" 2>&1)"

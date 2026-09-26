@@ -1133,6 +1133,30 @@ def run_retrain(
 # --- the process --------------------------------------------------------------
 
 
+def lanes_from_names(names: Sequence[str] | None) -> tuple[Lane, ...]:
+    """``--lane`` values as lanes: served ones only, each once, all of them by default.
+
+    Only a served lane: the threshold sweep's 1 MW and 10 MW lanes are lanes in
+    their own right and a retrain of one would gate an artifact nobody serves.
+    ``Lane.parse`` refuses any spelling but the directory name, so a typo is a
+    refusal here rather than a lane directory that never existed.
+    """
+    if not names:
+        return SERVING_LANES
+    lanes: list[Lane] = []
+    for name in names:
+        lane = Lane.parse(name)
+        if lane not in SERVING_LANES:
+            served = ", ".join(served.directory_name for served in SERVING_LANES)
+            raise ValueError(
+                f"{name} is not a served lane; the served lanes are {served}"
+            )
+        if lane in lanes:
+            raise ValueError(f"{name} was asked for twice")
+        lanes.append(lane)
+    return tuple(lanes)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """``python -m wattsteer_ml.retrain`` — one run, one JSON report on stdout.
 
@@ -1154,6 +1178,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--root", default=str(settings.artifact_dir))
     parser.add_argument("--database-url", default=settings.database_url or "")
     parser.add_argument(
+        "--lane",
+        action="append",
+        dest="lanes",
+        metavar="LANE",
+        help="retrain this lane only (its directory name, e.g. "
+        "dessem_free_v1__gate_early__thr5); repeatable. Default: every served "
+        "lane. One lane is half the run, for an hour that cannot hold a whole "
+        "one; the report then carries no contrast between the gate profiles.",
+    )
+    parser.add_argument(
         "--no-ladder",
         action="store_true",
         help="skip rungs 0–3. The card's ladder is then empty and a cold start "
@@ -1167,11 +1201,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
     run_id = args.run_id or format_instant(datetime.now(UTC))
+    try:
+        lanes = lanes_from_names(args.lanes)
+    except ValueError as error:
+        print(json.dumps({"error": str(error)}), file=sys.stderr)
+        return 2
     request = RetrainRequest(
         run_id=run_id,
         as_of=datetime.strptime(run_id, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC),
         root=Path(args.root),
         database_url=args.database_url,
+        lanes=lanes,
         ladder=not args.no_ladder,
     )
     watch = Stopwatch()

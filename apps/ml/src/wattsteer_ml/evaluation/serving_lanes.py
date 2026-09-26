@@ -269,11 +269,21 @@ class ServingLanesReport:
         return LaneContrast(early=by_gate[EARLY_GATE], late=by_gate[LATE_GATE])
 
     def as_dict(self) -> dict[str, Any]:
+        # A run over one gate profile has no contrast, and says so rather than
+        # raising out of its own report: `retrain --lane` asks for exactly that
+        # run when a full one is too slow for the hour.
+        try:
+            contrast: dict[str, Any] | None = self.contrast().as_dict()
+            absent = None
+        except ServingLanesError as error:
+            contrast = None
+            absent = str(error)
         return {
             "at": format_instant(self.at),
             "lanes": [outcome.as_dict() for outcome in self.outcomes],
             "promoted": [lane.directory_name for lane in self.promoted],
-            "contrast": self.contrast().as_dict(),
+            "contrast": contrast,
+            "contrast_absent_reason": absent,
         }
 
 
