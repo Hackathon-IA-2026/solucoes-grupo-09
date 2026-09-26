@@ -120,6 +120,16 @@ if [ "${chunks:-0}" -eq 0 ] && has_state rag.sql.gz; then
   restore rag.sql.gz
   echo "Seeded the RAG corpus"
 fi
+# Weather history merges by itself (temp tables, ON CONFLICT DO NOTHING), so
+# the only reason to do it once is its 99 MB: a marker file records it.
+if [ ! -e "$DIR/data/.seeded-weather" ] && has_state weather.sql.gz; then
+  # The asset inserts hours before the requests they reference; the request
+  # insert goes first (see restore-state.sh).
+  aws s3 cp --quiet "s3://$BUCKET/state/weather.sql.gz" - | gunzip |
+    sed -e '/^INSERT INTO public.weather_forecast_hour SELECT/{h;d;}' -e '/^INSERT INTO public.weather_run_request SELECT/G' |
+    psql_in -v ON_ERROR_STOP=1 -q && touch "$DIR/data/.seeded-weather"
+  echo "Seeded the weather history"
+fi
 forecast_days="$(psql_in -Atc "select count(*) from curtailment_forecast_day" 2>/dev/null || echo 0)"
 if [ "${forecast_days:-0}" -eq 0 ] && has_state forecasts.sql.gz; then
   restore forecasts.sql.gz

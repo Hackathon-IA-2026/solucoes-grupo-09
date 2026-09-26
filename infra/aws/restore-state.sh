@@ -17,6 +17,9 @@
 # not carry (an artifact an older stored forecast is scored against) stays.
 # The directory as it was is kept as ml-models.before-<utc stamp>.
 #
+# The weather history (weather.sql.gz), when the release has it, is applied
+# every time: it merges by construction.
+#
 # --forecasts-only leaves the artifacts alone; --with-rag also replaces the
 # RAG corpus (that one is a replacement: a corpus is one indexing).
 set -euo pipefail
@@ -70,6 +73,20 @@ for t in \$T; do
 done
 \$C exec -T postgres psql -U wattsteer -d wattsteer -q -c "drop schema \$stage cascade"
 echo "forecast days: \$(\$C exec -T postgres psql -U wattsteer -d wattsteer -Atc 'select count(*) from curtailment_forecast_day')"
+# The weather history merges by itself: weather.sql.gz loads into temp tables
+# and inserts ON CONFLICT DO NOTHING, so applying it again adds nothing and
+# never touches what the hourly live sweep fetched here.
+#
+# The asset inserts the hours before the run requests they reference, which
+# the foreign key refuses on any target that lacks those requests (measured
+# on this instance: weather_forecast_hour_source_request_id_..._fkey). The
+# request insert is moved in front; the rows are the asset's, unchanged.
+if aws s3 ls s3://$BUCKET/state/weather.sql.gz --region $AWS_REGION >/dev/null 2>&1; then
+  aws s3 cp --quiet s3://$BUCKET/state/weather.sql.gz - --region $AWS_REGION | gunzip |
+    sed -e '/^SET transaction_timeout/d' -e '/^INSERT INTO public.weather_forecast_hour SELECT/{h;d;}' -e '/^INSERT INTO public.weather_run_request SELECT/G' |
+    \$C exec -T postgres psql -U wattsteer -d wattsteer -q -v ON_ERROR_STOP=1
+  echo "weather rows: \$(\$C exec -T postgres psql -U wattsteer -d wattsteer -Atc 'select count(*) || chr(32) || min(valid_time)::date || chr(32) || max(valid_time)::date from weather_forecast_hour')"
+fi
 if [ "$RAG" = yes ]; then
   \$C stop rag >/dev/null
   \$C exec -T postgres psql -U wattsteer -d wattsteer -q -c "CREATE EXTENSION IF NOT EXISTS vector; DROP SCHEMA IF EXISTS rag CASCADE; DROP TABLE IF EXISTS public.rag_migration;"
