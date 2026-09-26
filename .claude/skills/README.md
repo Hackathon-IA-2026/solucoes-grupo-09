@@ -2,8 +2,9 @@
 
 Not ours. Copied from [jakubkrehel/skills](https://github.com/jakubkrehel/skills)
 at commit `267330e1adfc66a718fb65fa6918c1f06d0a689e` (2026-08-29), MIT licensed —
-the licence travels with them in `LICENSE` and is not AGPL like the rest of this
-repository.
+the licence travels with them in `LICENSE`. That file is theirs and stays,
+whatever this repository is under: it carries their copyright line, not ours,
+and a vendored copy keeps the notice it arrived with.
 
 Vendored rather than referenced because a review that depends on a network fetch
 is a review that stops working the day the upstream moves, and because the

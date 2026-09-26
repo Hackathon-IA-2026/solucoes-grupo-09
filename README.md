@@ -162,14 +162,15 @@ ODbL requires is published on the application's own terms page.
 
 ## License
 
-This project is released under the **GNU Affero General Public License v3.0** —
-see [LICENSE](LICENSE) for the full text.
+This project is released under the **MIT License** — see [LICENSE](LICENSE)
+for the full text. Copyright (c) 2026 Hackathon-IA-COPPE-2026.
 
-AGPL-3.0 is a copyleft licence with one clause that matters more than the rest
-for a product like this one. **Section 13**: if you run a modified version of
-WattSteer where people can reach it over a network, you have to offer those
-users the source of *your* version. Running it privately, unmodified, costs you
-nothing; running a modified fork as a public service means publishing the fork.
+It was AGPL-3.0 until 26/09/2026. What changes for a reader of this repository
+is the copyleft: MIT asks only that the copyright notice and the permission
+notice travel with the software, so a modified fork run as a public service no
+longer has to publish its source. The footer still offers the source anyway —
+see `apps/web/src/components/site-footer.tsx` — because that offer was worth
+making on its own terms and not only because §13 compelled it.
 
 Third-party components keep their own licences, which are unchanged and
 documented where they are used — the solver comparison in

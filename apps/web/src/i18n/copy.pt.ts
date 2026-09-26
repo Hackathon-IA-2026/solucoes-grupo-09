@@ -31,7 +31,14 @@ export const pt: Copy = {
   },
 
   footer: {
-    /** AGPL §13: the offer of corresponding source, on the page it is served from. */
+    /**
+     * The offer of corresponding source, on the page it is served from.
+     *
+     * AGPL §13 is why this started; the MIT relicensing on 26/09/2026 is why
+     * it is now a choice. The link stays: a product whose claim is that every
+     * figure is traceable does not stop showing its own source because it
+     * stopped being compelled to.
+     */
     sourceLink: "Código-fonte",
     rights: "© WattSteer {year}. Todos os direitos reservados.",
   },
