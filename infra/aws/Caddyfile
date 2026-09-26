@@ -11,6 +11,14 @@
 	# What only the worker and the operators may call.
 	@closed path /ingest/* /internal/* /docs /docs/*
 	respond @closed 404
+	# Static pages the team publishes beside the product (a UI proposal to
+	# review, a deck): infra/aws/publish-static.sh <dir> <name> puts them at
+	# /<name>/, behind the same password. Nothing here is the product.
+	redir /proposta /proposta/
+	handle_path /proposta/* {
+		root * /srv/static/proposta
+		file_server
+	}
 	@api path /v1/* /ready
 	reverse_proxy @api api:3000
 	reverse_proxy web:8080
