@@ -108,8 +108,9 @@ refused before it starts.
   ECR. The instance loads them with `docker load`.
 - **Built on arm64 in CodeBuild,** like the instance, so nothing is emulated and
   a laptop only uploads a zip.
-- **The site password** is in Parameter Store at `/wattsteer/site-password`
-  (user `wattsteer`), generated on the first deploy.
+- **The site user and password** are in Parameter Store at `/wattsteer/site-user`
+  (default `wattsteer`) and `/wattsteer/site-password` (generated on the first
+  deploy). Change either there; the next deploy applies it.
 
 ## Reading the password
 
