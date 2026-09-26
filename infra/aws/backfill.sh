@@ -10,7 +10,9 @@
 #
 #   1. the holiday calendar, once (load-calendar.ts);
 #   2. one `live` sweep, which brings the plant registry and SIGA the weather
-#      weights are cut from;
+#      weights are cut from, and one `recent` sweep: live covers the last two
+#      months and history stops five months back, so without it the three in
+#      between are never fetched (the first run left May-July 2026 empty);
 #   3. `history` sweeps, one slice each, newest slice first because the folds
 #      the gate decides on are the recent ones. A slice is 90 days of weather
 #      and one year of load; every other dataset is fetched whole on the first
@@ -59,6 +61,7 @@ set -u
 log() { echo "$(date -u +%FT%TZ) $*"; }
 log "calendar"; bun run src/scripts/load-calendar.ts || log "calendar failed"
 log "live sweep"; bun run src/scripts/ingest.ts sweep live || log "live sweep had failures"
+log "recent sweep"; bun run src/scripts/ingest.ts sweep recent || log "recent sweep had failures"
 for round in 1 2 3 4 5 6; do
   failed=0
   for slice in $(seq 12 -1 0); do
