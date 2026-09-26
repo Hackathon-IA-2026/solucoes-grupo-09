@@ -89,6 +89,20 @@ export interface IngestWeatherPayload {
    */
   force?: boolean;
   /**
+   * Which end of the window to start from. `newest_first` (the default) is
+   * the live sweep's rule — under a bounded allowance the serving day must be
+   * reached first. `oldest_first` is the backfill's: `writeWeatherForecast`
+   * never lets a key's publication time go backwards, so a window walked from
+   * its newest slot keeps only the newest run of every hour and throws the
+   * older runs away as superseded. Measured on the AWS instance on 26/09: July
+   * and August 2026 came back with one version per hour, the target day's own
+   * 00Z run, published after the morning gate, and the feature read at that
+   * gate saw no weather at all. Walked oldest first, each run lands before the
+   * one that supersedes it, and the versions accumulate exactly as they do
+   * when the sweep meets the runs one day at a time.
+   */
+  order?: SlotOrder;
+  /**
    * Weighted call units this invocation may spend before it stops.
    *
    * The free tier's allowance is a **daily** one and the endpoint publishes no
@@ -252,12 +266,19 @@ export interface RunSlot {
  * Pure and exported so the ordering is checkable without a database, which is
  * what the ingest tests need to be gated on.
  */
-export function plannedSlots(days: string[], cycles: RunCycle[]): RunSlot[] {
+export type SlotOrder = "newest_first" | "oldest_first";
+
+export function plannedSlots(
+  days: string[],
+  cycles: RunCycle[],
+  order: SlotOrder = "newest_first",
+): RunSlot[] {
+  const sign = order === "oldest_first" ? 1 : -1;
   return days
     .flatMap((day) =>
       cycles.map((cycle) => ({ day, cycle, scheduled: scheduledRunFor(day, cycle) })),
     )
-    .sort((a, b) => b.scheduled.getTime() - a.scheduled.getTime());
+    .sort((a, b) => sign * (a.scheduled.getTime() - b.scheduled.getTime()));
 }
 
 export function callBudget(options: {
@@ -401,7 +422,7 @@ export function createWeatherIngestor(
     // the serving day — the only slot the forecast needs — was never reached.
     // Reversing it means an exhausted allowance leaves the head moved and the
     // backfill behind, which is the direction that can be caught up later.
-    const slots = plannedSlots(days, cycles);
+    const slots = plannedSlots(days, cycles, payload.order);
     const held = payload.force ? new Set<string>() : await heldSlots(deps.db, slots);
 
     // One slot's cost, in the same units the budget is denominated in.

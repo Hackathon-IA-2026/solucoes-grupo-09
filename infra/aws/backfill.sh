@@ -5,6 +5,11 @@
 #   infra/aws/backfill.sh --status   the last lines of its log
 #   infra/aws/backfill.sh --weather  fill the weather history's holes, slowly
 #
+# `--weather` walks each window oldest run first (`order: oldest_first`):
+# the writer never lets an hour's publication time go backwards, so the live
+# sweep's newest-first order would keep only the newest run of every hour and
+# leave the gate nothing to read (measured 26/09 on July and August 2026).
+#
 # `--weather` is paced, not a sprint. The first weather mode (removed in
 # ecc10e5) ran tasks back to back and would have spent the free allowance the
 # hourly live sweep needs. This one asks one slot (a target day and a cycle,
@@ -93,13 +98,21 @@ NAME=wattsteer-backfill
 if [ "${1:-}" = --weather ]; then
   NAME=wattsteer-backfill-weather
   PACE="${WATTSTEER_WEATHER_PACE_S:-2400}"
+  # The gate the served lane reads is the morning one, and the freshest run it
+  # admits is the previous day's 12Z; a history that serves that gate needs
+  # that cycle and no other. WATTSTEER_WEATHER_CYCLES="00Z 12Z" fetches both.
+  CYCLES="$(printf '%s' "${WATTSTEER_WEATHER_CYCLES:-12Z}" | sed 's/[^ ]*/"&"/g; s/ /,/g')"
+  # Runs already held are skipped unless forced: WATTSTEER_WEATHER_FORCE=true
+  # re-fetches them, for a window whose held runs left no usable rows.
+  FORCE="${WATTSTEER_WEATHER_FORCE:-false}"
   read -r -d '' LOOP <<EOF || true
 set -u
 log() { echo "\$(date -u +%FT%TZ) \$*"; }
 for window in ${WATTSTEER_WEATHER_WINDOWS:-2026-07-01:2026-09-12 2026-06-01:2026-06-30 2025-11-01:2026-03-31 2025-06-01:2025-10-31 2024-03-15:2025-05-31}; do
   from="\${window%%:*}"; to="\${window##*:}"
   while :; do
-    out="\$(bun run src/scripts/ingest.ts task "{\\"kind\\":\\"weather\\",\\"payload\\":{\\"from\\":\\"\$from\\",\\"to\\":\\"\$to\\",\\"runCycles\\":[\\"00Z\\",\\"12Z\\"]}}" 2>&1)"
+    task="\$(printf '{"kind":"weather","payload":{"from":"%s","to":"%s","runCycles":[%s],"order":"oldest_first","force":%s}}' "\$from" "\$to" '$CYCLES' '$FORCE')"
+    out="\$(bun run src/scripts/ingest.ts task "\$task" 2>&1)"
     why="\$(printf '%s' "\$out" | grep -o '"stoppedBecause": "[a-z_]*"' | tail -1 | cut -d'"' -f4)"
     units="\$(printf '%s' "\$out" | grep -o '"weightedUnitsSpent": [0-9]*' | tail -1 | grep -o '[0-9]*$')"
     log "weather \$from..\$to: \${why:-error} (\${units:-?} units)"
