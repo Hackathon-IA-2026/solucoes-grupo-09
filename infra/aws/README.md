@@ -59,7 +59,9 @@ ONS takes minutes (870 s for the live sweep). Weather does not fit the free
 quota: each task stops at 138 weighted units (one target day and cycle) and the
 whole history is about 1,800 of them, against 10,000 units a day. The history
 sweep fetches one slice per pass within that budget; the weather history comes
-from a dump of a database that already holds it.
+from a dump of a database that already holds it (`weather.sql.gz`), and
+`backfill.sh --weather` fills the holes that dump has, one slot every 40
+minutes: about half the free allowance, the rest left to the live sweep.
 
 ## Training on the big machine
 
