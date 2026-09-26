@@ -75,7 +75,7 @@ SHA="$(git -C "$ROOT" rev-parse HEAD)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 git -C "$ROOT" archive --format=zip -o "$WORK/source.zip" HEAD
-AWS_WORKDIR="$WORK" "$AWS" s3 cp --quiet source.zip "s3://$BUCKET/source/$SHA.zip"
+(cd "$WORK" && AWS_WORKDIR="$WORK" "$AWS" s3 cp --quiet source.zip "s3://$BUCKET/source/$SHA.zip")
 
 vars="$(python3 -c '
 import json, sys

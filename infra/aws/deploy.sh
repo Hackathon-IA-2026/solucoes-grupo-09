@@ -25,7 +25,9 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 git -C "$ROOT" archive --format=zip -o "$WORK/source.zip" HEAD
-AWS_WORKDIR="$WORK" "$AWS" s3 cp --quiet source.zip "s3://$BUCKET/source/$SHA.zip"
+# From inside $WORK, so "source.zip" resolves for both the Docker wrapper
+# (which mounts it at /work) and a native CLI in CI.
+(cd "$WORK" && AWS_WORKDIR="$WORK" "$AWS" s3 cp --quiet source.zip "s3://$BUCKET/source/$SHA.zip")
 
 build="$("$AWS" codebuild start-build --project-name "$DEPLOY_PROJECT" \
   --source-location-override "$BUCKET/source/$SHA.zip" \

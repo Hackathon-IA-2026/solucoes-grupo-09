@@ -24,6 +24,6 @@ gh release download "$TAG" --repo vtorres/WattSteer --dir "$WORK" \
   --pattern models.tgz --pattern forecasts.sql.gz --pattern rag.sql.gz
 for file in models.tgz forecasts.sql.gz rag.sql.gz; do
   [ -s "$WORK/$file" ] || continue
-  AWS_WORKDIR="$WORK" "$AWS" s3 cp --quiet "$file" "s3://$BUCKET/state/$file"
+  (cd "$WORK" && AWS_WORKDIR="$WORK" "$AWS" s3 cp --quiet "$file" "s3://$BUCKET/state/$file")
   echo "   state/$file"
 done
