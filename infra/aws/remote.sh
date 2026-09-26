@@ -85,17 +85,20 @@ aws ssm get-parameters-by-path --path /wattsteer/keys --with-decryption \
   done
 umask 022
 
-# The site password lives in Parameter Store, so whoever runs the account can
-# read it without opening the instance. Generated on the first deploy.
+# The site user and password live in Parameter Store, so whoever runs the
+# account can read or change them without opening the instance. The password
+# is generated on the first deploy; the user defaults to wattsteer.
+user="$(aws ssm get-parameter --name /wattsteer/site-user --query Parameter.Value \
+  --output text 2>/dev/null || echo wattsteer)"
 if ! password="$(aws ssm get-parameter --name /wattsteer/site-password --with-decryption \
   --query Parameter.Value --output text 2>/dev/null)"; then
   password="$(openssl rand -base64 15 | tr -d '/+=')"
   aws ssm put-parameter --name /wattsteer/site-password --type SecureString \
     --value "$password" >/dev/null
-  echo "New site password stored at /wattsteer/site-password (user wattsteer)."
+  echo "New site password stored at /wattsteer/site-password (user $user)."
 fi
 HASH="$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$password")"
-sed -e "s|__SITE_USER__|wattsteer|" -e "s|__SITE_HASH__|$HASH|" Caddyfile.template > Caddyfile
+sed -e "s|__SITE_USER__|$user|" -e "s|__SITE_HASH__|$HASH|" Caddyfile.template > Caddyfile
 
 C="docker compose --project-name wattsteer --env-file $DIR/.env -f $DIR/compose.yml"
 psql_in() { $C exec -T postgres psql -U wattsteer -d wattsteer "$@"; }
