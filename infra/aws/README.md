@@ -24,6 +24,8 @@ viewer ─▶ CloudFront (HTTPS) ─▶ EC2 m7g.xlarge: Caddy ─▶ web · api 
 | `set-keys.sh` | provider keys from `.env` into Parameter Store (`/wattsteer/keys/*`) |
 | `seed-state.sh` | a state release (models, forecast rows, RAG corpus) into `s3://…/state/` |
 | `compose/compose.aws.yml`, `Caddyfile` | the stack the instance runs, with its memory ceilings |
+| `backfill.sh` | fills the instance's database from ONS and Open-Meteo, in the background |
+| `train.sh`, `buildspec-train.yml`, `train-job.sh` | one training run on the 72-vCPU CodeBuild machine, inside a budget of machine minutes |
 
 ## A new account, from nothing
 
@@ -40,6 +42,34 @@ infra/aws/deploy.sh              # the first deploy, ~20 minutes
 
 After that, pushing to `main` is the deploy. `stack.sh` runs again only when
 `stack.yaml` changes.
+
+## Filling the database
+
+```sh
+infra/aws/backfill.sh            # starts the background ingestion on the instance
+infra/aws/backfill.sh --status   # its last log lines
+```
+
+ONS takes minutes. Weather is bounded by Open-Meteo's free quota: 10 to 35
+hours for the whole window from one address. The loop asks again for what the
+quota cut short, an hour later; it never works around the quota.
+
+## Training on the big machine
+
+`train.sh` restores a database dump from the bucket into a scratch Postgres on
+CodeBuild's `BUILD_GENERAL1_2XLARGE` (72 vCPU, 145 GB), builds the ml image
+from `HEAD`, runs the command given after `--`, and writes the artifacts, the
+log and a `timing.json` to `s3://…/training/<run id>/`.
+
+```sh
+infra/aws/train.sh --usage
+infra/aws/train.sh --run-id f6 --timeout 90 -- python -m wattsteer_ml.retrain …
+```
+
+The account does not show participants its spending limit, so the team keeps
+its own: `WATTSTEER_TRAIN_BUDGET_MINUTES` (default 480) of this machine,
+counted over every build of the project. A run whose timeout would pass it is
+refused before it starts.
 
 ## Why this shape
 

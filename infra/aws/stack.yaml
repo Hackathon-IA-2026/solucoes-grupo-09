@@ -239,6 +239,54 @@ Resources:
           - { Name: INSTANCE_ID, Value: !Ref Instance }
           - { Name: PUBLIC_URL, Value: !Sub "https://${Distribution.DomainName}" }
 
+  TrainRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codebuild.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: wattsteer-train
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: "*"
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:GetObjectVersion]
+                Resource: !Sub "${Bucket.Arn}/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+
+  TrainProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: wattsteer-train
+      Description: Retrain and evaluate on the event's largest CodeBuild machine
+      ServiceRole: !GetAtt TrainRole.Arn
+      # A ceiling, not an estimate: train.sh sets each run's own, and refuses to
+      # start one that would pass the team's budget of machine-hours.
+      TimeoutInMinutes: 480
+      Artifacts: { Type: NO_ARTIFACTS }
+      Source:
+        Type: S3
+        Location: !Sub "${Bucket}/source/latest.zip"
+        BuildSpec: infra/aws/buildspec-train.yml
+      Environment:
+        # 72 vCPU, 145 GB (measured: Xeon Platinum 8223CL, 138 GB free). x86,
+        # which the ml image builds for as readily as arm64.
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        ComputeType: BUILD_GENERAL1_2XLARGE
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - { Name: BUCKET, Value: !Ref Bucket }
+
   GitHubProvider:
     Type: AWS::IAM::OIDCProvider
     Condition: MakeGitHubProvider
@@ -290,5 +338,7 @@ Outputs:
     Value: !Ref Instance
   DeployProject:
     Value: !Ref DeployProject
+  TrainProject:
+    Value: !Ref TrainProject
   GitHubRoleArn:
     Value: !GetAtt GitHubRole.Arn

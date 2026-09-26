@@ -1,0 +1,9 @@
+# CodeBuild: one training or evaluation run on the 72-vCPU machine.
+# train.sh starts it with TRAIN_COMMAND, RUN_ID, DB_STATE and MODELS_STATE.
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - bash infra/aws/train-job.sh
