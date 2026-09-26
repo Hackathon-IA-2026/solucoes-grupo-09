@@ -55,6 +55,14 @@ keep_env DATA_DIR "$DIR/data"
 # The corpus arrives as a dump (state/rag.sql.gz); indexing here would spend
 # the provider quota for hours.
 keep_env WATTSTEER_RAG_INDEX_ON_BOOT 0
+# Postgres sized to the m7g.xlarge (4 vCPU, 16 GB) rather than to the first
+# event's 2-vCPU box. keep_env, so a hand tune on the instance survives.
+keep_env POSTGRES_CPUS 3
+keep_env POSTGRES_MEM_LIMIT 4g
+keep_env POSTGRES_SHARED_BUFFERS 1GB
+keep_env POSTGRES_EFFECTIVE_CACHE_SIZE 3GB
+keep_env POSTGRES_WORK_MEM 32MB
+keep_env POSTGRES_MAINTENANCE_WORK_MEM 512MB
 set_env PUBLIC_URL "$PUBLIC_URL"
 set_env REGISTRY local
 set_env NAME wattsteer
