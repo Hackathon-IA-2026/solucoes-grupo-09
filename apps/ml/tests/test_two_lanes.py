@@ -445,6 +445,19 @@ def test_a_one_lane_report_refuses_to_produce_a_contrast() -> None:
         report.contrast()
 
 
+def test_a_one_lane_report_states_the_contrast_it_does_not_have() -> None:
+    """`retrain --lane` runs one gate profile; its report says why there is no
+    contrast instead of raising out of its own serialisation."""
+    report = ServingLanesReport(
+        at=NOW,
+        outcomes=(LaneOutcome.of(LATE_LANE, _decision(LATE_LANE, promote=True)),),
+    )
+    payload = report.as_dict()
+    assert payload["contrast"] is None
+    assert "needs both gate profiles" in payload["contrast_absent_reason"]
+    assert payload["promoted"] == [LATE_LANE.directory_name]
+
+
 # --- the leak the ticket is shaped by ----------------------------------------
 
 
