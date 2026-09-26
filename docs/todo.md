@@ -376,8 +376,9 @@ about ONS's own field definitions rather than about this code.
       `psql "$DATABASE_URL" -c "\copy (select * from answer_feedback) to
       'feedback.csv' csv header"` through a temporary TCP proxy on the Postgres
       service, deleted afterwards.
-- [ ] When AWS reopens on site: `infra/aws/event/deploy.sh`, keeping the
-      memory ceilings in `compose.aws.yml`. The CloudFront address will change.
+- [x] When AWS reopens on site: deploy there, keeping the memory ceilings in
+      `compose.aws.yml`. Done 26/09 as `infra/aws/stack.yaml` plus a deploy on
+      every push to `main`.
 - [x] **The Time Machine offered 5 replayable days out of 120, and the cause was
       a calibration clause tested against the wrong number.** Closed 23/09.
 
@@ -440,8 +441,9 @@ about ONS's own field definitions rather than about this code.
       predecessor, so there is no out-of-fold pool to calibrate on. That is a
       property of the walk-forward, not a defect.
 
-- [ ] When AWS reopens on site: `infra/aws/event/deploy.sh`, keeping the
-      memory ceilings in `compose.aws.yml`. The CloudFront address will change.
+- [x] When AWS reopens on site: deploy there, keeping the memory ceilings in
+      `compose.aws.yml`. Done 26/09 as `infra/aws/stack.yaml` plus a deploy on
+      every push to `main`.
 - [ ] **The Time Machine offers 5 replayable days out of a 120-day window, and
       the last 115 are a calibration question.** Investigated 22–23/09; two
       defects found and fixed, one question left that needs the author of

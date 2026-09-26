@@ -1,27 +1,17 @@
-# Deploy to AWS from GitHub, by hand only.
+# Deploy every push to main to the AWS stack (infra/aws/stack.yaml).
 #
-# The same command as on a laptop (infra/aws/scripts/deploy.sh), run from the
-# commit you pick. It never runs on a push: a deploy is a decision, and the
-# `aws` environment can require a reviewer's approval before the job starts
-# (Settings → Environments → aws → Required reviewers).
-#
-# Needs, in the `aws` environment (README, "Deploy from GitHub"):
-#   secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY  (or AWS_ROLE_ARN for OIDC)
-#   variables: AWS_REGION, TF_STATE_BUCKET
+# The same command as on a laptop, infra/aws/deploy.sh: archive the commit into
+# the stack's bucket and start the CodeBuild project, which builds the images on
+# arm64 and ships them to the instance. No keys are stored in GitHub: the job
+# assumes the stack's GitHubRole through OIDC, which trusts only this
+# repository's main branch.
 name: deploy-aws
 
 on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]
   workflow_dispatch:
-    inputs:
-      option:
-        description: "ecs (Fargate) or ec2 (one instance with Compose)"
-        type: choice
-        options: [ecs, ec2]
-        default: ecs
-      plan_only:
-        description: "Only show the plan"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -33,32 +23,18 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-24.04-arm
-    environment: aws
-    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - name: Read the stack outputs
+        run: cat infra/aws/stack.env | grep -v '^#' >> "$GITHUB_ENV"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-region: ${{ vars.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      - name: backend settings
-        run: |
-          cat > infra/aws/backend.hcl <<EOF
-          bucket       = "${{ vars.TF_STATE_BUCKET }}"
-          region       = "${{ vars.AWS_REGION }}"
-          use_lockfile = true
-          EOF
-      - name: deploy
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.GIT_HUB_ROLE_ARN }}
+      - name: Deploy
         env:
-          OPTION: ${{ inputs.option }}
-          PLAN_ONLY: ${{ inputs.plan_only }}
-        run: |
-          if [ "$PLAN_ONLY" = "true" ]; then
-            infra/aws/scripts/deploy.sh "$OPTION" --plan
-          else
-            infra/aws/scripts/deploy.sh "$OPTION" --yes
-          fi
+          # The runner has the CLI already; the laptop wrapper runs it in Docker.
+          AWS_CLI: aws
+        run: infra/aws/deploy.sh
