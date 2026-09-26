@@ -3,6 +3,17 @@
 #
 #   infra/aws/backfill.sh            start it (a second start is refused)
 #   infra/aws/backfill.sh --status   the last lines of its log
+#   infra/aws/backfill.sh --weather  fill the weather history's holes, slowly
+#
+# `--weather` is paced, not a sprint. The first weather mode (removed in
+# ecc10e5) ran tasks back to back and would have spent the free allowance the
+# hourly live sweep needs. This one asks one slot (a target day and a cycle,
+# at most 138 weighted units) every WATTSTEER_WEATHER_PACE_S seconds (default
+# 2400: about 5,000 units a day, half the free 10,000; the live sweep uses
+# about 3,300), waits an hour on a 429, and moves to the next window when a
+# task reports `complete`. The windows are the holes measured on 26/09 in the
+# history state-2026-09-26 brought, the fold the gate decides on first: July
+# 2026 had no weather at all and August eight days.
 #
 # It runs on the instance as a detached container of the worker image,
 # `wattsteer-backfill`, and drives the ingestion the worker already has
@@ -50,7 +61,9 @@ run() {
 }
 
 if [ "${1:-}" = --status ]; then
-  run "docker logs --tail 40 wattsteer-backfill 2>&1; docker inspect -f 'state: {{.State.Status}} since {{.State.StartedAt}}' wattsteer-backfill 2>&1"
+  for name in wattsteer-backfill wattsteer-backfill-weather; do
+    run "echo == $name; docker logs --tail 12 $name 2>&1 | grep -v '… [0-9]*/'; docker inspect -f 'state: {{.State.Status}} since {{.State.StartedAt}}' $name 2>&1"
+  done
   exit 0
 fi
 
@@ -75,6 +88,31 @@ done
 log "backfill finished"
 EOF
 
+NAME=wattsteer-backfill
+if [ "${1:-}" = --weather ]; then
+  NAME=wattsteer-backfill-weather
+  PACE="${WATTSTEER_WEATHER_PACE_S:-2400}"
+  read -r -d '' LOOP <<EOF || true
+set -u
+log() { echo "\$(date -u +%FT%TZ) \$*"; }
+for window in 2026-07-01:2026-09-12 2026-06-01:2026-06-30 2025-11-01:2026-03-31 2025-06-01:2025-10-31 2024-03-15:2025-05-31; do
+  from="\${window%%:*}"; to="\${window##*:}"
+  while :; do
+    out="\$(bun run src/scripts/ingest.ts task "{\\"kind\\":\\"weather\\",\\"payload\\":{\\"from\\":\\"\$from\\",\\"to\\":\\"\$to\\",\\"runCycles\\":[\\"00Z\\",\\"12Z\\"]}}" 2>&1)"
+    why="\$(printf '%s' "\$out" | grep -o '"stoppedBecause": "[a-z_]*"' | tail -1 | cut -d'"' -f4)"
+    units="\$(printf '%s' "\$out" | grep -o '"weightedUnitsSpent": [0-9]*' | tail -1 | grep -o '[0-9]*$')"
+    log "weather \$from..\$to: \${why:-error} (\${units:-?} units)"
+    case "\$why" in
+      complete) break ;;
+      rate_limited|"") sleep 3600 ;;
+      *) sleep $PACE ;;
+    esac
+  done
+done
+log "weather backfill finished"
+EOF
+fi
+
 C="docker compose --project-name wattsteer --env-file /opt/wattsteer/.env -f /opt/wattsteer/compose.yml"
 encoded="$(printf '%s' "$LOOP" | base64 | tr -d '\n')"
-run "if docker inspect wattsteer-backfill >/dev/null 2>&1 && [ \"\$(docker inspect -f '{{.State.Running}}' wattsteer-backfill)\" = true ]; then echo 'already running'; exit 0; fi; docker rm -f wattsteer-backfill >/dev/null 2>&1; $C run -d --no-deps --name wattsteer-backfill worker sh -c \"echo $encoded | base64 -d > /tmp/loop.sh && sh /tmp/loop.sh\" && echo started"
+run "if docker inspect $NAME >/dev/null 2>&1 && [ \"\$(docker inspect -f '{{.State.Running}}' $NAME)\" = true ]; then echo 'already running'; exit 0; fi; docker rm -f $NAME >/dev/null 2>&1; $C run -d --no-deps --name $NAME worker sh -c \"echo $encoded | base64 -d > /tmp/loop.sh && sh /tmp/loop.sh\" && echo started"
