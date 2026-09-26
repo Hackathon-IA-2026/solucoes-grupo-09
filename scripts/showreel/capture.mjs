@@ -57,8 +57,15 @@ const shot = async (name, settle = 1500) => {
 const box = async (name, loc) => {
   boxes[name] = await loc.boundingBox();
 };
+// The day the Overview is sampled on, with the same battery and shiftable load
+// the Time Machine replays. `/app` with no parameters lands on whatever
+// tomorrow happens to hold, which on a quiet day is a screen of small numbers;
+// this one was picked for having figures worth looking at.
+const APP =
+  "/app?date=2026-09-24&s=eyJhc3NldHMiOlt7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IkJhdHRlcnkiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9LHsiYXNzZXRfdHlwZSI6InNoaWZ0YWJsZV9sb2FkIiwiZGFpbHlfZW5lcmd5X213aCI6MTcwMCwibGFiZWwiOiJGbGV4aWJsZSBsb2FkIiwibWF4X3Bvd2VyX213Ijo3MCwibWF4X3NoaWZ0X213Ijo1MCwic2hpZnRfd2luZG93X2hvdXJzIjozLCJzdWJzeXN0ZW0iOiJORSJ9XSwiZWNvbm9taWNfYXNzdW1wdGlvbnMiOnsiYnJsX3Blcl9td2giOjE4MH0sInN1YnN5c3RlbSI6Ik5FIiwidGFyZ2V0X2RhdGUiOiIyMDI2LTA5LTI2IiwidiI6MX0";
+
 const openApp = async () => {
-  await p.goto(`${ORIGIN}/app`, { waitUntil: "networkidle" });
+  await p.goto(`${ORIGIN}${APP}`, { waitUntil: "networkidle" });
   await p.waitForTimeout(6000);
   await hideDock();
 };

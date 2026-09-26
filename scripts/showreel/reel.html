@@ -166,14 +166,14 @@ function reveal(el, t, a, b, { stagger = 0.045, dur = 0.5, out = null } = {}) {
 // retiming the reel is editing a duration, not hunting for constants — the
 // first cut was 15 s with 0.46 s per card, too fast to read a figure.
 const BEATS = [
-  ["problem", 3.4, "01 · Problema"],
-  ["solution", 3.0, "02 · Solução"],
-  ["map", 4.2, "03 · Mapa"],
-  ["cards", 5.6, "04 · Cinco perguntas"],
-  ["drawers", 4.4, "05 · Explicar · O que fazer"],
-  ["replay", 6.2, "06 · Máquina do tempo"],
-  ["thesis", 3.4, "07 · Tese"],
-  ["outro", 3.2, "08 · WattSteer"],
+  ["problem", 5.9, "01 · Problema"],
+  ["solution", 3.9, "02 · Solução"],
+  ["map", 5.6, "03 · Mapa"],
+  ["cards", 7.6, "04 · Cinco perguntas"],
+  ["drawers", 7.6, "05 · Explicar · O que fazer"],
+  ["replay", 9.4, "06 · Máquina do tempo"],
+  ["thesis", 4.4, "07 · Tese"],
+  ["outro", 5.1, "08 · WattSteer"],
 ];
 const AT = {};
 { let s = 0; for (const [k, d, label] of BEATS) { AT[k] = { a: s, b: s + d, d, label }; s += d; } }
@@ -186,18 +186,22 @@ window.DUR = DUR;
 const SCHED = (() => {
   const p = AT.problem, so = AT.solution, m = AT.map, c = AT.cards, d = AT.drawers, r = AT.replay, th = AT.thesis, o = AT.outro;
   const mapT0 = m.a + 0.25, cardsOut = 0.35, cardsT0 = c.a + 0.1, half = d.d / 2;
-  const rT0 = r.a + 1.15, rBack = r.b - 0.45;
+  // The tab is held for as long as a drawer button is — see `drawers.hold`.
+  // It used to be pressed 0.42 s in and dived through 0.13 s later, which read
+  // as a jump cut with a cursor in it rather than as something being opened.
+  const tabHold = 1.35;
+  const rT0 = r.a + 2.3, rBack = r.b - 0.45;
   return {
     problem: { p1: p.a + 0.1, p2: p.a + 0.6, n0: p.a + 1.7 },
     solution: { sweep: so.a + 1.1 },
     map: { t0: mapT0, slot: (m.b - mapT0 - 0.1) / 4, n: 4 },
     cards: { t0: cardsT0, out: cardsOut, slot: (c.b - cardsOut - cardsT0) / 5, n: 5 },
-    drawers: { half, opens: [0, 1].map((j) => d.a + j * half + 0.3) },
-    replay: { press: r.a + 0.42, dive: r.a + 0.55, land: r.a + 0.75, t0: rT0, back: rBack, slot: (rBack - rT0) / 5, n: 5 },
+    drawers: { half, hold: 1.35, opens: [0, 1].map((j) => d.a + j * half + 1.35) },
+    replay: { hold: tabHold, press: r.a + tabHold, dive: r.a + tabHold + 0.15, land: r.a + tabHold + 0.55, t0: rT0, back: rBack, slot: (rBack - rT0) / 5, n: 5 },
     // One cue per clause. The three land in order and the last one holds:
     // the sentence is an escalation and the music should arrive with it.
     thesis: { l1: th.a + 0.25, l2: th.a + 0.95, l3: th.a + 1.7 },
-    outro: { v: o.a + 0.15, g: o.a + 1.25, l: o.a + 2.1 },
+    outro: { v: o.a + 0.15, g: o.a + 2.75, l: o.a + 3.0 },
     whip: 0.34,
   };
 })();
@@ -217,8 +221,6 @@ const T = {
   th1: line(words("Os modelos estimam."), "top:330px;font-size:118px;color:#8a8a93"),
   th2: line(words("A IA explica."), "top:470px;font-size:118px"),
   th3: line(words("O operador decide."), "top:610px;font-size:118px;color:#d4f54a"),
-  goTag: line(`<span class="tag" style="color:#d4f54a">Onde queremos chegar</span>`, "top:380px"),
-  go: line(words("Nenhum MWh cortado sem aviso."), "top:450px;font-size:104px"),
   logo: line(`<img src="output/shots/logo.png" style="height:120px">`, "top:390px"),
   url: line(words("wattsteer.com"), "top:560px;font-size:56px;font-weight:600;letter-spacing:-0.02em"),
   claim: line(words("Curtailment do dia seguinte · rede brasileira"), "top:650px;font-size:30px;font-weight:500;letter-spacing:0;color:#8a8a93"),
@@ -302,8 +304,12 @@ function render(t) {
         T.num.style.opacity = 1 - out;
         T.num.style.transform = `translateY(${(1 - E.outExpo(seg(t, n0, n0 + 0.4))) * 60}px) scale(${1 + out * 0.4})`;
         T.num.style.filter = `blur(${out * 14}px)`;
-        reveal(T.numSub, t, n0 + 0.2, b, { stagger: 0.03, out: 0.18 });
-        reveal(T.numQ, t, n0 + 0.55, b, { stagger: 0.05, out: 0.18 });
+        // A second of the figure alone before anything is said about it: the
+        // sub and the questions used to arrive while the counter was still
+        // running, so three things moved at once and the number — the only one
+        // that matters — was the one nobody finished reading.
+        reveal(T.numSub, t, n0 + 1.2, b, { stagger: 0.03, out: 0.18 });
+        reveal(T.numQ, t, n0 + 1.55, b, { stagger: 0.05, out: 0.18 });
       }
     } }
 
@@ -312,7 +318,10 @@ function render(t) {
     if (t >= a - 0.1 && t < b + 0.1) {
       const k = E.outExpo(seg(t, a - 0.1, a + 1.0));
       const push = E.inOutCubic(seg(t, a + 0.8, b + 0.1));
-      const c = mixCam(FULL, { x: 800, y: 330, z: 1.6 }, push);
+      // y on the headline, not on the chip above it. At 330 the push landed on
+      // "Curtailment do dia seguinte · rede brasileira" — a label — and pushed
+      // the sentence the slide is about to the bottom of frame.
+      const c = mixCam(FULL, { x: 800, y: 455, z: 1.55 }, push);
       place("landing", c, {
         opacity: seg(t, a - 0.1, a + 0.2),
         extra: `translateZ(${lerp(-900, 0, k)}px) rotateX(${lerp(38, 0, k)}deg) rotateY(${lerp(-24, 0, k)}deg)`,
@@ -377,11 +386,26 @@ function render(t) {
       const beats = [["explainBtn", "explain", "Explicar", 3.2], ["mitigateBtn", "mitigate", "O que fazer?", 3.4]];
       const j = t < a + half ? 0 : 1;
       const [btnKey, shotName, text, z] = beats[j];
-      const open = SCHED.drawers.opens[j], s0 = open - 0.3, btn = B[btnKey];
+      const { hold } = SCHED.drawers;
+      const open = SCHED.drawers.opens[j], s0 = open - hold, btn = B[btnKey];
       if (t < open) {
-        cam = j === 0 ? camOn(btn, z) : mixCam({ x: 800, y: 560, z: 1.3 }, camOn(btn, z), E.inOutExpo(seg(t, s0, s0 + 0.2)));
+        // **The first half is already there.** Section 04 spends its last
+        // 0.35 s easing from "Onde?" to this very button, so the camera arrives
+        // on it at the boundary and only has to hold. Giving this half an
+        // approach of its own played that move twice — the camera reached the
+        // button, snapped back and travelled again, which is the glitch this
+        // comment exists to stop somebody re-introducing.
+        //
+        // The second half does travel: it comes from the Explicar drawer being
+        // read at the bottom of the page, and 0.2 s was barely an approach.
+        const settle = E.inOutExpo(seg(t, s0, s0 + 0.55));
+        cam =
+          j === 0
+            ? camOn(btn, z)
+            : mixCam({ x: 800, y: 560, z: 1.3 }, camOn(btn, z), settle);
         camLayer = "app-NE-btn";
-        if (t >= s0 + 0.08) click(cam, btn, t, open - 0.12);
+        // The press is the last third of the hold, not its opening frame.
+        if (t >= open - 0.42) click(cam, btn, t, open - 0.12);
       } else {
         const k = E.inOutQuint(seg(t, open, open + 0.5));
         const read = E.inOutCubic(seg(t, open + 0.4, s0 + half));
@@ -398,12 +422,14 @@ function render(t) {
     if (t >= a && t < b) {
       const tab = B.tmTab, { dive, land, t0, back, press } = SCHED.replay;
       if (t < land) {
-        const k = E.inOutExpo(seg(t, a, a + 0.3));
+        // 0.55 s to travel and then a beat sitting still, matching the drawer
+        // buttons: the viewer gets to see what is about to be pressed.
+        const k = E.inOutExpo(seg(t, a, a + 0.55));
         const c = mixCam({ x: 800, y: 560, z: 1.3 }, camOn(tab, 4.2), k);
         const z = E.inExpo(seg(t, dive, land));
         const c2 = z > 0 ? mixCam(camOn(tab, 4.2), { x: cx(tab), y: 60, z: 14 }, z) : c;
         place(k < 0.5 ? "mitigate" : "app-NE", c2, { opacity: 1 - z, blur: z * 20 });
-        if (t >= press - 0.17) click(bounded(c2), tab, t, press);
+        if (t >= press - 0.42) click(bounded(c2), tab, t, press);
       }
       if (t >= land - 0.1) {
         const first = camOn(B["kpi-forecast"], 1.7);
@@ -449,8 +475,6 @@ function render(t) {
         strike.style.transform = `scaleX(${E.outExpo(seg(t, v + 0.4, v + 0.65))})`;
         strike.style.opacity = 1 - E.inExpo(seg(t, g - 0.15, g));
       }
-      reveal(T.goTag, t, g + 0.05, l, { out: 0.15 });
-      reveal(T.go, t, g + 0.1, l, { out: 0.15, stagger: 0.05 });
       if (t >= l) {
         const k = E.outBack(seg(t, l, l + 0.4));
         T.logo.style.display = "block";
