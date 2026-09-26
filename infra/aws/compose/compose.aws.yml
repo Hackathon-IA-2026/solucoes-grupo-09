@@ -37,11 +37,25 @@ x-small: &small
 
 services:
   postgres:
-    <<: [*restart, *small]
+    <<: *restart
+    # Its own CPU and memory, not the one core every small service gets: every
+    # canonical read and every feature row is a query here. remote.sh sizes
+    # these to the instance; the defaults are the first event box's.
+    cpus: ${POSTGRES_CPUS:-1}
     mem_limit: ${POSTGRES_MEM_LIMIT:-1g}
     # pgvector on 16: the same major version as Railway's Postgres, with the
     # extension apps/rag needs, so both use one database as on RDS.
     image: pgvector/pgvector:pg16
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-128MB}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-512MB}
+      - -c
+      - work_mem=${POSTGRES_WORK_MEM:-4MB}
+      - -c
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-64MB}
     environment:
       POSTGRES_USER: wattsteer
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

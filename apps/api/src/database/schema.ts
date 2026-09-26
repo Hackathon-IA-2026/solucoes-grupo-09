@@ -264,6 +264,7 @@ export const subsystemEnergyBalanceHour = pgTable(
     primaryKey({ columns: [t.subsystem, t.validTime, t.dataVersion] }),
     // `AsOf` orders by ingested_at within a key; the range predicate is on
     // valid_time. This index serves the DISTINCT ON directly.
+    index("subsystem_energy_balance_hour_ingested_at").on(t.ingestedAt),
     index("subsystem_energy_balance_hour_as_of").on(
       t.validTime,
       t.subsystem,
@@ -372,6 +373,7 @@ export const curtailmentReportHour = pgTable(
     primaryKey({
       columns: [t.reportingEntityCode, t.technology, t.validTime, t.dataVersion],
     }),
+    index("curtailment_report_hour_ingested_at").on(t.ingestedAt),
     index("curtailment_report_hour_as_of").on(
       t.validTime,
       t.reportingEntityCode,
@@ -590,6 +592,7 @@ export const verifiedLoadHalfHour = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.areaCode, t.validTime, t.dataVersion] }),
+    index("verified_load_half_hour_ingested_at").on(t.ingestedAt),
     index("verified_load_half_hour_as_of").on(t.validTime, t.areaCode, t.ingestedAt),
     // Subsystem-grain reads scan by time across the four subsystem areas only.
     index("verified_load_half_hour_subsystem").on(t.subsystem, t.validTime),
@@ -645,6 +648,7 @@ export const programmedLoadHalfHour = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.areaCode, t.validTime, t.dataVersion] }),
+    index("programmed_load_half_hour_ingested_at").on(t.ingestedAt),
     index("programmed_load_half_hour_as_of").on(t.validTime, t.areaCode, t.ingestedAt),
     check(
       "programmed_load_subsystem_only_for_subsystem_area",
@@ -787,6 +791,7 @@ export const generatingUnit = pgTable(
     primaryKey({ columns: [t.plantCegCore, t.equipmentCode, t.dataVersion] }),
     // `AsOf` orders by ingested_at within a key; the interval predicate is on
     // the two date columns. This index serves the DISTINCT ON directly.
+    index("generating_unit_ingested_at").on(t.ingestedAt),
     index("generating_unit_as_of").on(t.commissionedOn, t.plantCegCore, t.ingestedAt),
     // The fleet build-up query scans the commissioning axis across all plants.
     index("generating_unit_interval").on(t.commissionedOn, t.decommissionedOn),
@@ -870,6 +875,7 @@ export const conjuntoMembership = pgTable(
     primaryKey({
       columns: [t.plantOnsCode, t.conjuntoCode, t.memberFrom, t.dataVersion],
     }),
+    index("conjunto_membership_ingested_at").on(t.ingestedAt),
     index("conjunto_membership_as_of").on(t.memberFrom, t.plantOnsCode, t.ingestedAt),
     index("conjunto_membership_conjunto").on(t.conjuntoCode, t.memberFrom),
     // An interval that ends before it starts is not a shorter membership, it is
@@ -990,6 +996,7 @@ export const dessemBalanceHalfHour = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.subsystem, t.validTime, t.dataVersion] }),
+    index("dessem_balance_half_hour_ingested_at").on(t.ingestedAt),
     index("dessem_balance_half_hour_as_of").on(t.validTime, t.subsystem, t.ingestedAt),
     // Forecast-sourced features are cut on `published_at ≤ gate`
     // (`docs/specs/feature-engineering.md`), which is a different access path
@@ -1066,6 +1073,7 @@ export const dessemGeneralHalfHour = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.subsystem, t.validTime, t.dataVersion] }),
+    index("dessem_general_half_hour_ingested_at").on(t.ingestedAt),
     index("dessem_general_half_hour_as_of").on(t.validTime, t.subsystem, t.ingestedAt),
     index("dessem_general_half_hour_published").on(t.publishedAt, t.validTime),
     // The structural discriminator, as on the detalhe table: a row whose
@@ -1144,6 +1152,7 @@ export const programmedGenerationHalfHour = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.subsystem, t.technology, t.validTime, t.dataVersion] }),
+    index("programmed_generation_half_hour_ingested_at").on(t.ingestedAt),
     index("programmed_generation_half_hour_as_of").on(
       t.validTime,
       t.subsystem,
@@ -1189,6 +1198,7 @@ export const programmedVsForecastHalfHour = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.pdpCode, t.validTime, t.dataVersion] }),
+    index("programmed_vs_forecast_half_hour_ingested_at").on(t.ingestedAt),
     index("programmed_vs_forecast_half_hour_as_of").on(
       t.validTime,
       t.pdpCode,
@@ -1227,6 +1237,7 @@ export const pdpCrosswalk = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.pdpCode, t.dataVersion] }),
+    index("pdp_crosswalk_ingested_at").on(t.ingestedAt),
     index("pdp_crosswalk_as_of").on(t.pdpCode, t.ingestedAt),
   ],
 );
@@ -1259,6 +1270,7 @@ export const controlledFlowHalfHour = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.element, t.terminal, t.validTime, t.dataVersion] }),
+    index("controlled_flow_half_hour_ingested_at").on(t.ingestedAt),
     index("controlled_flow_half_hour_as_of").on(
       t.validTime,
       t.element,
@@ -1330,6 +1342,7 @@ export const subsystemExchangeHour = pgTable(
     primaryKey({
       columns: [t.fromSubsystem, t.toSubsystem, t.validTime, t.dataVersion],
     }),
+    index("subsystem_exchange_hour_ingested_at").on(t.ingestedAt),
     index("subsystem_exchange_hour_as_of").on(
       t.validTime,
       t.fromSubsystem,
@@ -1381,6 +1394,7 @@ export const subsystemLoadDay = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.subsystem, t.validTime, t.dataVersion] }),
+    index("subsystem_load_day_ingested_at").on(t.ingestedAt),
     index("subsystem_load_day_as_of").on(t.validTime, t.subsystem, t.ingestedAt),
     // A day is 23, 24 or 25 hours long and nothing else. Any other divisor
     // means the local-day resolution went wrong, and a wrong divisor is a
@@ -1508,6 +1522,7 @@ export const plantDetailHour = pgTable(
     primaryKey({
       columns: [t.plantOnsCode, t.technology, t.validTime, t.dataVersion],
     }),
+    index("plant_detail_hour_ingested_at").on(t.ingestedAt),
     index("plant_detail_hour_as_of").on(
       t.validTime,
       t.plantOnsCode,
@@ -1651,6 +1666,7 @@ export const plantGeo = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.plantCegCore, t.dataVersion] }),
+    index("plant_geo_ingested_at").on(t.ingestedAt),
     index("plant_geo_as_of").on(t.plantCegCore, t.ingestedAt),
     index("plant_geo_municipality").on(t.municipalityUf, t.municipalityName),
     // A located row has both halves or neither. Half a coordinate is not a
@@ -1913,6 +1929,7 @@ export const weatherForecastHour = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.centroidId, t.validTime, t.dataVersion] }),
+    index("weather_forecast_hour_ingested_at").on(t.ingestedAt),
     index("weather_forecast_hour_as_of").on(t.validTime, t.centroidId, t.ingestedAt),
     // Reading one run back — the 00Z-versus-12Z comparison the ticket exists to
     // make possible — scans by publication rather than by valid time.
@@ -2879,6 +2896,7 @@ export const curtailmentForecastHour = pgTable(
     // `AsOf` orders by ingested_at within a key; the day-ahead read's predicate
     // is on target_date and subsystem. Two indexes, because they are two
     // different questions: "what did we believe at t" and "what is tomorrow".
+    index("curtailment_forecast_hour_ingested_at").on(t.ingestedAt),
     index("curtailment_forecast_hour_as_of").on(t.validTime, t.subsystem, t.ingestedAt),
     index("curtailment_forecast_hour_day").on(
       t.targetDate,
@@ -3116,6 +3134,7 @@ export const curtailmentForecastDay = pgTable(
     primaryKey({
       columns: [t.subsystem, t.targetDate, t.originKind, t.gateProfile, t.dataVersion],
     }),
+    index("curtailment_forecast_day_ingested_at").on(t.ingestedAt),
     index("curtailment_forecast_day_as_of").on(t.targetDate, t.subsystem, t.ingestedAt),
     // The day's publication instant is the same gate its hours carry, so the
     // forecast-shape check is expressible here too: the gate precedes the local
@@ -3265,6 +3284,7 @@ export const curtailmentForecastNationalDay = pgTable(
     primaryKey({
       columns: [t.targetDate, t.originKind, t.gateProfile, t.thresholdMw, t.dataVersion],
     }),
+    index("curtailment_forecast_national_day_ingested_at").on(t.ingestedAt),
     index("curtailment_forecast_national_day_as_of").on(t.targetDate, t.ingestedAt),
     check(
       "curtailment_forecast_national_day_is_a_forecast",
@@ -3546,6 +3566,7 @@ export const diagnosisAttribution = pgTable(
     primaryKey({
       columns: [t.subsystem, t.targetDate, t.originKind, t.gateProfile, t.dataVersion],
     }),
+    index("diagnosis_attribution_ingested_at").on(t.ingestedAt),
     index("diagnosis_attribution_as_of").on(t.targetDate, t.subsystem, t.ingestedAt),
     // The explanation is published with the forecast it explains, at the same
     // gate, and the gate precedes the local day. The same inequality that makes

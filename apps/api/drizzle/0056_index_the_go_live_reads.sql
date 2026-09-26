@@ -1,0 +1,21 @@
+CREATE INDEX "conjunto_membership_ingested_at" ON "conjunto_membership" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "controlled_flow_half_hour_ingested_at" ON "controlled_flow_half_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "curtailment_forecast_day_ingested_at" ON "curtailment_forecast_day" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "curtailment_forecast_hour_ingested_at" ON "curtailment_forecast_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "curtailment_forecast_national_day_ingested_at" ON "curtailment_forecast_national_day" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "curtailment_report_hour_ingested_at" ON "curtailment_report_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "dessem_balance_half_hour_ingested_at" ON "dessem_balance_half_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "dessem_general_half_hour_ingested_at" ON "dessem_general_half_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "diagnosis_attribution_ingested_at" ON "diagnosis_attribution" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "generating_unit_ingested_at" ON "generating_unit" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "pdp_crosswalk_ingested_at" ON "pdp_crosswalk" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "plant_detail_hour_ingested_at" ON "plant_detail_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "plant_geo_ingested_at" ON "plant_geo" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "programmed_generation_half_hour_ingested_at" ON "programmed_generation_half_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "programmed_load_half_hour_ingested_at" ON "programmed_load_half_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "programmed_vs_forecast_half_hour_ingested_at" ON "programmed_vs_forecast_half_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "subsystem_energy_balance_hour_ingested_at" ON "subsystem_energy_balance_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "subsystem_exchange_hour_ingested_at" ON "subsystem_exchange_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "subsystem_load_day_ingested_at" ON "subsystem_load_day" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "verified_load_half_hour_ingested_at" ON "verified_load_half_hour" USING btree ("ingested_at");--> statement-breakpoint
+CREATE INDEX "weather_forecast_hour_ingested_at" ON "weather_forecast_hour" USING btree ("ingested_at");
