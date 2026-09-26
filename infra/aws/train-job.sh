@@ -52,7 +52,9 @@ start=$(now)
 docker build -q -t local/wattsteer-ml apps/ml >/dev/null
 took[build]=$(($(now) - start))
 if [ "$MODELS_STATE" != none ]; then
-  aws s3 cp --quiet "s3://$BUCKET/$MODELS_STATE" - | tar -xz -C "$WORK/models"
+  # The release was packed on macOS; its xattr headers are noise to GNU tar.
+  aws s3 cp --quiet "s3://$BUCKET/$MODELS_STATE" - |
+    tar --warning=no-unknown-keyword -xz -C "$WORK/models"
 fi
 echo "== ml image in ${took[build]} s; artifacts: $(find "$WORK/models" -name '*.joblib' | wc -l)"
 

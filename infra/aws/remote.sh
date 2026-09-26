@@ -102,7 +102,7 @@ $C --profile tools run --rm migrate 2>&1 | tail -1
 # Seed what a fresh instance lacks, once each, from the bucket.
 mkdir -p "$DIR/data/ml-models"
 if [ -z "$(ls -A "$DIR/data/ml-models")" ] && has_state models.tgz; then
-  aws s3 cp --quiet "s3://$BUCKET/state/models.tgz" - | tar -xz -C "$DIR/data/ml-models"
+  aws s3 cp --quiet "s3://$BUCKET/state/models.tgz" - | tar --warning=no-unknown-keyword -xz -C "$DIR/data/ml-models"
   echo "Seeded model artifacts: $(find "$DIR/data/ml-models" -name '*.joblib' | wc -l) files"
 fi
 chunks="$(psql_in -Atc "select count(*) from rag.chunk" 2>/dev/null || echo 0)"
