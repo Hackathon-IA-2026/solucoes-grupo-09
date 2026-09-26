@@ -11,19 +11,12 @@ the grid could not take it. Brazil curtails a great deal of it, the data is
 public, and nobody was turning that data into a number an operator could act on
 the day before.
 
-[![WattSteer in 30 seconds: the Visão da rede map with Nordeste selected — click to play](.github/media/wattsteer-reel.jpg)](.github/media/wattsteer-reel.mp4)
-
-Thirty seconds, captured from the live site on 26 September 2026: tomorrow's
-forecast across the four subsystems, the five questions it answers, Explicar
-and O que fazer, and the Máquina do tempo replaying 18 September in the
-Nordeste against what ONS settled. Every figure in it is one the product
-printed; [`scripts/showreel/`](scripts/showreel/) rebuilds the reel from a
-fresh capture.
-
 ## Demo
 
 - **Live application:** https://www.wattsteer.com
 - **Pitch deck:** https://www.wattsteer.com/pitch
+- **Demo video:** [`scripts/showreel/`](scripts/showreel/) builds it from a
+  fresh capture of the live site.
 
 ## Technologies
 
@@ -166,15 +159,3 @@ ODbL requires is published on the application's own terms page.
 
 This project is released under the **MIT License** — see [LICENSE](LICENSE)
 for the full text. Copyright (c) 2026 Hackathon-IA-COPPE-2026.
-
-It was AGPL-3.0 until 26/09/2026. What changes for a reader of this repository
-is the copyleft: MIT asks only that the copyright notice and the permission
-notice travel with the software, so a modified fork run as a public service no
-longer has to publish its source. The footer still offers the source anyway —
-see `apps/web/src/components/site-footer.tsx` — because that offer was worth
-making on its own terms and not only because §13 compelled it.
-
-Third-party components keep their own licences, which are unchanged and
-documented where they are used — the solver comparison in
-`docs/research/optimizer-formulation.md`, and the ONS and IBGE data terms on the
-application's own terms page.
