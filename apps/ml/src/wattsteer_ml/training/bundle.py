@@ -791,12 +791,56 @@ def load_artifact(*, root: Path, lane: Lane, artifact_id: str) -> LoadedArtifact
     return LoadedArtifact(artifact_id=artifact_id, bundle=bundle, card=card)
 
 
+#: The two fields the subsystem split added (2026-09-23, #49), in the order
+#: :func:`_pooled_for_every_subsystem` fills them.
+PRE_SUBSYSTEM_FIELDS = ("subsystem_calibration", "subsystem_conformal")
+
+
+def _pooled_for_every_subsystem(loaded: HurdleBundle) -> None:
+    """Give a bundle pickled before the subsystem split the split it implied.
+
+    A bundle written before #49 carries the pooled ``calibration`` and
+    ``conformal`` and **no attribute at all** for the two per-subsystem fields,
+    because they did not exist yet. It served every subsystem from the pooled
+    map, so the faithful reading of it is a split in which every subsystem is
+    declined and falls back to the pooled map: the same numbers it always
+    served, now with the card-facing ``declined`` saying so.
+
+    Only that shape is read this way. A field present and ``None`` is a
+    truncated bundle written *after* the split, and stays refused by the sweep
+    in :func:`_validated`, as ``test_a_bundle_missing_subsystem_calibration``
+    requires. Measured on 26/09: the promoted ``2026-09-21T23:19:00Z`` has
+    both fields absent, and with the refusal alone every deployment of main
+    answered ``MODEL_UNAVAILABLE`` until ml was rolled back to ``f1cf0da``.
+    """
+    state = vars(loaded)
+    if any(name in state for name in PRE_SUBSYSTEM_FIELDS):
+        return
+    if state.get("calibration") is None or state.get("conformal") is None:
+        return
+    object.__setattr__(
+        loaded,
+        "subsystem_calibration",
+        SubsystemCalibration(
+            pooled=loaded.calibration, per_subsystem={}, declined=SUBSYSTEM_CODES
+        ),
+    )
+    object.__setattr__(
+        loaded,
+        "subsystem_conformal",
+        SubsystemCorrections(
+            pooled=loaded.conformal, per_subsystem={}, declined=SUBSYSTEM_CODES
+        ),
+    )
+
+
 def _validated(loaded: object) -> HurdleBundle:
     """Every field present and of the right kind, after an ``__init__``-less load."""
     if not isinstance(loaded, HurdleBundle):
         raise PartialBundleError(
             f"the bundle holds a {type(loaded).__name__}, not a HurdleBundle"
         )
+    _pooled_for_every_subsystem(loaded)
     missing = [
         field.name
         for field in fields(loaded)
