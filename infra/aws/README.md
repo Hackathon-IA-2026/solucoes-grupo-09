@@ -26,6 +26,8 @@ viewer ─▶ CloudFront (HTTPS) ─▶ EC2 m7g.xlarge: Caddy ─▶ web · api 
 | `compose/compose.aws.yml`, `Caddyfile` | the stack the instance runs, with its memory ceilings |
 | `backfill.sh` | fills the instance's database from ONS and Open-Meteo, in the background |
 | `train.sh`, `buildspec-train.yml`, `train-job.sh` | one training run on the 72-vCPU CodeBuild machine, inside a budget of machine minutes |
+| `jobs/campaign.sh`, `jobs/fit_speed.py` | the arms a training run parallelises, and the benchmark that says why |
+| `dump-db.sh` | the instance's database into the bucket, for `train.sh` |
 
 ## A new account, from nothing
 
@@ -64,6 +66,22 @@ log and a `timing.json` to `s3://…/training/<run id>/`.
 ```sh
 infra/aws/train.sh --usage
 infra/aws/train.sh --run-id f6 --timeout 90 -- python -m wattsteer_ml.retrain …
+```
+
+What the big machine buys, measured with `jobs/fit_speed.py` (one fit is
+single-threaded by the model configuration):
+
+| | M3 laptop, 8 cores | CodeBuild 2XLARGE, 72 vCPU |
+|---|---|---|
+| one fit | 13.4–14.9 s | 17.6 s |
+| fits in parallel | 8.2 a minute | 110 a minute |
+
+So a run is worth sending there when it has several independent arms, which
+`jobs/campaign.sh` runs at once (v2, v3, the DESSEM A/B):
+
+```sh
+infra/aws/dump-db.sh
+infra/aws/train.sh --run-id campaign-1 --timeout 240 -- sh /jobs/campaign.sh
 ```
 
 The account does not show participants its spending limit, so the team keeps

@@ -38,8 +38,15 @@ if [ "$DB_STATE" != none ]; then
   aws s3 cp --quiet "s3://$BUCKET/$DB_STATE" - | gunzip | sed '/^SET transaction_timeout/d' |
     docker exec -i pg psql -U wattsteer -d wattsteer -q -v ON_ERROR_STOP=1 >/dev/null
 fi
+# Bring the restored schema to this commit's migrations: a dump taken from
+# the instance is at main's, and a branch that adds a feature column trains
+# against the new feature_row only once its migration has run.
+docker build -q -t local/wattsteer-migrate -f infra/aws/docker/migrate.Dockerfile . >/dev/null
+docker run --rm --network host \
+  -e DATABASE_URL=postgres://wattsteer:wattsteer@127.0.0.1:5432/wattsteer \
+  local/wattsteer-migrate 2>&1 | tail -1
 took[restore]=$(($(now) - start))
-echo "== restored $DB_STATE in ${took[restore]} s"
+echo "== restored $DB_STATE and migrated in ${took[restore]} s"
 
 start=$(now)
 docker build -q -t local/wattsteer-ml apps/ml >/dev/null
@@ -54,7 +61,7 @@ status=0
 docker run --rm --network host --user root \
   -e DATABASE_URL=postgres://wattsteer:wattsteer@127.0.0.1:5432/wattsteer \
   -e WATTSTEER_ML_ARTIFACT_DIR=/data/models \
-  -v "$WORK/models:/data/models" -v "$PWD/infra/aws/bench:/bench:ro" \
+  -v "$WORK/models:/data/models" -v "$PWD/infra/aws/jobs:/jobs:ro" \
   --entrypoint sh local/wattsteer-ml -c "$TRAIN_COMMAND" \
   2>&1 | tee "$WORK/train.log" || status=$?
 took[train]=$(($(now) - start))

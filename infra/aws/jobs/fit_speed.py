@@ -10,7 +10,7 @@ real design matrix's shape and with the served booster's parameters:
 - ``one_fit_s``: one fit, one thread;
 - ``parallel_fits_per_min``: ``processes`` single-thread fits at once.
 
-    python infra/aws/bench/fit_speed.py [processes]
+    python infra/aws/jobs/fit_speed.py [processes]
 """
 
 import os
