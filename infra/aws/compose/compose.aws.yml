@@ -186,6 +186,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${DATA_DIR:-/data}/caddy:/data
+      - ${DATA_DIR:-/data}/static:/srv/static:ro
     depends_on:
       - api
       - web
