@@ -3,14 +3,6 @@
 #
 #   infra/aws/backfill.sh            start it (a second start is refused)
 #   infra/aws/backfill.sh --status   the last lines of its log
-#   infra/aws/backfill.sh --weather  weather only, in its own container, beside it
-#
-# `--weather` exists because the first history pass spends an hour or more
-# fetching ONS's whole archive, and weather waits behind it although it is
-# bounded by a different thing (Open-Meteo's quota, not this machine). It asks
-# the same weather task the history sweep would, 90 days at a time, newest
-# first, one request stream at a time; a window the quota cut short is asked
-# again half an hour later. What either container fetched is not fetched twice.
 #
 # It runs on the instance as a detached container of the worker image,
 # `wattsteer-backfill`, and drives the ingestion the worker already has
@@ -54,9 +46,7 @@ run() {
 }
 
 if [ "${1:-}" = --status ]; then
-  for name in wattsteer-backfill wattsteer-backfill-weather; do
-    run "echo == $name; docker logs --tail 20 $name 2>&1 | grep -v '… [0-9]*/'; docker inspect -f 'state: {{.State.Status}} since {{.State.StartedAt}}' $name 2>&1"
-  done
+  run "docker logs --tail 40 wattsteer-backfill 2>&1; docker inspect -f 'state: {{.State.Status}} since {{.State.StartedAt}}' wattsteer-backfill 2>&1"
   exit 0
 fi
 
@@ -80,33 +70,6 @@ done
 log "backfill finished"
 EOF
 
-NAME=wattsteer-backfill
-if [ "${1:-}" = --weather ]; then
-  NAME=wattsteer-backfill-weather
-  # Newest window first, from the weather model's coverage start (2024-03-15,
-  # single-runs.ts) to two weeks ago; the live sweep holds the last two weeks.
-  windows="$(python3 -c '
-from datetime import date, timedelta
-start, end = date(2024, 3, 15), date.today() - timedelta(days=15)
-out, to = [], end
-while to >= start:
-    frm = max(start, to - timedelta(days=89))
-    out.append(f"{frm}:{to}")
-    to = frm - timedelta(days=1)
-print(" ".join(out))')"
-  LOOP="set -u
-log() { echo \"\$(date -u +%FT%TZ) \$*\"; }
-for window in $windows; do
-  from=\"\${window%%:*}\"; to=\"\${window##*:}\"
-  for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    log \"weather \$from..\$to attempt \$attempt\"
-    bun run src/scripts/ingest.ts task \"{\\\"kind\\\":\\\"weather\\\",\\\"payload\\\":{\\\"from\\\":\\\"\$from\\\",\\\"to\\\":\\\"\$to\\\",\\\"runCycles\\\":[\\\"00Z\\\",\\\"12Z\\\"]}}\" && break
-    sleep 1800
-  done
-done
-log \"weather backfill finished\""
-fi
-
 C="docker compose --project-name wattsteer --env-file /opt/wattsteer/.env -f /opt/wattsteer/compose.yml"
 encoded="$(printf '%s' "$LOOP" | base64 | tr -d '\n')"
-run "if docker inspect $NAME >/dev/null 2>&1 && [ \"\$(docker inspect -f '{{.State.Running}}' $NAME)\" = true ]; then echo 'already running'; exit 0; fi; docker rm -f $NAME >/dev/null 2>&1; $C run -d --no-deps --name $NAME worker sh -c \"echo $encoded | base64 -d > /tmp/loop.sh && sh /tmp/loop.sh\" && echo started"
+run "if docker inspect wattsteer-backfill >/dev/null 2>&1 && [ \"\$(docker inspect -f '{{.State.Running}}' wattsteer-backfill)\" = true ]; then echo 'already running'; exit 0; fi; docker rm -f wattsteer-backfill >/dev/null 2>&1; $C run -d --no-deps --name wattsteer-backfill worker sh -c \"echo $encoded | base64 -d > /tmp/loop.sh && sh /tmp/loop.sh\" && echo started"
