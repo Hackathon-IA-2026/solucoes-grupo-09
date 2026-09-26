@@ -226,6 +226,31 @@ describe("the dashboard opens on the reader's day", () => {
     ).toBeNull();
   });
 
+  it("never answers from another subsystem's calendar", () => {
+    /*
+      The defect this catches, measured on production 26/09: pressing SE/CO on
+      the Time Machine did nothing. The pill writes an episode in the new
+      subsystem, but `useReplayDays` keeps the previous answer while the new
+      calendar is in flight — that is the rule `web.md` states and it is right
+      — so for a frame or two this function was handed **NE's** list beside an
+      **SE** day. The asked day is not in that list, so the search below found
+      NE's newest day at or before the date and the effect wrote it back to the
+      URL. The subsystem pill was inert and nothing said why.
+
+      A list belonging to another region cannot answer anything about this one:
+      the honest response is to keep the asked day until its own calendar
+      arrives.
+    */
+    const asked = { id: "2026-09-19-se", date: "2026-09-19", subsystem: "SE" as const };
+    expect(
+      openingDay(days, asked, { fromUrl: true, date: "2026-09-19", subsystem: "SE" }),
+    ).toBeNull();
+    // And the same from a tab switch, where the date is the one being walked to.
+    expect(
+      openingDay(days, asked, { fromUrl: false, date: "2026-09-23", subsystem: "SE" }),
+    ).toBeNull();
+  });
+
   it("moves a named day it cannot answer to the nearest earlier one", () => {
     const named = { id: "2026-09-19-ne", date: "2026-09-19", subsystem: "NE" as const };
     expect(

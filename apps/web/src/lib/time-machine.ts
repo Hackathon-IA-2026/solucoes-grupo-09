@@ -109,6 +109,24 @@ export function openingDay(
   if (viewable.length === 0) {
     return null;
   }
+  /*
+    **A calendar for another region answers nothing about this one.**
+
+    `viewable` is one subsystem's list and `use-replay-days.ts` keeps the
+    previous answer while the next is in flight — deliberately, because a
+    re-read that collapsed to a skeleton is what `web.md` forbids. So between
+    pressing SE/CO and its calendar arriving, this function is handed **NE's**
+    days beside an **SE** day. The asked day is not in that list, and the
+    search below would answer with NE's newest day at or before the date.
+
+    Measured on production 26/09: that is exactly what happened, and the effect
+    wrote it straight back to the URL, so the subsystem pill did nothing at all
+    and nothing on screen said why. Keeping the asked day until its own
+    calendar lands is the only honest answer here.
+  */
+  if (viewable[0]?.subsystem !== current.subsystem) {
+    return null;
+  }
   if (wanted.fromUrl && viewable.some((day) => day.id === current.id)) {
     return null;
   }
