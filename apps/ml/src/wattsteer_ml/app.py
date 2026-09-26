@@ -164,6 +164,77 @@ CANONICAL_VIEW = "canonical_system_context"
 logger = logging.getLogger(__name__)
 
 
+#: What the last check of each promoted artifact found, keyed by
+#: ``(lane directory name, artifact id)``. An entry's value is the refusal's
+#: sentence, or ``None`` when the bundle loaded.
+#:
+#: Keyed on the artifact id as well as the lane so that a retrain promoting a
+#: new bundle is re-checked rather than inheriting the previous one's verdict.
+_PROMOTED_LOAD_CHECKS: dict[tuple[str, str], str | None] = {}
+
+
+def promoted_load_faults() -> dict[str, str]:
+    """Every promoted lane whose bundle will not load, and why.
+
+    Empty when every promoted lane loads — **and** when nothing is promoted,
+    which is a different thing and deliberately not a fault: a deployment with
+    no promoted artifact is the ordinary state this product is built to render
+    as a stated absence. The fault this function reports is narrower and much
+    worse: the promotion log names an artifact, and that artifact cannot be
+    loaded by the code now running.
+
+    ## Why this exists
+
+    Measured on production, 2026-09-24 to 26. `a2f1c4b` made
+    ``subsystem_calibration`` and ``subsystem_conformal`` required fields on
+    :class:`~wattsteer_ml.training.bundle.HurdleBundle`. Bundles are pickled, so
+    joblib rebuilds them without ``__init__`` and every artifact written before
+    that commit came back with the two fields absent — refused, correctly, by
+    the loader that exists to stop a band being composed from a probability the
+    pooled map distorted.
+
+    The deploy carrying that change **passed its healthcheck**, because
+    readiness asked Postgres whether it was up and never asked the volume
+    whether the thing this service claims to serve could be served. So
+    ``publish-forecast:gate_early`` answered ``MODEL_UNAVAILABLE`` every day for
+    two days, `/v1/meta` went on reporting ``usable: true`` beside it, and the
+    screens said a model was serving while no forecast was being written.
+
+    Loading is expensive, so each verdict is computed once per promoted
+    artifact and cached. The cost is paid at boot, which is exactly where a
+    deployment that cannot serve should find out.
+    """
+    faults: dict[str, str] = {}
+    store = inspect()
+    for view in store.lanes:
+        promoted = view.promoted
+        # Only a lane that already believes it can serve. A lane the card has
+        # ruled out — a stale feature hash, an unparseable card — is unusable
+        # for a reason it can already state, and loading its bundle would be
+        # work done to produce a second sentence about a lane nobody is going
+        # to be served from. This check exists for the narrower case: the card
+        # says fine and the bundle does not load.
+        if promoted is None or not view.usable:
+            continue
+        key = (view.lane.directory_name, promoted)
+        if key not in _PROMOTED_LOAD_CHECKS:
+            try:
+                load_promoted(view.lane, root=settings.artifact_dir)
+            except Exception as error:
+                # Deliberately broad. This runs at boot to decide whether the
+                # instance may serve, and *any* failure to load is that answer
+                # — a narrower catch would let an unanticipated error escape
+                # into a healthcheck and be read as the service being down for
+                # some other reason.
+                _PROMOTED_LOAD_CHECKS[key] = str(error)
+            else:
+                _PROMOTED_LOAD_CHECKS[key] = None
+        fault = _PROMOTED_LOAD_CHECKS[key]
+        if fault is not None:
+            faults[view.lane.directory_name] = fault
+    return faults
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Hold the connection pool open for the process's life.
@@ -178,6 +249,18 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     boot with the reason, not on whichever request first reaches the optimizer.
     """
     configured_milp_backend()
+    # At boot, once, and loudly. A deployment whose promoted artifact cannot be
+    # loaded is a deployment that must not take over from the one serving now —
+    # `/ready` refuses below, and Railway's healthcheck is what keeps the
+    # previous deployment in place. Printed as well as refused, because the
+    # sentence is the repair and a 503 alone is not.
+    for lane_name, reason in promoted_load_faults().items():
+        logger.error(
+            "%s: the promoted artifact will not load — %s. This instance "
+            "cannot serve this lane, and readiness refuses for that reason",
+            lane_name,
+            reason,
+        )
     yield
     if database is not None:
         await database.close()
@@ -217,6 +300,14 @@ class Readiness(BaseModel):
     #: False means Postgres is up but Drizzle has not migrated it yet. Not our
     #: fix, and worth saying so plainly.
     schema_present: bool | None = None
+    #: Promoted lanes whose bundle will not load, lane name to the refusal's
+    #: own sentence. Empty is the ordinary case **and** covers a deployment with
+    #: nothing promoted, which is not a fault: this product renders "no forecast
+    #: is published" as a stated absence and every observed route still answers.
+    #: A non-empty map is the narrow, serious case — the log names an artifact
+    #: this code cannot load — and it is what readiness refuses over, so the
+    #: deploy fails instead of the publication.
+    promoted_faults: dict[str, str] = {}
 
 
 class PromotionLogState(BaseModel):
@@ -411,18 +502,20 @@ async def ready() -> JSONResponse:
     Returns 503 with the same body when it cannot, so a load balancer and a
     human reading the JSON learn the same thing.
     """
+    faults = promoted_load_faults()
     if database is None:
-        state = Readiness(ready=False, database="unconfigured")
+        state = Readiness(ready=False, database="unconfigured", promoted_faults=faults)
     elif not await database.ping():
-        state = Readiness(ready=False, database="unreachable")
+        state = Readiness(ready=False, database="unreachable", promoted_faults=faults)
     else:
         read_only = await database.is_read_only()
         migrated = await database.relation_exists(CANONICAL_VIEW)
         state = Readiness(
-            ready=read_only and migrated,
+            ready=read_only and migrated and not faults,
             database="ok",
             read_only=read_only,
             schema_present=migrated,
+            promoted_faults=faults,
         )
     return JSONResponse(
         status_code=200 if state.ready else 503,
@@ -433,6 +526,16 @@ async def ready() -> JSONResponse:
 @app.get("/v1/meta", response_model=Meta, tags=["meta"])
 def meta() -> Meta:
     store = artifacts.inspect()
+    # `LaneView.usable` reads the card and cannot read the bundle: `artifacts`
+    # sits below `publication`, and importing the loader there would be a
+    # cycle. So the bundle's verdict is joined here, where both are in scope.
+    #
+    # It has to be joined *somewhere*. `usable` is documented as "promoted and
+    # loadable", and for two days it reported `true` for a lane whose bundle had
+    # not loaded since the deploy — the gateway believed a model was serving,
+    # and `honesty.md`'s rule that the deployment's condition is read and never
+    # assumed was being broken at the source rather than on a screen.
+    faults = promoted_load_faults()
     return Meta(
         service="wattsteer-ml",
         version=__version__,
@@ -464,11 +567,17 @@ def meta() -> Meta:
                     promoted=view.promoted,
                     newest=view.newest,
                     fault=view.fault,
-                    usable=view.usable,
+                    usable=view.usable and view.lane.directory_name not in faults,
                     retrain_owed=view.retrain_owed,
                     contract_fault=view.contract_fault,
                     card_error=view.card_error,
-                    unusable_reason=view.unusable_reason,
+                    # The card's own sentence wins where it has one: it is
+                    # the older and more specific fact, and a load failure
+                    # printed over "this artifact's feature hash is stale"
+                    # would replace the operative repair with a symptom. The
+                    # bundle's refusal fills the gap the card cannot see.
+                    unusable_reason=view.unusable_reason
+                    or faults.get(view.lane.directory_name),
                 )
                 for view in store.lanes
             ],

@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from wattsteer_ml.app import app
+from wattsteer_ml.artifacts import ARTIFACT_SUFFIX, CARD_SUFFIX
 from wattsteer_ml.config import settings
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.promotions import (
@@ -133,3 +134,111 @@ def test_this_service_serves_no_day_ahead_read() -> None:
     # need this process because neither can be answered from a row.
     assert "/internal/publish/forecast" in paths
     assert "/v1/optimize" in paths
+
+
+def test_readiness_refuses_when_a_promoted_artifact_will_not_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The deploy fails instead of the publication.
+
+    Production, 2026-09-24 to 26. `a2f1c4b` made two fields required on
+    `HurdleBundle`. Bundles are pickled, so joblib rebuilds them without
+    `__init__` and every artifact written before that commit came back with the
+    fields absent — refused by the loader, correctly. The deploy carrying that
+    change **passed its healthcheck**, because readiness asked Postgres whether
+    it was up and never asked whether the thing this service claims to serve
+    could be served. `publish-forecast:gate_early` then answered
+    `MODEL_UNAVAILABLE` for two days while `/v1/meta` reported `usable: true`.
+
+    Readiness reads the volume now, so a deployment that cannot load what the
+    promotion log names never takes over from the one serving.
+    """
+    import joblib
+
+    from wattsteer_ml import app as app_module
+    from wattsteer_ml.training.bundle import HurdleBundle
+
+    lane_dir = tmp_path / LANE.directory_name
+    lane_dir.mkdir(parents=True)
+    # The incident's exact shape, and the reason it was invisible: the card is
+    # on the volume and parses, so `LaneView.usable` called the lane fine. The
+    # bundle is on the volume too and unpickles — into an instance whose newer
+    # fields are simply absent, which is what joblib gives back for an object
+    # written before those fields existed, because pickle restores attributes
+    # and never runs `__init__`. `_validated` is what catches it.
+    (lane_dir / f"{PROMOTED}{CARD_SUFFIX}").write_text("{}")
+    joblib.dump(object.__new__(HurdleBundle), lane_dir / f"{PROMOTED}{ARTIFACT_SUFFIX}")
+    append(
+        tmp_path / PROMOTION_LOG_FILENAME,
+        PromotionRecord(
+            lane=LANE,
+            artifact_id=PROMOTED,
+            decision="promote",
+            at=datetime(2026, 8, 28, 3, 11, 7, tzinfo=UTC),
+            reason="promoted in the fixture",
+        ),
+    )
+    monkeypatch.setattr(settings, "artifact_dir", tmp_path)
+    # The cache is keyed per (lane, artifact) and this test supplies its own.
+    app_module._PROMOTED_LOAD_CHECKS.clear()
+
+    faults = app_module.promoted_load_faults()
+    assert LANE.directory_name in faults
+    # The sentence production printed, not merely "something went wrong": the
+    # reason is the repair, and it is what `/v1/meta` renders for an operator.
+    assert "could not be loaded" in faults[LANE.directory_name]
+    assert PROMOTED in faults[LANE.directory_name]
+
+    # A **healthy** database, so the 503 below can only be about the volume.
+    # Without this the assertion is blind: readiness already answers 503 in
+    # this suite because no Postgres is configured, so it would pass with the
+    # volume check removed — which is what a mutation of this file proved.
+    class _Healthy:
+        async def ping(self) -> bool:
+            return True
+
+        async def is_read_only(self) -> bool:
+            return True
+
+        async def relation_exists(self, _name: str) -> bool:
+            return True
+
+    monkeypatch.setattr(app_module, "database", _Healthy())
+
+    response = client.get("/ready")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["database"] == "ok"
+    assert body["read_only"] is True
+    assert body["schema_present"] is True
+    # Everything Postgres owns is fine, so the refusal is the volume's alone.
+    assert LANE.directory_name in body["promoted_faults"]
+
+    # And the lane stops claiming it can serve, which is the half that was
+    # lying on screen: `usable` reads the card and cannot reach the bundle.
+    lanes = {
+        row["lane"]: row for row in client.get("/v1/meta").json()["artifacts"]["lanes"]
+    }
+    assert lanes[LANE.directory_name]["usable"] is False
+    assert lanes[LANE.directory_name]["unusable_reason"]
+
+    app_module._PROMOTED_LOAD_CHECKS.clear()
+
+
+def test_nothing_promoted_is_not_a_fault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty volume is the ordinary state, not a broken deployment.
+
+    The check above must not fire when there is simply nothing to serve: this
+    product renders "no forecast is published" as a stated absence and every
+    observed route answers without a model. Readiness failing there would take
+    a working deployment down over its normal condition.
+    """
+    from wattsteer_ml import app as app_module
+
+    monkeypatch.setattr(settings, "artifact_dir", tmp_path)
+    app_module._PROMOTED_LOAD_CHECKS.clear()
+    assert app_module.promoted_load_faults() == {}
+    assert client.get("/ready").json()["promoted_faults"] == {}
+    app_module._PROMOTED_LOAD_CHECKS.clear()
