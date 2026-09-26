@@ -3,10 +3,22 @@
 #
 #   infra/railway/make-state-bundle.sh <output directory>
 #
-# Two files come out, and they are the two things a deployment cannot rebuild
-# from the repository: the artifact files a retrain wrote, and the forecast rows
-# a holdout backfill scored. Everything else Railway needs is code, an image or
-# an ingestion it runs itself.
+# Three files come out, and they are the three things a deployment cannot
+# rebuild from the repository: the artifact files a retrain wrote, the forecast
+# rows a holdout backfill scored, and the weather history.
+#
+# **Weather is here because `ecc10e5` measured that it cannot be refetched.**
+# Each weather task stops at the free tier's 138 weighted units, so the history
+# since 2024-03-15 is about 1,800 such slots — on the order of 200,000 units
+# against an allowance of 10,000 a day, which is about three weeks, and it would
+# spend the allowance the hourly live sweep needs for tomorrow's forecast. That
+# commit removed `backfill.sh --weather` and said where the history has to come
+# from instead: "a database that already holds it (a dump of the standing
+# deployment's)". This is that dump. It was missing from this script for two
+# days after the finding, and a bundle cut in between shipped without it.
+#
+# The RAG corpus is the fourth and is not produced here — see `ship-rag.sh`,
+# which carries the two `pg_dump` invocations it needs in its own header.
 #
 # `ship-state.sh` sends the result. They are separate because the machine that
 # trains and the machine that deploys need not be the same one, and because a
@@ -49,7 +61,34 @@ docker exec "$PG_CONTAINER" pg_dump -U wattsteer -d wattsteer \
       cat; echo "COMMIT;"; } \
   | gzip -1 > "$OUT/forecasts.sql.gz"
 
-for file in "$OUT"/models.tgz "$OUT"/forecasts.sql.gz; do
+echo "== weather history from $PG_CONTAINER"
+# Idempotent, and deliberately not the truncate-and-load the forecast rows get.
+# Those three tables are written only by a backfill, so replacing them wholesale
+# is safe; `weather_forecast_hour` is written by the hourly live sweep on the
+# *receiving* side as well, and both tables are keyed — (centroid_id,
+# valid_time, data_version) and (id) — so a row that is already there is the
+# same row. Loading through a temp table and inserting `ON CONFLICT DO NOTHING`
+# adds the history the target lacks and discards nothing it fetched itself.
+#
+# No `--disable-triggers`: nothing is written to a real table until the final
+# INSERTs, and those run as the ordinary user.
+{
+  echo "BEGIN;"
+  echo "CREATE TEMP TABLE t_weather_forecast_hour (LIKE public.weather_forecast_hour) ON COMMIT DROP;"
+  echo "CREATE TEMP TABLE t_weather_run_request (LIKE public.weather_run_request) ON COMMIT DROP;"
+  docker exec "$PG_CONTAINER" pg_dump -U wattsteer -d wattsteer \
+    --data-only --no-owner \
+    -t public.weather_forecast_hour \
+    -t public.weather_run_request \
+    | grep -v -E '^\\(un)?restrict |^SET transaction_timeout' \
+    | sed -e 's/^COPY public\.weather_forecast_hour /COPY t_weather_forecast_hour /' \
+          -e 's/^COPY public\.weather_run_request /COPY t_weather_run_request /'
+  echo "INSERT INTO public.weather_forecast_hour SELECT * FROM t_weather_forecast_hour ON CONFLICT DO NOTHING;"
+  echo "INSERT INTO public.weather_run_request SELECT * FROM t_weather_run_request ON CONFLICT DO NOTHING;"
+  echo "COMMIT;"
+} | gzip -6 > "$OUT/weather.sql.gz"
+
+for file in "$OUT"/models.tgz "$OUT"/forecasts.sql.gz "$OUT"/weather.sql.gz; do
   printf '%.1f MB  %s\n' "$(echo "scale=2; $(wc -c < "$file") / 1048576" | bc)" "$(basename "$file")"
 done
 echo "== bundle ready. Ship it with infra/railway/ship-state.sh $OUT"

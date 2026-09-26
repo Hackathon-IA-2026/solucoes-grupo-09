@@ -2,14 +2,16 @@
 
 Railway runs the same `main` as everywhere else, so **code needs no special
 handling**: `railway up --service <name>`, in the order `.claude/rules/deploy.md`
-gives. What does need handling is the three things a deployment cannot rebuild
-from the repository, because they were produced by a run on somebody's machine:
+gives. What does need handling is the four things a deployment cannot rebuild
+from the repository, because they were produced by a run on somebody's machine —
+or, in the weather's case, by two and a half years of a quota nobody can hurry:
 
 | | What it is | Where it lives | Without it |
 |---|---|---|---|
 | `models.tgz` | the retrain's artifacts — a `.joblib` and a `.card.json` per lane | the `ml-models` volume, mounted at `/data/models` | the Time Machine cannot check a replay's windows, and no lane can be promoted |
 | `forecasts.sql.gz` | the forecast rows a holdout backfill scored | `curtailment_forecast_{hour,day,national_day}` | the Time Machine has no day to replay and says so |
 | `rag.sql.gz` | the evidence corpus: 469 documents, 28,340 chunks with their embeddings (BDO to 21/09/2026, IPDO of 21/09, the whole RAP) | the `rag` schema | Explicar answers without a citation, which is the one thing it exists not to do |
+| `weather.sql.gz` | the weather history: 1.46M hourly rows per centroid, 2024-03-31 to 2026-09-28, plus the run-request ledger | `weather_forecast_hour`, `weather_run_request` | the feature rows have no weather, so nothing can be trained or published for a day the target did not fetch itself |
 
 ## The short version, if somebody else already trained
 
@@ -34,6 +36,24 @@ both scripts end by printing a count, so the next person can tell:
 infra/railway/ship-rag.sh --from-release state-2026-09-23
 ```
 
+The weather history is a **fourth** command, and the safest of them to run:
+the load is idempotent, so it adds what the target lacks and discards nothing it
+fetched itself. Run it on any deployment whose `weather_forecast_hour` does not
+reach back to 2024 — without it, no day the target did not fetch can be trained
+or published on.
+
+```sh
+infra/railway/ship-weather.sh --from-release state-2026-09-26
+```
+
+**Why it travels rather than being refetched.** `ecc10e5` measured it: each
+weather task stops at the free tier's 138 weighted units, so the whole history
+is about 1,800 such slots — on the order of 200,000 units against an allowance
+of 10,000 a day. That is roughly three weeks, and it would spend the allowance
+the hourly live sweep needs for tomorrow's forecast. `backfill.sh --weather` was
+removed for that reason, and it named the alternative: a dump of a database that
+already holds it.
+
 **Code is separate and may need nothing**: if the project deploys from GitHub,
 `main` is already live. If it deploys from the CLI, it is
 `railway up --service rag`, then `ml`, `api`, `worker` and `web`: the order and
@@ -53,12 +73,16 @@ the rag service. Without it the service runs as before.
 
 ## Making a bundle yourself
 
-Two scripts, deliberately separate — the machine that trains need not be the one
-that deploys, and a bundle is worth keeping as what a later run is compared to:
+Producing and shipping are deliberately separate — the machine that trains need
+not be the one that deploys, and a bundle is worth keeping as what a later run
+is compared to. One command produces `models.tgz`, `forecasts.sql.gz` and
+`weather.sql.gz`; the corpus is not produced here, and `ship-rag.sh` carries the
+two `pg_dump` invocations it needs in its own header.
 
 ```sh
 MODELS_DIR=<the local ml volume> infra/railway/make-state-bundle.sh ~/wattsteer-state
 infra/railway/ship-state.sh ~/wattsteer-state
+infra/railway/ship-weather.sh ~/wattsteer-state
 ```
 
 ## Or from GitHub, with nobody running anything
@@ -107,8 +131,13 @@ one person will deploy this week.
 - **`ship-state.sh` does not touch the RAG corpus.** That is `ship-rag.sh`,
   separately, because replacing a corpus a target built itself is a decision
   and not a step.
-- **They write no table other than the three forecast ones**, and that write is
-  a single transaction: truncate and insert, so a failure leaves what was there.
+- **`ship-state.sh` writes no table other than the three forecast ones**, and
+  that write is a single transaction: truncate and insert, so a failure leaves
+  what was there.
+- **`ship-weather.sh` never truncates.** The receiving deployment writes
+  `weather_forecast_hour` itself every hour, so the load goes through a temp
+  table and inserts `ON CONFLICT DO NOTHING`: it adds the history the target
+  lacks and discards nothing it fetched. Running it twice is running it once.
 
 ## After shipping
 
