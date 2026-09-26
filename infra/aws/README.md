@@ -28,6 +28,7 @@ viewer ─▶ CloudFront (HTTPS) ─▶ EC2 m7g.xlarge: Caddy ─▶ web · api 
 | `train.sh`, `buildspec-train.yml`, `train-job.sh` | one training run on the 72-vCPU CodeBuild machine, inside a budget of machine minutes |
 | `jobs/campaign.sh`, `jobs/fit_speed.py` | the arms a training run parallelises, and the benchmark that says why |
 | `dump-db.sh` | the instance's database into the bucket, for `train.sh` |
+| `install-models.sh` | a training run's artifacts (or one campaign arm's) onto the instance, keeping the previous ones |
 
 ## A new account, from nothing
 
@@ -84,6 +85,7 @@ So a run is worth sending there when it has several independent arms, which
 ```sh
 infra/aws/dump-db.sh
 infra/aws/train.sh --run-id campaign-1 --timeout 240 -- sh /jobs/campaign.sh
+infra/aws/install-models.sh campaign-1 v3    # what that arm's gate promoted, onto the instance
 ```
 
 The account does not show participants its spending limit, so the team keeps
