@@ -23,6 +23,10 @@ RUN bun install --frozen-lockfile --production --filter=wattsteer-api
 # to `packages/core/src`, so copying only the package.json installs a workspace
 # link pointing at nothing and the container dies on first import.
 COPY packages/core/src ./packages/core/src
+# The holiday calendar `src/scripts/load-calendar.ts` writes. Without it the
+# one command that fills `feature_calendar_day` on a fresh database fails with
+# ENOENT, which is what the first AWS backfill met.
+COPY packages/core/fixtures/calendar ./packages/core/fixtures/calendar
 
 WORKDIR /app/apps/api
 
