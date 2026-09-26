@@ -36,6 +36,13 @@ Parameters:
   GitHubRepository:
     Type: String
     Default: vtorres/WattSteer
+  GitHubRepositoryIds:
+    Type: String
+    # The same repository in GitHub's immutable-id subject format,
+    # owner@<owner id>/<repo>@<repo id>, which this repository's tokens carry.
+    # Measured from CloudTrail on 26/09: the first deploy was refused because
+    # the trust named only the plain form.
+    Default: vtorres@3085197/WattSteer@1349956537
   CreateGitHubProvider:
     Type: String
     AllowedValues: ["true", "false"]
@@ -313,7 +320,9 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepository}:ref:refs/heads/main"
+                token.actions.githubusercontent.com:sub:
+                  - !Sub "repo:${GitHubRepository}:ref:refs/heads/main"
+                  - !Sub "repo:${GitHubRepositoryIds}:ref:refs/heads/main"
       Policies:
         - PolicyName: wattsteer-start-deploy
           PolicyDocument:
