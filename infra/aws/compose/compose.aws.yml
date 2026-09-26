@@ -1,10 +1,9 @@
-# The EC2 option's stack: the same five services as Railway and as the ECS
-# option, next to a Postgres and a Redis container, behind Caddy.
+# The AWS stack: the same five services as Railway, next to a Postgres and a
+# Redis container, behind Caddy, on the one instance stack.yaml creates.
 #
-# Run by /opt/wattsteer/up.sh on the instance, and by infra/aws/sim/smoke.sh on
-# a laptop. Interpolated from two env files: settings.env (non-secret, written
-# by Terraform) and secrets.env (from SSM). Everything stateful is a directory
-# under ${DATA_DIR}, the instance's separate data volume.
+# Run by remote.sh on the instance, which writes the .env it is interpolated
+# from (generated secrets, provider keys from Parameter Store, the image tag).
+# Everything stateful is a directory under ${DATA_DIR}.
 
 x-gateway-env: &gateway-env
   NODE_ENV: production
@@ -144,6 +143,7 @@ services:
       WATTSTEER_RAG_INDEX_ON_BOOT: ${WATTSTEER_RAG_INDEX_ON_BOOT:-1}
       NVIDIA_API_KEYS: ${NVIDIA_API_KEYS:-}
       GROQ_API_KEYS: ${GROQ_API_KEYS:-}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
     volumes:
       - ${DATA_DIR:-/data}/rag-store:/data/rag-store
     depends_on:

@@ -1,19 +1,13 @@
-# The AWS deploy, checked without an AWS account.
-#
-# Runs only when infra/aws changes, so it never slows or fails anything else.
-# `check` is fast: formatting, validation and lint of the Terraform, the shell
-# scripts, and the plan guard's own test. `simulate` is the whole deploy
-# against a local AWS simulator, with the containers really started (see
-# infra/aws/sim/simulate.sh); it runs on an arm64 runner because the images are
-# arm64, like the Fargate and Graviton targets.
+# Checks the AWS deployment's own files. Runs only when they change, so it
+# never slows or fails anything else.
 name: infra-aws
 
 on:
   pull_request:
-    paths: ["infra/aws/**", ".github/workflows/infra-aws.yml"]
+    paths: ["infra/aws/**", ".github/workflows/*-aws.yml"]
   push:
     branches: [main]
-    paths: ["infra/aws/**", ".github/workflows/infra-aws.yml"]
+    paths: ["infra/aws/**", ".github/workflows/*-aws.yml"]
   workflow_dispatch:
 
 permissions:
@@ -25,32 +19,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.13.5
-      - name: terraform fmt
-        run: terraform fmt -check -recursive infra/aws
-      - name: terraform validate
-        run: |
-          for root in bootstrap ecs ec2; do
-            terraform -chdir=infra/aws/$root init -backend=false -input=false >/dev/null
-            terraform -chdir=infra/aws/$root validate
-          done
-      - uses: terraform-linters/setup-tflint@v4
-      - name: tflint
-        run: |
-          for root in bootstrap ecs ec2; do tflint --chdir=infra/aws/$root; done
       - name: shellcheck
-        run: shellcheck infra/aws/scripts/*.sh infra/aws/sim/*.sh infra/aws/compose/up.sh infra/aws/ec2/user-data.sh
-      - name: plan guard test
-        run: python3 -m unittest infra/aws/sim/test_guard_plan.py
-
-  simulate:
-    needs: check
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: deploy both options against the simulator and run them
-        run: infra/aws/sim/simulate.sh ecs ec2
+        run: shellcheck infra/aws/*.sh infra/aws/scripts/*.sh
+      - name: cfn-lint
+        run: |
+          pip install --quiet cfn-lint
+          cfn-lint infra/aws/stack.yaml

@@ -1,0 +1,344 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  WattSteer on the event's AWS account: one Graviton instance running the
+  Compose stack behind CloudFront, a bucket for deploys and state, the CodeBuild
+  project that builds and ships every commit, and the role GitHub Actions
+  assumes to start it. Created and updated by infra/aws/stack.sh.
+
+# Why this shape, in one paragraph. The participant role cannot run instances,
+# pass roles to CodeBuild or push to ECR, but the account's CDK execution role
+# can create anything, and deploying through it is what the workshop expects
+# (`cdk deploy`). So the whole deployment is this one template, applied through
+# that role. The app keeps the shape it has on a laptop: one Compose project,
+# because it is the one every service is already tested in. Terraform is gone:
+# it could not run here, and two definitions of one deployment drift.
+
+Parameters:
+  InstanceType:
+    Type: String
+    # 4 vCPU and 16 GB: the Compose memory ceilings add up to about 10 GB, and
+    # the worker's 5 GB is what a backfill needs. The event denies 6xlarge and
+    # above, which this is far below.
+    Default: m7g.xlarge
+  VolumeSize:
+    Type: Number
+    Default: 100
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: A public subnet of VpcId, so the instance has an address CloudFront can reach.
+  CloudFrontPrefixList:
+    Type: String
+    # com.amazonaws.global.cloudfront.origin-facing in us-west-2. The participant
+    # may not call ec2:DescribeManagedPrefixLists, so it is a parameter.
+    Default: pl-82a045eb
+  GitHubRepository:
+    Type: String
+    Default: vtorres/WattSteer
+  CreateGitHubProvider:
+    Type: String
+    AllowedValues: ["true", "false"]
+    # An account holds one provider per URL; set false where one already exists.
+    Default: "true"
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+
+Conditions:
+  MakeGitHubProvider: !Equals [!Ref CreateGitHubProvider, "true"]
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          # Source archives and image tarballs are per commit and worthless a
+          # week later. `state/` (models, corpus, dumps) is kept.
+          - Id: expire-deploys
+            Status: Enabled
+            Prefix: deploy/
+            ExpirationInDays: 7
+          - Id: expire-sources
+            Status: Enabled
+            Prefix: source/
+            ExpirationInDays: 7
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: wattsteer-instance
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource: !Sub "${Bucket.Arn}/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+              - Effect: Allow
+                Action: [ssm:GetParameter, ssm:GetParametersByPath, ssm:PutParameter]
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/wattsteer/*"
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: "*"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: WattSteer - port 80 from CloudFront only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourcePrefixListId: !Ref CloudFrontPrefixList
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds: [!Ref SecurityGroup]
+      MetadataOptions: { HttpTokens: required }
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: !Ref VolumeSize, VolumeType: gp3, Encrypted: true }
+      Tags:
+        - { Key: Name, Value: wattsteer }
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          # Docker and its compose plugin; everything else arrives with a deploy.
+          set -euxo pipefail
+          dnf install -y docker
+          systemctl enable --now docker
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -fsSL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-aarch64 \
+            -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+  Address:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref Instance
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: WattSteer
+        HttpVersion: http2and3
+        # Every edge, so a viewer in Rio is served from São Paulo.
+        PriceClass: PriceClass_All
+        Origins:
+          - Id: app
+            # CloudFront needs a name, not an address: the EIP's public DNS name.
+            DomainName: !Join
+              - ""
+              - - "ec2-"
+                - !Join ["-", !Split [".", !Ref Address]]
+                - !Sub ".${AWS::Region}.compute.amazonaws.com"
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+              OriginReadTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: app
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          # Managed CachingDisabled and AllViewer. The app states its own cache
+          # policy per route and the site sits behind a password; an edge copy
+          # would hand a page to a viewer who never typed it.
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codebuild.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: wattsteer-deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: "*"
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:GetObjectVersion]
+                Resource: !Sub "${Bucket.Arn}/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Instance}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}::document/AWS-RunShellScript"
+              - Effect: Allow
+                Action: [ssm:GetCommandInvocation, ssm:ListCommandInvocations]
+                Resource: "*"
+
+  DeployProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: wattsteer-deploy
+      Description: Build the images of one commit on arm64 and ship them to the instance
+      ServiceRole: !GetAtt DeployRole.Arn
+      TimeoutInMinutes: 60
+      Artifacts: { Type: NO_ARTIFACTS }
+      Source:
+        Type: S3
+        # Overridden on every start by deploy.sh with the commit's own archive.
+        Location: !Sub "${Bucket}/source/latest.zip"
+        BuildSpec: infra/aws/buildspec.yml
+      Cache:
+        Type: LOCAL
+        Modes: [LOCAL_DOCKER_LAYER_CACHE]
+      Environment:
+        # arm64, like the instance, so nothing is emulated. LARGE is 8 vCPU and
+        # 16 GB: the web export is the long pole and it is CPU-bound.
+        Type: ARM_CONTAINER
+        Image: aws/codebuild/amazonlinux-aarch64-standard:3.0
+        ComputeType: BUILD_GENERAL1_LARGE
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - { Name: BUCKET, Value: !Ref Bucket }
+          - { Name: INSTANCE_ID, Value: !Ref Instance }
+          - { Name: PUBLIC_URL, Value: !Sub "https://${Distribution.DomainName}" }
+
+  TrainRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codebuild.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: wattsteer-train
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: "*"
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:GetObjectVersion]
+                Resource: !Sub "${Bucket.Arn}/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+
+  TrainProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: wattsteer-train
+      Description: Retrain and evaluate on the event's largest CodeBuild machine
+      ServiceRole: !GetAtt TrainRole.Arn
+      # A ceiling, not an estimate: train.sh sets each run's own, and refuses to
+      # start one that would pass the team's budget of machine-hours.
+      TimeoutInMinutes: 480
+      Artifacts: { Type: NO_ARTIFACTS }
+      Source:
+        Type: S3
+        Location: !Sub "${Bucket}/source/latest.zip"
+        BuildSpec: infra/aws/buildspec-train.yml
+      Environment:
+        # 72 vCPU, 145 GB (measured: Xeon Platinum 8223CL, 138 GB free). x86,
+        # which the ml image builds for as readily as arm64.
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        ComputeType: BUILD_GENERAL1_2XLARGE
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - { Name: BUCKET, Value: !Ref Bucket }
+
+  GitHubProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: MakeGitHubProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  GitHubRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Assumed by GitHub Actions on main to start a deploy. No stored keys.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              # The Ref orders the role after the provider when this stack makes it.
+              Federated: !If
+                - MakeGitHubProvider
+                - !Ref GitHubProvider
+                - !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepository}:ref:refs/heads/main"
+      Policies:
+        - PolicyName: wattsteer-start-deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub "${Bucket.Arn}/source/*"
+              - Effect: Allow
+                Action: [codebuild:StartBuild, codebuild:BatchGetBuilds]
+                Resource: !GetAtt DeployProject.Arn
+              - Effect: Allow
+                Action: logs:GetLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/wattsteer-deploy:*"
+
+Outputs:
+  SiteUrl:
+    Value: !Sub "https://${Distribution.DomainName}"
+  Bucket:
+    Value: !Ref Bucket
+  InstanceId:
+    Value: !Ref Instance
+  DeployProject:
+    Value: !Ref DeployProject
+  TrainProject:
+    Value: !Ref TrainProject
+  GitHubRoleArn:
+    Value: !GetAtt GitHubRole.Arn

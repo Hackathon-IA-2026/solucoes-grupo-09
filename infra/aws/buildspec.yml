@@ -1,0 +1,10 @@
+# CodeBuild: build one commit's images on arm64 and ship them to the instance.
+# The project (stack.yaml, DeployProject) sets BUCKET, INSTANCE_ID and
+# PUBLIC_URL; deploy.sh adds GIT_SHA when it starts the build.
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - bash infra/aws/ship.sh
