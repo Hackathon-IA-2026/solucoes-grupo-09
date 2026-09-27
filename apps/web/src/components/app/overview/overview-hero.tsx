@@ -576,7 +576,6 @@ export function OverviewHero({
           window={window}
           reasons={spokenReasons}
           reasonDate={observed.hoursDate}
-          evidence={observed.evidence}
           atRisk={atRisk}
           worstRisk={worstRisk}
           causeNote={copy.app.overview.causeNote}

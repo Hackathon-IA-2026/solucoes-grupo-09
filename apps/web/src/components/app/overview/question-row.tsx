@@ -55,7 +55,6 @@ export function QuestionRow({
   window,
   reasons,
   reasonDate,
-  evidence,
   atRisk,
   worstRisk,
   causeNote,
@@ -73,7 +72,6 @@ export function QuestionRow({
   /** One or two, already filtered by share. See the hero for the rule. */
   reasons: readonly DominantReason[];
   reasonDate: string;
-  evidence: EvidenceCitation | null;
   /** Every region in the day's worst bin — the answer to "where?". */
   atRisk: readonly QuestionSubject[];
   worstRisk: RiskClass;
@@ -215,6 +213,15 @@ export function QuestionRow({
           forecasts how much will be curtailed and never why — but it is a
           standing truth rather than news, and a standing truth printed across
           the page every morning is read once and then never again.
+
+          **The rule citation is gone from this row and kept on the settled
+          one.** `Regra: IO-ON.NE.5NE Rev.61, p. 7` was set in the accent
+          colour directly under the forecast cards, where it read as a finding
+          about the day rather than as what it is: the ONS document behind the
+          reason label. On the settled row it has the verdict control under it
+          and a reason beside it that was actually measured, which is where a
+          reader can do something with it. Here it was a link nobody asked for,
+          under numbers it does not describe.
         */}
       <View style={{ flexBasis: "100%", gap: 4 }}>
         {window !== null && window.hoursInDay > window.toHour - window.fromHour + 1 ? (
@@ -224,28 +231,6 @@ export function QuestionRow({
             })}
           </Text>
         ) : null}
-        {evidence === null ? null : (
-          <Link
-            href={evidence.url as never}
-            target="_blank"
-            style={{
-              ...type.caption,
-              color: colors.accent,
-              ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
-            }}
-          >
-            {fill(
-              evidence.page === null
-                ? copy.app.overview.causeEvidenceNoPage
-                : copy.app.overview.causeEvidence,
-              {
-                document: evidence.documentCode,
-                revision: evidence.revision ?? "",
-                page: String(evidence.page ?? ""),
-              },
-            )}
-          </Link>
-        )}
       </View>
     </View>
   );
