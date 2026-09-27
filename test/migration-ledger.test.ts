@@ -400,8 +400,22 @@ export interface MigrationReference {
   numberHeldBy?: string;
 }
 
-/** `0046_a_parse_that_landed`, in prose or in a path, with or without `.sql`. */
-const REFERENCE = /(\d{4})_([a-z][a-z0-9_]*)/g;
+/**
+ * `0046_a_parse_that_landed`, in prose or in a path, with or without `.sql`.
+ *
+ * **The number must be zero-padded**, and that is a fix for a real false
+ * positive rather than a convenience: drizzle numbers from `0000` and the tree
+ * holds 57 migrations, so every migration name this guard can ever check
+ * begins with a `0`. A year does not. `wattsteer-pitch-2026-v37` and
+ * `build_2026_v37.py` arrived with the pitch deck and matched the old pattern
+ * ten times over, in three documents that name no migration at all.
+ *
+ * Tightened here rather than by exempting `docs/pitch`, because the guard's
+ * whole point is that it reads **every** markdown in the tree: an exemption
+ * would leave the next document in that directory unchecked, and the renumber
+ * defect this catches does not care which directory names it.
+ */
+const REFERENCE = /(0\d{3})_([a-z][a-z0-9_]*)/g;
 
 /**
  * Every migration a document names, with whether the tree holds it.
@@ -409,9 +423,11 @@ const REFERENCE = /(\d{4})_([a-z][a-z0-9_]*)/g;
  * Shape-matched rather than path-matched, deliberately: the reference that
  * nothing caught was `drizzle/0046_a_parse_that_landed.sql` in a ticket, but
  * the same name appears bare in prose, as `0016_the_feature_gate`, and both are
- * the same checkable claim. The `NNNN_lowercase_words` shape is specific enough
- * that dates (`2026_08_29`) and years do not match it — the second component
- * must begin with a letter.
+ * the same checkable claim. The `0NNN_lowercase_words` shape is specific enough
+ * that dates (`2026_08_29`) and years do not match it — the number is
+ * zero-padded from drizzle's own sequence and the second component must begin
+ * with a letter. Both halves are load-bearing: the letter rule alone let
+ * `2026_v37` through, which is how the pitch deck turned this guard red.
  */
 export function migrationReferences(
   texts: Map<string, string>,
@@ -720,6 +736,26 @@ describe("the guard is not vacuous: it goes red when the ledger drifts", () => {
     // and somebody would delete it.
     const dates = new Map([["x.md", "the 2026_08_29 file, and 2025_05_23, and 2024_04"]]);
     expect(migrationReferences(dates, LEDGER)).toEqual([]);
+  });
+
+  it("does not mistake a year followed by a version for a migration", () => {
+    // The case above claimed years were safe because the second component has
+    // to begin with a letter. `2026_v37` begins with a letter, and the pitch
+    // deck's build script, its output and the skill that drives it named it
+    // ten times — the guard went red on three documents that name no migration
+    // at all. The number is zero-padded now, which every real one is and no
+    // year ever will be.
+    const deck = new Map([
+      ["docs/pitch/README.md", "build_2026_v37.py writes wattsteer-pitch-2026_v37"],
+      ["t/SKILL.md", "bump 2026_v37 to 2026_v38"],
+    ]);
+    expect(migrationReferences(deck, LEDGER)).toEqual([]);
+
+    // And the guard still sees the thing it is for, one digit away.
+    const real = new Map([["t/ticket.md", "drizzle/0046_a_parse_that_landed.sql"]]);
+    expect(migrationReferences(real, LEDGER).map((r) => r.tag)).toEqual([
+      "0046_a_parse_that_landed",
+    ]);
   });
 });
 

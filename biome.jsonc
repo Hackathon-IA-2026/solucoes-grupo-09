@@ -3,7 +3,19 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!reference", "!apps/api/test/fixtures", "!apps/api/drizzle/meta"]
+    // `docs/pitch/*.html` are **generated**: `build_2026_v37.py` reads
+    // `wattsteer-pitch-v48.html` and writes `wattsteer-pitch-2026-v37.html`,
+    // and a finding in either is a finding about a Python template's output
+    // that cannot be fixed in the file it is reported on. The 34 errors they
+    // carried were decorative SVGs with no `<title>` and `QRCode`, which is a
+    // CDN global the deck loads. Same category as `apps/api/drizzle/meta`.
+    "includes": [
+      "**",
+      "!reference",
+      "!apps/api/test/fixtures",
+      "!apps/api/drizzle/meta",
+      "!docs/pitch/*.html"
+    ]
   },
   "formatter": {
     "enabled": true,
