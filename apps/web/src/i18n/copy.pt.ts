@@ -308,12 +308,33 @@ export const pt: Copy = {
         body: "Vento e irradiância para o dia seguinte em centroides de cluster, a partir de uma rodada de modelo fixada, agregados por capacidade instalada variável no tempo.",
       },
     ],
+    /**
+     * Saiu da lista de recusas porque não é uma.
+     *
+     * "A safra do dado fica na tela" era o quarto item de uma lista cujo título
+     * é *o que o WattSteer não vai afirmar*, e é a única frase ali que promete
+     * em vez de recusar — um leitor que varre a lista lê quatro limites e uma
+     * funcionalidade. Como o que ela descreve é a procedência do dado, e esta
+     * seção é a procedência do dado, virou a nota de rodapé da grade de fontes.
+     */
+    vintage:
+      "Toda previsão nomeia a rodada que a produziu, e todo backtest diz se sua janela era de fato conhecível na época ou é a reafirmação posterior do ONS.",
     honesty: {
       title: "O que o WattSteer não vai afirmar",
       items: [
         {
           label: "Nenhum número de carbono",
-          body: "Energia renovável que deixa de ser cortada não corresponde a uma economia fixa de CO₂ sem saber qual geração ela substituiu. O WattSteer reporta energia recuperada e não diz nada sobre carbono.",
+          body: "Energia que deixa de ser cortada só vira CO₂ evitado se você souber qual geração ela substituiu. O WattSteer reporta energia recuperada e para aí.",
+        },
+        // Named here rather than left to be inferred, and **segundo em vez de
+        // último**: é a recusa que mais muda como se lê um número da tela, e
+        // estava no fim de uma lista de cinco. `app.narration
+        // .flag_unmodelled_outage_regime` já declara a mesma ausência dentro do
+        // produto, onde um grupo de drivers não tem feature de transmissão para
+        // ler; esta é a metade pública da mesma frase.
+        {
+          label: "O previsor não lê manutenção de transmissão",
+          body: "O ONS publica manutenção programada como texto corrido, não como dado, e nenhuma variável do modelo carrega esse fato — um dia cortado por uma linha fora de serviço é lido ao redor dela. A camada de evidência cita o boletim; nada ali vira número.",
         },
         {
           label: "R$ apenas como cenário rotulado",
@@ -321,15 +342,7 @@ export const pt: Copy = {
         },
         {
           label: "Razões apenas no grão em que o ONS as reporta",
-          body: "A razão de uma restrição é propriedade de uma entidade de medição — um conjunto para a maior parte da eólica, uma usina só onde a usina reporta por si. O WattSteer nunca aloca uma razão até a usina e a apresenta como observação.",
-        },
-        {
-          label: "A safra do dado fica na tela",
-          body: "Toda previsão nomeia a rodada que a produziu, e todo backtest diz se sua janela era de fato conhecível na época ou é a reafirmação posterior do ONS.",
-        },
-        {
-          label: "O previsor não lê manutenção de transmissão",
-          body: "O ONS publica manutenções programadas e indisponibilidades como texto corrido, não como conjunto de dados, e nenhuma variável do modelo carrega esse fato. Então um dia cujo curtailment veio de uma linha fora de serviço é lido ao redor dele. A camada de evidência cita os boletins diários onde essa prosa aparece, mas só transcreve o que o ONS publicou: nada ali vira variável nem número.",
+          body: "O ONS informa a razão no grão em que mede — um conjunto, quase sempre, e uma usina só onde ela reporta por si. O WattSteer não desce disso e chama o resultado de observação.",
         },
       ],
     },

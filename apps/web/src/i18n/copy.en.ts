@@ -379,12 +379,26 @@ export const en = {
         body: "Day-ahead wind and irradiance at cluster centroids, from a pinned model run, aggregated by time-varying installed capacity.",
       },
     ],
+    /** See the note on the Portuguese key — it is not a refusal, so it left
+     * a list of refusals and became the sources grid's footnote. */
+    vintage:
+      "Every forecast names the run that produced it, and every backtest says whether its window was genuinely knowable at the time or is ONS's later restatement of it.",
     honesty: {
       title: "What WattSteer will not claim",
       items: [
         {
           label: "No carbon figure",
-          body: "Renewable energy that stops being curtailed does not map to a fixed CO₂ saving without knowing which generation it displaced. WattSteer reports recovered energy and says nothing about carbon.",
+          body: "Energy that stops being curtailed is only avoided CO₂ if you know which generation it displaced. WattSteer reports recovered energy and stops there.",
+        },
+        // Named here rather than left to be inferred, and **second rather than
+        // last**: it is the refusal that most changes how a figure on screen
+        // should be read, and it sat at the bottom of a list of five.
+        // `app.narration.flag_unmodelled_outage_regime` already states the same
+        // absence inside the product, where a driver group has no transmission
+        // feature to read; this is the public half of the same sentence.
+        {
+          label: "The forecaster does not read transmission maintenance",
+          body: "ONS publishes planned maintenance as prose rather than as a dataset, and no feature of the model carries that fact — a day curtailed by a line out of service is read around it. The evidence layer cites the bulletin; nothing there becomes a number.",
         },
         {
           label: "R$ only as a labelled scenario",
@@ -392,19 +406,7 @@ export const en = {
         },
         {
           label: "Reasons only at the grain ONS reports them",
-          body: "A restriction reason is a property of a reporting entity — a conjunto for most wind, a plant only where the plant reports for itself. WattSteer never allocates a reason down to a plant and presents it as an observation.",
-        },
-        {
-          label: "Data vintage is on screen",
-          body: "Every forecast names the run that produced it, and every backtest says whether its window was genuinely knowable at the time or is ONS's later restatement of it.",
-        },
-        // Named here rather than left to be inferred. `app.narration
-        // .flag_unmodelled_outage_regime` already states the same absence
-        // inside the product, where a driver group has no transmission
-        // feature to read; this is the public half of the same sentence.
-        {
-          label: "The forecaster does not read transmission maintenance",
-          body: "ONS publishes planned maintenance and outages as prose rather than as a dataset, and no feature of the model carries that fact. So a day whose curtailment was driven by a line out of service is read around. The evidence layer cites the daily bulletins where that prose appears, but only transcribes what ONS published: nothing there becomes a variable or a number.",
+          body: "ONS gives the reason at the grain it measures — a conjunto, nearly always, and a plant only where the plant reports for itself. WattSteer does not go below that, and calls the result an observation.",
         },
       ],
     },

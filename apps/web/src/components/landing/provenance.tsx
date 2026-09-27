@@ -1,7 +1,7 @@
 import { IconCircle, LinkIcon, Panel, space, usePalette, XIcon } from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import { useCopy } from "@/i18n";
-import { SectionHeading } from "./section";
+import { Footnote, SectionHeading } from "./section";
 
 /**
  * Where the data comes from, and what the product refuses to say.
@@ -56,6 +56,16 @@ export function Provenance({ wide }: { wide: boolean }) {
       </View>
 
       {/*
+        The vintage line, which used to be the fourth "will not claim".
+
+        It is a promise, not a refusal — the one sentence in that list that
+        said what the product *does* — so it reads as a footnote on the sources
+        above it, which is what it is about. `Footnote` rather than a fifth
+        card for the same reason the block below is not one.
+      */}
+      <Footnote>{copy.provenance.vintage}</Footnote>
+
+      {/*
         **Out of the card, and that is the point of the section.**
 
         This used to sit inside a `Panel` like the source cards above it, which
@@ -82,13 +92,17 @@ export function Provenance({ wide }: { wide: boolean }) {
         {/*
           Two columns that stay two columns.
 
-          The list is five items and the grid was `flexBasis: 45%` with
+          The list was five items and the grid was `flexBasis: 45%` with
           `flexGrow: 1`, so the fifth — alone on its row — grew to the full
           1,196 px of the card: 168 characters a line beside four siblings set
           at 84. One item of five was therefore read at twice the measure of
           the rest, and it happened to be the newest and longest one. Capping
           the item at half the row and letting `space-between` place the pair
           keeps every body at one measure, whichever row it lands on.
+
+          Four items now — two clean rows — so the cap is currently inert. It
+          stays because the list has grown before, and the next fifth item
+          would otherwise be set at twice its siblings' measure again.
         */}
         <View
           style={{
@@ -104,7 +118,8 @@ export function Provenance({ wide }: { wide: boolean }) {
               **The last item sits where the others do, at the left of its
               column.** It was briefly centred with auto margins, on the
               argument that a fifth item alone on its row looked ragged under a
-              column of four. That was true while this block was inside a
+              column of four — the shape this list had before the vintage line
+              moved up into the footnote. That was true while this block was inside a
               `Panel`; out of the card the section has the page's own left
               edge, and an item that starts somewhere else is the thing that now
               reads as misaligned. Every body in this list begins on the same
