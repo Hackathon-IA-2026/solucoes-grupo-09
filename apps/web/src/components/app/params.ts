@@ -48,6 +48,7 @@
 
 import { GATES, latestTargetDate } from "@wattsteer/core";
 import type { GateProfile } from "@wattsteer/core/api";
+import { DEMO_DATE } from "@/lib/config";
 import {
   isReplayDayId,
   REPLAY_DAYS,
@@ -228,13 +229,30 @@ export function parseAppParams(
       with stated absences, which is a screen, while a malformed one would be
       an invalid request on every read.
     */
-    date: date !== undefined && CIVIL_DATE.test(date) ? date : latestTargetDate(now),
+    date: date !== undefined && CIVIL_DATE.test(date) ? date : openingDate(now),
     episode:
       // Shape, not membership: the picker's days come from the gateway now, so
       // a link to any day it can answer has to survive a reload.
       episode !== undefined && isReplayDayId(episode) ? episode : REPLAY_DAYS[0].id,
     episodeFromUrl: episode !== undefined && isReplayDayId(episode),
   };
+}
+
+/**
+ * The day the Overview opens on when the URL names none.
+ *
+ * Tomorrow, which is the day a forecast is about — unless `DEMO_DATE` pins it,
+ * in which case that day, validated by the same shape test the URL gets. An
+ * unparseable flag is ignored rather than trusted: a demonstration is not a
+ * reason to ask the gateway for a date that cannot exist.
+ *
+ * `pinned` defaults to the constant and is a parameter so the rule can be
+ * tested without reaching for the module cache: `DEMO_DATE` resolves once at
+ * import, exactly as `API_URL` does, so a test that set the global afterwards
+ * would be exercising something the bundle never does.
+ */
+export function openingDate(now: Date, pinned: string | null = DEMO_DATE): string {
+  return pinned !== null && CIVIL_DATE.test(pinned) ? pinned : latestTargetDate(now);
 }
 
 /**
