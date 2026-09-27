@@ -782,6 +782,17 @@ const REPLAY = specExample("12-replay.json");
  * longest. The body is the spec's own example with the lane state replaced, so
  * the shape stays the contract's.
  */
+/**
+ * `GET /v1/meta` as the contract's own example: a lane promoted and usable.
+ *
+ * Exported because a second spec needs it now. `voice-survives-navigation`
+ * drives a `replay` tool call, and the agent's replay calendar is read from
+ * the deployment rather than written down — so a suite where `/v1/meta` refuses
+ * is a suite where the agent correctly cannot open the Time Machine, which is
+ * not the thing that spec is trying to measure.
+ */
+export const META_PROMOTED = specExample("01-meta.json");
+
 const META_NOTHING_PROMOTED = (() => {
   const meta = specExample("01-meta.json") as {
     model: { lanes: { lane: string; state: string; artifact_id: string }[] };
@@ -942,7 +953,7 @@ export async function routeGateway(
       return;
     }
     if (serving === "promoted" && path === "/v1/meta") {
-      await route.fulfill({ json: specExample("01-meta.json") });
+      await route.fulfill({ json: META_PROMOTED });
       return;
     }
     if (review && path === "/v1/model/card") {

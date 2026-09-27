@@ -76,7 +76,7 @@ import {
 } from "@/components/app/scenario";
 import {
   ASSET_LIMITS,
-  REPLAY_DAYS,
+  type ReplayCandidateDay,
   RUN_LABELS,
   type RunLabel,
   type Technology,
@@ -417,19 +417,24 @@ function daysFrom(date: string, days: number): string {
 /**
  * "Last week" becomes a day the Time Machine can actually score.
  *
- * The catalogue has four days in it, chosen for what they prove about the
- * artifact families — `REPLAY_DAYS` says which. A reader asking about seven
- * days ago is not asking for that date, they are asking *what happened
- * recently*, so the nearest replayable day **at or before** the one named is
- * the honest answer and the voice states which day it opened. Rounding forward
- * would be worse: it would answer about a day the reader has not had yet.
+ * The catalogue is whatever `GET /v1/replay/days` answered for this
+ * deployment — **not** `REPLAY_DAYS`, which is four hand-written dates and was
+ * the source here until it opened a day the calendar no longer held. A reader
+ * asking about seven days ago is not asking for that date, they are asking
+ * *what happened recently*, so the nearest replayable day **at or before** the
+ * one named is the honest answer and the voice states which day it opened.
+ * Rounding forward would be worse: it would answer about a day the reader has
+ * not had yet.
  *
  * Nothing at or before it is a refusal, not a clamp to the oldest day. A reader
  * asking about 2019 is asking about something WattSteer has no opinion on, and
- * opening November 2024 instead would be answering a different question.
+ * opening the oldest day instead would be answering a different question.
  */
-function replayDayBefore(target: string): string | undefined {
-  const candidates = REPLAY_DAYS.filter((day) => day.date <= target);
+function replayDayBefore(
+  target: string,
+  days: readonly ReplayCandidateDay[],
+): string | undefined {
+  const candidates = days.filter((day) => day.date <= target);
   if (candidates.length === 0) {
     return;
   }
@@ -490,9 +495,20 @@ function runBrief(args: Record<string, unknown>, current: AppParams): Navigation
   };
 }
 
+/**
+ * `days` is the deployment's replay calendar, and it has no default.
+ *
+ * A default would be a fixture list, which is what this layer had and what
+ * made the model look like it was hallucinating: it named a day from the list
+ * it was given, and the list was four dates nobody had updated since the
+ * picker moved onto the gateway. An empty array is a legitimate value and
+ * means the calendar has not answered — `replay` then refuses rather than
+ * guessing, which is the same shape as every other absence here.
+ */
 export function executeTool(
   call: ToolCall,
   current: AppParams,
+  days: readonly ReplayCandidateDay[],
   scenario?: Scenario,
 ): NavigationIntent {
   if (!isToolName(call.name)) {
@@ -511,7 +527,7 @@ export function executeTool(
     case "mitigate":
       return runMitigate(args, current, scenario);
     case "replay":
-      return runReplay(args, current);
+      return runReplay(args, current, days);
     case "focus":
       return runFocus(args);
     case "highlight":
@@ -641,7 +657,11 @@ function runMitigate(
   return { kind: "navigate", pathname: SCREEN_PATHS.mitigate, params };
 }
 
-function runReplay(args: Record<string, unknown>, current: AppParams): NavigationIntent {
+function runReplay(
+  args: Record<string, unknown>,
+  current: AppParams,
+  days: readonly ReplayCandidateDay[],
+): NavigationIntent {
   const stray = unexpected(args, ["episode", "relative_day"]);
   if (stray !== undefined) {
     return refuse("unexpected_argument", stray, args[stray]);
@@ -657,7 +677,15 @@ function runReplay(args: Record<string, unknown>, current: AppParams): Navigatio
   let episode: string;
   if (hasEpisode) {
     const raw = args.episode;
-    if (typeof raw !== "string" || !REPLAY_DAYS.some((day) => day.id === raw)) {
+    /*
+      Checked against the deployment's own calendar, which is also the list the
+      model was offered — one source, so a day the model can name is a day the
+      screen can open. It used to be checked against `REPLAY_DAYS`, and a day
+      that passed here could still be absent from the picker: the screen then
+      honoured the ask by walking back to the nearest day it *did* hold, and
+      the reader met a refusal about a day nobody had asked for.
+    */
+    if (typeof raw !== "string" || !days.some((day) => day.id === raw)) {
       return refuse("unknown_episode", "episode", raw);
     }
     episode = raw;
@@ -671,7 +699,7 @@ function runReplay(args: Record<string, unknown>, current: AppParams): Navigatio
     ) {
       return refuse("value_out_of_range", "relative_day", raw);
     }
-    const resolved = replayDayBefore(daysFrom(current.date, raw));
+    const resolved = replayDayBefore(daysFrom(current.date, raw), days);
     if (resolved === undefined) {
       return refuse("no_episode_for_relative_day", "relative_day", raw);
     }

@@ -52,13 +52,16 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { parseAppParams } from "@/components/app/params";
 import { defaultScenario, readScenario, SCENARIO_PARAM } from "@/components/app/scenario";
 import { requestSection } from "@/components/app/section-request";
+import { useReplayDays } from "@/components/app/use-replay-days";
 import { useServing } from "@/components/app/use-serving";
 import type { BriefingRequest } from "@/components/voice/use-voice-agent";
 import { useI18n } from "@/i18n";
+import type { ReplayCandidateDay } from "@/lib/fixtures";
 import { useLatest } from "@/lib/use-latest";
 import { contextSentence, screenFor } from "@/lib/voice/context";
 import { executeTool, SCREEN_PATHS, type ToolCall } from "@/lib/voice/execute";
 import { voiceInstructions } from "@/lib/voice/instructions";
+import { voiceTools } from "@/lib/voice/tools";
 
 /**
  * The agent's paths that are sections of `/app` rather than documents.
@@ -66,6 +69,15 @@ import { voiceInstructions } from "@/lib/voice/instructions";
  * Keyed by the path the agent names, so adding a section is one entry and
  * nothing in `execute.ts` or `instructions.ts` has to know.
  */
+/**
+ * No calendar, as one stable array.
+ *
+ * A fresh `[]` per render would give `useMemo` a new dependency every time and
+ * rebuild the tool list — which is cheap, but it also means `toolsRef` would
+ * change identity under an open session for no reason at all.
+ */
+const EMPTY_DAYS: readonly ReplayCandidateDay[] = [];
+
 const SECTION_OF: Record<string, string | undefined> = {
   [SCREEN_PATHS.explain]: "explain",
   [SCREEN_PATHS.mitigate]: "mitigate",
@@ -106,6 +118,27 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const screen = screenFor(pathname);
 
   /**
+   * The days this deployment can replay, which the agent is offered and the
+   * executor checks against.
+   *
+   * **Read here rather than named in `tools.ts`.** The `episode` enum was four
+   * hand-written dates while the picker read `GET /v1/replay/days`, so the
+   * model was offered days the screen could not open: measured in production
+   * on 2026-09-27, "abra a máquina do tempo" landed on a refusal about a day
+   * nobody had asked for. One source or none — the same rule `/v1/meta` and
+   * the lane name are under.
+   *
+   * `probing` is an empty list on purpose, not a fallback to the fixtures. The
+   * `replay` tool then carries no `episode` property at all and the executor
+   * refuses rather than guessing, which is what an absence is owed here. The
+   * read is one request per subsystem, ETag-cached by the gateway and skipped
+   * entirely until `/v1/meta` has named a lane.
+   */
+  const replayDays = useReplayDays(params.subsystem);
+  const days = replayDays.status === "known" ? replayDays.viewable : EMPTY_DAYS;
+  const tools = useMemo(() => voiceTools(days), [days]);
+
+  /**
    * The current selection and scenario, in a ref.
    *
    * A ref and not a closure: the socket's message handler is installed once,
@@ -116,8 +149,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
    * layer down, and invisible, because every intent would still be a valid URL.
    */
   const liveSelection = useMemo(
-    () => ({ params, screen, locale, serving }),
-    [params, screen, locale, serving],
+    () => ({ params, screen, locale, serving, days }),
+    [params, screen, locale, serving, days],
   );
   const liveRef = useLatest(liveSelection);
 
@@ -209,6 +242,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       const intent = executeTool(
         call,
         live.params,
+        // The calendar the reader's screen has, not the one the session opened
+        // with: a tool call three navigations later must be checked against
+        // what the deployment can answer *now*, which is why it rides in the
+        // same ref as the params rather than in this callback's closure.
+        live.days,
         scenario.ok === true ? scenario.scenario : undefined,
       );
       performIntent(intent, navigator);
@@ -236,7 +274,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
    * the result — the action card, the map highlight, the dock's size — is in
    * front of it.
    */
-  const session = useVoiceSession({ context, onToolCall });
+  const session = useVoiceSession({ context, tools, onToolCall });
   const { availability, status, transcript, level, mic, error, say, narrationClock } =
     session;
 

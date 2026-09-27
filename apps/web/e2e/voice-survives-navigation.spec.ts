@@ -1,4 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
+import { META_PROMOTED } from "./gateway-fixtures";
+import { REPLAY_DAYS } from "./time-machine-fixtures";
 
 /**
  * **The session survives a tool-call navigation.**
@@ -106,6 +108,28 @@ async function armVoice(page: Page, credential = mintedResponse()): Promise<void
   await page.route("**/v1/voice/session", (route) => route.fulfill(credential));
 }
 
+/**
+ * A deployment that can actually replay a day.
+ *
+ * `armVoice` refuses every `/v1/**`, which is the right premise for most of
+ * this file — the dock must work with the gateway down. It is the wrong
+ * premise for the one test that drives a `replay` tool call, and it silently
+ * became so: the agent's replay calendar used to be four dates compiled into
+ * the bundle, and is now read from `GET /v1/replay/days`. With every read
+ * refusing there are no days, so `replay` refuses too — correctly, and the
+ * route change this spec exists to protect never happens.
+ *
+ * So the two reads that calendar needs answer here, registered after the
+ * catch-all because Playwright gives the last matching route the request.
+ * `/v1/meta` names the lane; `/v1/replay/days` is the calendar itself, reused
+ * from the Time Machine's own fixtures so there is one description of what
+ * that route returns.
+ */
+async function armReplayCalendar(page: Page): Promise<void> {
+  await page.route("**/v1/meta", (route) => route.fulfill({ json: META_PROMOTED }));
+  await page.route("**/v1/replay/days*", (route) => route.fulfill({ json: REPLAY_DAYS }));
+}
+
 function mintedResponse() {
   return {
     status: 200,
@@ -152,6 +176,7 @@ test.describe("the voice session outlives a tool-call navigation", () => {
     page,
   }) => {
     await armVoice(page);
+    await armReplayCalendar(page);
     await page.goto("/app");
     await startSession(page);
 

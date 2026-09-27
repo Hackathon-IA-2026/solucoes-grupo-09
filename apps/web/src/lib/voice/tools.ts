@@ -25,15 +25,31 @@
  * other three and fails if any of the three names appears in it.
  *
  * **The enums are read, never re-typed.** `SUBSYSTEM_DISPLAY_ORDER`,
- * `RUN_LABELS`, `DRIVER_CODES` and `REPLAY_DAYS` are the same lists the screens
- * and the gateway use. A hand-written `["N", "NE", "SE", "S"]` here would be a
- * second opinion about the grid, and the first time the two disagreed the model
- * would be offered a subsystem the executor refuses — which is the worst kind
- * of defect in this layer, because it looks like the model hallucinating.
+ * `RUN_LABELS` and `DRIVER_CODES` are the same lists the screens and the
+ * gateway use. A hand-written `["N", "NE", "SE", "S"]` here would be a second
+ * opinion about the grid, and the first time the two disagreed the model would
+ * be offered a subsystem the executor refuses — which is the worst kind of
+ * defect in this layer, because it looks like the model hallucinating.
+ *
+ * **That is exactly what happened to the replayable days, one axis over.** The
+ * `episode` enum was built from `REPLAY_DAYS`, four dates written by hand, and
+ * that was true while the picker offered the same four. `use-replay-days.ts`
+ * moved the picker onto `GET /v1/replay/days` — 81 days on the event's
+ * instance against the four here — and this file went on offering the old
+ * ones. Measured in production on 2026-09-27: "abra a máquina do tempo" opened
+ * `2026-08-11-ne`, a day the calendar no longer holds, the screen walked back
+ * to the nearest day it did hold, and the reader met *"esse cenário quebrou o
+ * solver"*. The model had done nothing wrong; it picked from the list it was
+ * given.
+ *
+ * So the days are a **parameter** now, and this is a function rather than a
+ * constant. There is no default: a caller with no calendar in hand is a caller
+ * that must say so, and it gets a `replay` tool with no `episode` property at
+ * all rather than one naming days that may not exist.
  */
 
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
-import { ASSET_LIMITS, REPLAY_DAYS, RUN_LABELS } from "@/lib/fixtures";
+import { ASSET_LIMITS, type ReplayCandidateDay, RUN_LABELS } from "@/lib/fixtures";
 import { QUESTION_KINDS } from "@/lib/voice/briefing/types";
 
 /** The six. Order is the order they are offered to the model. */
@@ -142,205 +158,229 @@ export interface JsonSchemaProperty {
  * locales could describe different tools — a far worse failure than an English
  * string the reader never sees.
  */
-export const VOICE_TOOLS: readonly VoiceTool[] = [
-  {
-    type: "function",
-    name: "show_grid",
-    description:
-      "Open the Grid Overview: all four subsystems, the map and the risk rows. " +
-      "Use it when the reader asks to go back, to see everything, or to compare " +
-      "regions. Takes no arguments — the current selection is carried over.",
-    parameters: {
-      type: "object",
-      properties: {},
-      required: [],
-      additionalProperties: false,
-    },
-  },
-  {
-    type: "function",
-    name: "explain",
-    description:
-      "Open Explain for a subsystem: the risk class, the band and the ranked " +
-      "drivers behind it. Use it for any 'why' question.",
-    parameters: {
-      type: "object",
-      properties: {
-        subsystem: {
-          type: "string",
-          enum: SUBSYSTEM_DISPLAY_ORDER,
-          description:
-            "The ONS subsystem code. Omit to keep the one the reader is already on. " +
-            "Never guess: if you did not hear one of these four codes, omit it.",
-        },
-        driver: {
-          type: "string",
-          enum: DRIVER_CODES,
-          description:
-            "The driver group to emphasise, when the reader named one. Omit otherwise.",
-        },
+export function voiceTools(days: readonly ReplayCandidateDay[]): readonly VoiceTool[] {
+  return [
+    {
+      type: "function",
+      name: "show_grid",
+      description:
+        "Open the Grid Overview: all four subsystems, the map and the risk rows. " +
+        "Use it when the reader asks to go back, to see everything, or to compare " +
+        "regions. Takes no arguments — the current selection is carried over.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
       },
-      required: [],
-      additionalProperties: false,
     },
-  },
-  {
-    type: "function",
-    name: "mitigate",
-    description:
-      "Open Mitigate and, optionally, resize the fleet in the scenario. The " +
-      "optimizer re-solves on the server from the URL, so a size given here " +
-      "produces a real plan. Omit every size to open the screen unchanged.",
-    parameters: {
-      type: "object",
-      properties: {
-        subsystem: {
-          type: "string",
-          enum: SUBSYSTEM_DISPLAY_ORDER,
-          description: "The ONS subsystem code. Omit to keep the current one.",
+    {
+      type: "function",
+      name: "explain",
+      description:
+        "Open Explain for a subsystem: the risk class, the band and the ranked " +
+        "drivers behind it. Use it for any 'why' question.",
+      parameters: {
+        type: "object",
+        properties: {
+          subsystem: {
+            type: "string",
+            enum: SUBSYSTEM_DISPLAY_ORDER,
+            description:
+              "The ONS subsystem code. Omit to keep the one the reader is already on. " +
+              "Never guess: if you did not hear one of these four codes, omit it.",
+          },
+          driver: {
+            type: "string",
+            enum: DRIVER_CODES,
+            description:
+              "The driver group to emphasise, when the reader named one. Omit otherwise.",
+          },
         },
-        battery_mwh: {
-          type: "number",
-          minimum: ASSET_LIMITS.batteryEnergyMwh.min,
-          maximum: ASSET_LIMITS.batteryEnergyMwh.max,
-          description: "Battery energy capacity in MWh.",
-        },
-        battery_mw: {
-          type: "number",
-          minimum: ASSET_LIMITS.batteryPowerMw.min,
-          maximum: ASSET_LIMITS.batteryPowerMw.max,
-          description: "Battery maximum power in MW.",
-        },
-        load_mwh: {
-          type: "number",
-          minimum: ASSET_LIMITS.loadDailyEnergyMwh.min,
-          maximum: ASSET_LIMITS.loadDailyEnergyMwh.max,
-          description: "Daily energy of the shiftable load, in MWh.",
-        },
+        required: [],
+        additionalProperties: false,
       },
-      required: [],
-      additionalProperties: false,
     },
-  },
-  {
-    type: "function",
-    name: "replay",
-    description:
-      "Open the Time Machine on a past day that WattSteer can score. Give " +
-      "either an episode id or a relative day, never both.",
-    parameters: {
-      type: "object",
-      properties: {
-        episode: {
-          type: "string",
-          enum: REPLAY_DAYS.map((day) => day.id),
-          description: "The id of a replayable day.",
+    {
+      type: "function",
+      name: "mitigate",
+      description:
+        "Open Mitigate and, optionally, resize the fleet in the scenario. The " +
+        "optimizer re-solves on the server from the URL, so a size given here " +
+        "produces a real plan. Omit every size to open the screen unchanged.",
+      parameters: {
+        type: "object",
+        properties: {
+          subsystem: {
+            type: "string",
+            enum: SUBSYSTEM_DISPLAY_ORDER,
+            description: "The ONS subsystem code. Omit to keep the current one.",
+          },
+          battery_mwh: {
+            type: "number",
+            minimum: ASSET_LIMITS.batteryEnergyMwh.min,
+            maximum: ASSET_LIMITS.batteryEnergyMwh.max,
+            description: "Battery energy capacity in MWh.",
+          },
+          battery_mw: {
+            type: "number",
+            minimum: ASSET_LIMITS.batteryPowerMw.min,
+            maximum: ASSET_LIMITS.batteryPowerMw.max,
+            description: "Battery maximum power in MW.",
+          },
+          load_mwh: {
+            type: "number",
+            minimum: ASSET_LIMITS.loadDailyEnergyMwh.min,
+            maximum: ASSET_LIMITS.loadDailyEnergyMwh.max,
+            description: "Daily energy of the shiftable load, in MWh.",
+          },
         },
-        relative_day: {
-          type: "integer",
-          minimum: RELATIVE_DAY_FLOOR,
-          maximum: -1,
-          description:
-            "Days before today, negative. -7 is 'last week'. The nearest " +
-            "replayable day at or before that date is opened.",
-        },
+        required: [],
+        additionalProperties: false,
       },
-      required: [],
-      additionalProperties: false,
     },
-  },
-  {
-    type: "function",
-    name: "focus",
-    description:
-      "Change the selection without changing screen: subsystem, fleet or " +
-      "weather run. Use it when the reader wants the same view of something " +
-      "else. At least one argument is required.",
-    parameters: {
-      type: "object",
-      properties: {
-        subsystem: {
-          type: "string",
-          enum: SUBSYSTEM_DISPLAY_ORDER,
-          description: "The ONS subsystem code.",
+    {
+      type: "function",
+      name: "replay",
+      description:
+        "Open the Time Machine on a past day that WattSteer can score. Give " +
+        "either an episode id or a relative day, never both.",
+      parameters: {
+        type: "object",
+        properties: {
+          /*
+          Omitted entirely when the calendar has not arrived, rather than
+          offered empty. An `enum: []` is a property the model can never
+          satisfy, and a property it cannot satisfy is one it will invent a
+          value for — which is the failure this whole file is arranged to
+          prevent. With no `episode`, `relative_day` still answers "last week"
+          and the executor resolves it over the days that exist.
+        */
+          ...(days.length === 0
+            ? {}
+            : {
+                episode: {
+                  type: "string",
+                  enum: days.map((day) => day.id),
+                  description: "The id of a replayable day.",
+                } as JsonSchemaProperty,
+              }),
+          relative_day: {
+            type: "integer",
+            minimum: RELATIVE_DAY_FLOOR,
+            maximum: -1,
+            description:
+              "Days before today, negative. -7 is 'last week'. The nearest " +
+              "replayable day at or before that date is opened.",
+          },
         },
-        technology: {
-          type: "string",
-          enum: TECHNOLOGY_VALUES,
-          description: "Which fleet to emphasise.",
-        },
-        run: {
-          type: "string",
-          enum: RUN_LABELS,
-          description: "Which D−1 weather run's gate to read.",
-        },
+        required: [],
+        additionalProperties: false,
       },
-      required: [],
-      additionalProperties: false,
     },
-  },
-  {
-    type: "function",
-    name: "highlight",
-    description:
-      "Light a subsystem on the map and its row, WITHOUT navigating. This is " +
-      "the right tool when you are about to talk about one region while the " +
-      "reader is looking at all four — do not open a screen to answer a " +
-      "question you can answer where they are.",
-    parameters: {
-      type: "object",
-      properties: {
-        subsystem: {
-          type: "string",
-          enum: SUBSYSTEM_DISPLAY_ORDER,
-          description: "The ONS subsystem code to light.",
+    {
+      type: "function",
+      name: "focus",
+      description:
+        "Change the selection without changing screen: subsystem, fleet or " +
+        "weather run. Use it when the reader wants the same view of something " +
+        "else. At least one argument is required.",
+      parameters: {
+        type: "object",
+        properties: {
+          subsystem: {
+            type: "string",
+            enum: SUBSYSTEM_DISPLAY_ORDER,
+            description: "The ONS subsystem code.",
+          },
+          technology: {
+            type: "string",
+            enum: TECHNOLOGY_VALUES,
+            description: "Which fleet to emphasise.",
+          },
+          run: {
+            type: "string",
+            enum: RUN_LABELS,
+            description: "Which D−1 weather run's gate to read.",
+          },
         },
+        required: [],
+        additionalProperties: false,
       },
-      required: ["subsystem"],
-      additionalProperties: false,
     },
-  },
-  {
-    type: "function",
-    name: "brief",
-    description:
-      "Present the answer instead of only saying it: a short narrated sequence " +
-      "over this product's own panels. The right tool when the question is " +
-      "'why', 'what happens tomorrow', 'what happened' or 'what if' — the " +
-      "questions whose answer is a sequence rather than a sentence. For a " +
-      "question with a one-line answer, speak it and use `highlight` or " +
-      "`focus` instead; a briefing for 'which subsystem is selected' would be " +
-      "theatre. You choose THAT a briefing is owed and what it is about. You " +
-      "do not choose what is in it: the scenes are composed from what the " +
-      "screen has actually read, and a briefing will silently contain less " +
-      "when less is available.",
-    parameters: {
-      type: "object",
-      properties: {
-        question_kind: {
-          type: "string",
-          enum: [...QUESTION_KINDS],
-          description:
-            "Which shape of question this is. `why` and `what_happened` earn " +
-            "the driver attribution; `tomorrow` earns the day's magnitude; " +
-            "`what_if` earns the counterfactual, but only where a plan has " +
-            "actually been solved.",
+    {
+      type: "function",
+      name: "highlight",
+      description:
+        "Light a subsystem on the map and its row, WITHOUT navigating. This is " +
+        "the right tool when you are about to talk about one region while the " +
+        "reader is looking at all four — do not open a screen to answer a " +
+        "question you can answer where they are.",
+      parameters: {
+        type: "object",
+        properties: {
+          subsystem: {
+            type: "string",
+            enum: SUBSYSTEM_DISPLAY_ORDER,
+            description: "The ONS subsystem code to light.",
+          },
         },
-        subsystem: {
-          type: "string",
-          enum: SUBSYSTEM_DISPLAY_ORDER,
-          description:
-            "The ONS subsystem the briefing is about. Omit to brief on the " +
-            "one already selected.",
-        },
+        required: ["subsystem"],
+        additionalProperties: false,
       },
-      required: ["question_kind"],
-      additionalProperties: false,
     },
-  },
-];
+    {
+      type: "function",
+      name: "brief",
+      description:
+        "Present the answer instead of only saying it: a short narrated sequence " +
+        "over this product's own panels. The right tool when the question is " +
+        "'why', 'what happens tomorrow', 'what happened' or 'what if' — the " +
+        "questions whose answer is a sequence rather than a sentence. For a " +
+        "question with a one-line answer, speak it and use `highlight` or " +
+        "`focus` instead; a briefing for 'which subsystem is selected' would be " +
+        "theatre. You choose THAT a briefing is owed and what it is about. You " +
+        "do not choose what is in it: the scenes are composed from what the " +
+        "screen has actually read, and a briefing will silently contain less " +
+        "when less is available.",
+      parameters: {
+        type: "object",
+        properties: {
+          question_kind: {
+            type: "string",
+            enum: [...QUESTION_KINDS],
+            description:
+              "Which shape of question this is. `why` and `what_happened` earn " +
+              "the driver attribution; `tomorrow` earns the day's magnitude; " +
+              "`what_if` earns the counterfactual, but only where a plan has " +
+              "actually been solved.",
+          },
+          subsystem: {
+            type: "string",
+            enum: SUBSYSTEM_DISPLAY_ORDER,
+            description:
+              "The ONS subsystem the briefing is about. Omit to brief on the " +
+              "one already selected.",
+          },
+        },
+        required: ["question_kind"],
+        additionalProperties: false,
+      },
+    },
+  ];
+}
 
-/** The tool of a name, or `undefined`. Used by the tests and by the dock. */
-export function toolNamed(name: string): VoiceTool | undefined {
-  return VOICE_TOOLS.find((tool) => tool.name === name);
+/**
+ * The tool of a name, or `undefined`. Used by the tests and by the dock.
+ *
+ * Takes the tools rather than reaching for a module constant, because there is
+ * no longer one to reach for: which tools exist is a question about a
+ * deployment's calendar, and a helper that answered it from a fixture would be
+ * the second source this file just finished removing.
+ */
+export function toolNamed(
+  name: string,
+  tools: readonly VoiceTool[],
+): VoiceTool | undefined {
+  return tools.find((tool) => tool.name === name);
 }

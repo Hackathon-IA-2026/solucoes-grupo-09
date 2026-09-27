@@ -29,7 +29,7 @@ import {
   VoiceSessionCore,
   type VoiceStatus,
 } from "@/lib/voice/session";
-import { VOICE_TOOLS } from "@/lib/voice/tools";
+import type { VoiceTool } from "@/lib/voice/tools";
 import { WebAudioBackend } from "@/lib/voice/web-audio-backend";
 import {
   remintDelayMs,
@@ -131,6 +131,7 @@ export interface VoiceSession {
 
 export function useVoiceSession({
   context,
+  tools,
   onToolCall,
 }: {
   /**
@@ -138,6 +139,18 @@ export function useVoiceSession({
    * between turns, deduplicated by value — see the effect below.
    */
   context: string;
+  /**
+   * The tools this deployment can actually offer.
+   *
+   * Passed in rather than imported, because one of them depends on data: the
+   * `replay` tool's `episode` enum is the deployment's replay calendar, and a
+   * constant here was four hand-written dates that stopped matching the picker
+   * — the model then named a day the screen could not open. Read through a ref
+   * for the same reason `instructions` is: `open` is a stable callback and a
+   * closure would hand the model whatever the calendar said when the dock
+   * first rendered.
+   */
+  tools: readonly VoiceTool[];
   /**
    * What a tool call means to the app — where it sends the reader, and what
    * the action card says. Returns the intent, which this hook then answers the
@@ -160,6 +173,8 @@ export function useVoiceSession({
    * the model the screen the dock was first rendered on.
    */
   const contextRef = useLatest(context);
+  /** The calendar as it is *now*, for the same reason as the line above. */
+  const toolsRef = useLatest(tools);
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [transcript, setTranscript] = useState<readonly TranscriptEntry[]>([]);
   const [level, setLevel] = useState(0);
@@ -304,7 +319,7 @@ export function useVoiceSession({
         // callback and a closure over `context` would hand the model the screen
         // the dock was first rendered on rather than the one it is opening from.
         instructions: contextRef.current,
-        tools: VOICE_TOOLS,
+        tools: toolsRef.current,
       },
     );
     sessionRef.current = session;

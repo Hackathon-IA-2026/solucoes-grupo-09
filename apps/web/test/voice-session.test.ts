@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { parseAppParams } from "@/components/app/params";
+import { REPLAY_DAYS } from "@/lib/fixtures";
 import { executeTool } from "@/lib/voice/execute";
 import { realtimeUrl, toolCallFrom } from "@/lib/voice/session";
 
@@ -72,19 +73,21 @@ describe("voice session · arguments are forwarded, never re-validated here", ()
     // why.
     const call = toolCallFrom({ name: "explain", arguments: "{not json" });
     expect(call).not.toBeNull();
-    const intent = executeTool(call as NonNullable<typeof call>, PARAMS);
+    const intent = executeTool(call as NonNullable<typeof call>, PARAMS, REPLAY_DAYS);
     expect(intent.kind).toBe("refused");
   });
 
   it("forwards an object exactly as it arrived", () => {
     const call = toolCallFrom({ name: "focus", arguments: { subsystem: "S" } });
-    const intent = executeTool(call as NonNullable<typeof call>, PARAMS);
+    const intent = executeTool(call as NonNullable<typeof call>, PARAMS, REPLAY_DAYS);
     expect(intent.kind).toBe("params");
   });
 
   it("survives a frame with no arguments at all", () => {
     const call = toolCallFrom({ name: "show_grid" });
-    expect(executeTool(call as NonNullable<typeof call>, PARAMS).kind).toBe("navigate");
+    expect(executeTool(call as NonNullable<typeof call>, PARAMS, REPLAY_DAYS).kind).toBe(
+      "navigate",
+    );
   });
 });
 

@@ -11,8 +11,19 @@ import {
   TECHNOLOGY_VALUES,
   TOOL_NAMES,
   toolNamed,
-  VOICE_TOOLS,
+  voiceTools,
 } from "../src/lib/voice/tools";
+
+/**
+ * The calendar these assertions are made against.
+ *
+ * `REPLAY_DAYS` is no longer what the app offers — the deployment's own
+ * `GET /v1/replay/days` is — but it remains what the tests pin, which is what
+ * `fixtures/replay.ts` says it is for. What matters here is that the enum is
+ * *whatever calendar the builder was handed*, and the case below asserts
+ * exactly that rather than a list of dates.
+ */
+const TOOLS = voiceTools(REPLAY_DAYS);
 
 /**
  * The schema the model reads, and the property that makes the rest testable.
@@ -182,7 +193,7 @@ describe("the seven tools", () => {
       // owed; `compose.ts` decides what is in it.
       "brief",
     ]);
-    expect(VOICE_TOOLS.map((tool) => tool.name)).toEqual([...TOOL_NAMES]);
+    expect(TOOLS.map((tool) => tool.name)).toEqual([...TOOL_NAMES]);
   });
 
   it("isToolName refuses everything else", () => {
@@ -195,7 +206,7 @@ describe("the seven tools", () => {
   });
 
   it("every tool is a function tool that forbids extra properties", () => {
-    for (const tool of VOICE_TOOLS) {
+    for (const tool of TOOLS) {
       expect(tool.type).toBe("function");
       expect(tool.parameters.type).toBe("object");
       // The executor refuses an undeclared property. Saying so in the schema
@@ -206,7 +217,7 @@ describe("the seven tools", () => {
   });
 
   it("every required property is a declared property", () => {
-    for (const tool of VOICE_TOOLS) {
+    for (const tool of TOOLS) {
       for (const key of tool.parameters.required) {
         expect(Object.keys(tool.parameters.properties)).toContain(key);
       }
@@ -217,44 +228,42 @@ describe("the seven tools", () => {
     // Every other tool can fall back on the current selection. These two
     // cannot: a highlight with no region lights nothing, and a briefing with
     // no question kind has no shape — `compose.ts` branches on it.
-    const withRequired = VOICE_TOOLS.filter(
-      (tool) => tool.parameters.required.length > 0,
-    );
+    const withRequired = TOOLS.filter((tool) => tool.parameters.required.length > 0);
     expect(withRequired.map((tool) => tool.name)).toEqual(["highlight", "brief"]);
-    expect(toolNamed("highlight")?.parameters.required).toEqual(["subsystem"]);
-    expect(toolNamed("brief")?.parameters.required).toEqual(["question_kind"]);
+    expect(toolNamed("highlight", TOOLS)?.parameters.required).toEqual(["subsystem"]);
+    expect(toolNamed("brief", TOOLS)?.parameters.required).toEqual(["question_kind"]);
   });
 
   it("brief offers exactly the question kinds the composer branches on", () => {
     // The enum is `QUESTION_KINDS` itself, not a copy: a kind the model could
     // name but the composer does not know would be a silent no-op.
-    const kinds = toolNamed("brief")?.parameters.properties.question_kind?.enum;
+    const kinds = toolNamed("brief", TOOLS)?.parameters.properties.question_kind?.enum;
     expect(kinds).toEqual([...QUESTION_KINDS]);
   });
 
   it("brief may be asked without a subsystem, and briefs on the selected one", () => {
-    expect(toolNamed("brief")?.parameters.required).not.toContain("subsystem");
-    expect(Object.keys(toolNamed("brief")?.parameters.properties ?? {})).toContain(
+    expect(toolNamed("brief", TOOLS)?.parameters.required).not.toContain("subsystem");
+    expect(Object.keys(toolNamed("brief", TOOLS)?.parameters.properties ?? {})).toContain(
       "subsystem",
     );
   });
 
   it("show_grid takes nothing at all", () => {
-    const tool = toolNamed("show_grid");
+    const tool = toolNamed("show_grid", TOOLS);
     expect(tool?.parameters.properties).toEqual({});
     expect(tool?.parameters.required).toEqual([]);
   });
 
   it("toolNamed answers for the seven and for nothing else", () => {
     for (const name of TOOL_NAMES) {
-      expect(toolNamed(name)?.name).toBe(name);
+      expect(toolNamed(name, TOOLS)?.name).toBe(name);
     }
-    expect(toolNamed("promote_model")).toBeUndefined();
+    expect(toolNamed("promote_model", TOOLS)).toBeUndefined();
   });
 });
 
 describe("the enums are the app's, not a second opinion", () => {
-  const subsystemEnums = VOICE_TOOLS.flatMap((tool) =>
+  const subsystemEnums = TOOLS.flatMap((tool) =>
     Object.entries(tool.parameters.properties)
       .filter(([key]) => key === "subsystem")
       .map(([, property]) => property.enum),
@@ -270,7 +279,7 @@ describe("the enums are the app's, not a second opinion", () => {
   });
 
   it("the run enum is RUN_LABELS and the technology enum is the URL spelling", () => {
-    const focus = toolNamed("focus");
+    const focus = toolNamed("focus", TOOLS);
     expect(focus?.parameters.properties.run.enum).toEqual([...RUN_LABELS]);
     expect(focus?.parameters.properties.technology.enum).toEqual([...TECHNOLOGY_VALUES]);
     // The URL spelling, not the domain's: `params.ts` owns that boundary and
@@ -278,10 +287,26 @@ describe("the enums are the app's, not a second opinion", () => {
     expect(TECHNOLOGY_VALUES).toEqual(["wind", "solar"]);
   });
 
-  it("the episode enum is the replay catalogue", () => {
-    expect(toolNamed("replay")?.parameters.properties.episode.enum).toEqual(
+  it("the episode enum is the calendar the builder was handed", () => {
+    expect(toolNamed("replay", TOOLS)?.parameters.properties.episode.enum).toEqual(
       REPLAY_DAYS.map((day) => day.id),
     );
+    // And a different calendar gives a different enum — which is the property
+    // that was missing when this read a module constant. A deployment whose
+    // picker offers other days must offer the model those days.
+    const other = [{ id: "2026-09-24-ne", date: "2026-09-24", subsystem: "NE" }] as const;
+    expect(
+      toolNamed("replay", voiceTools(other))?.parameters.properties.episode.enum,
+    ).toEqual(["2026-09-24-ne"]);
+  });
+
+  it("offers no episode at all when the calendar has not answered", () => {
+    // An `enum: []` is a property the model can never satisfy, so it would
+    // invent a value — which is the failure this file exists to prevent. The
+    // property is absent instead, and `relative_day` still answers.
+    const blind = toolNamed("replay", voiceTools([]))?.parameters.properties;
+    expect(blind?.episode).toBeUndefined();
+    expect(blind?.relative_day).toBeDefined();
   });
 
   it("the driver enum is the eight groups the diagnosis contract publishes", () => {
@@ -303,7 +328,7 @@ describe("the enums are the app's, not a second opinion", () => {
   });
 
   it("the size bounds are the steppers' own", () => {
-    const mitigate = toolNamed("mitigate");
+    const mitigate = toolNamed("mitigate", TOOLS);
     const properties = mitigate?.parameters.properties ?? {};
     expect(properties.battery_mwh.minimum).toBe(ASSET_LIMITS.batteryEnergyMwh.min);
     expect(properties.battery_mwh.maximum).toBe(ASSET_LIMITS.batteryEnergyMwh.max);
@@ -314,7 +339,7 @@ describe("the enums are the app's, not a second opinion", () => {
   });
 
   it("relative_day is past-only and bounded", () => {
-    const relative_day = toolNamed("replay")?.parameters.properties.relative_day;
+    const relative_day = toolNamed("replay", TOOLS)?.parameters.properties.relative_day;
     expect(relative_day?.type).toBe("integer");
     expect(relative_day?.maximum).toBe(-1);
     expect(relative_day?.minimum).toBe(RELATIVE_DAY_FLOOR);
@@ -324,6 +349,6 @@ describe("the enums are the app's, not a second opinion", () => {
     // The step that proves the thesis (plan §6, step 1). If the model is not
     // told this, it opens Explain to answer a question that fits where the
     // reader already is, and the demo loses its best moment.
-    expect(toolNamed("highlight")?.description).toContain("WITHOUT navigating");
+    expect(toolNamed("highlight", TOOLS)?.description).toContain("WITHOUT navigating");
   });
 });

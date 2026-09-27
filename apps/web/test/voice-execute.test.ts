@@ -57,7 +57,12 @@ const NE: AppParams = {
 };
 
 function run(name: string, args?: unknown, params: AppParams = NE, scenario?: Scenario) {
-  return executeTool({ name, arguments: args } as ToolCall, params, scenario);
+  return executeTool(
+    { name, arguments: args } as ToolCall,
+    params,
+    REPLAY_DAYS,
+    scenario,
+  );
 }
 
 function refusal(intent: NavigationIntent): ToolRefusalCode {
@@ -105,8 +110,8 @@ describe("executeTool is total", () => {
     for (const call of shapes) {
       // The caller is a socket message handler mid-sentence; a throw there ends
       // the session rather than the turn.
-      expect(() => executeTool(call, NE)).not.toThrow();
-      expect(typeof executeTool(call, NE).kind).toBe("string");
+      expect(() => executeTool(call, NE, REPLAY_DAYS)).not.toThrow();
+      expect(typeof executeTool(call, NE, REPLAY_DAYS).kind).toBe("string");
     }
   });
 
@@ -155,7 +160,7 @@ describe("executeTool is total", () => {
       { name: "brief", arguments: { question_kind: "vibes" } },
     ];
     for (const call of calls) {
-      seen.add(refusal(executeTool(call, NE)));
+      seen.add(refusal(executeTool(call, NE, REPLAY_DAYS)));
     }
     // Every published code is reachable, and nothing outside the list is
     // produced: a taxonomy with an unreachable member is a taxonomy that is
@@ -627,7 +632,7 @@ describe("property: any valid call leaves the URL parseable", () => {
   it("no valid call is ever refused", () => {
     for (const params of EVERY_PARAMS) {
       for (const call of VALID_CALLS) {
-        const intent = executeTool(call, params);
+        const intent = executeTool(call, params, REPLAY_DAYS);
         expect(intent.kind).not.toBe("refused");
       }
     }
@@ -636,7 +641,7 @@ describe("property: any valid call leaves the URL parseable", () => {
   it("the params of every intent parse back through parseAppParams", () => {
     for (const params of EVERY_PARAMS) {
       for (const call of VALID_CALLS) {
-        const intent = executeTool(call, params);
+        const intent = executeTool(call, params, REPLAY_DAYS);
         if (intent.kind !== "navigate" && intent.kind !== "params") {
           continue;
         }
@@ -666,7 +671,7 @@ describe("property: any valid call leaves the URL parseable", () => {
     // it falls back to wind. From a tab press that is a wrong pill; from the
     // agent it would be the voice saying "solar" over a wind screen.
     const solar: AppParams = { ...NE, technology: "SOLAR" };
-    const { params } = navigation(executeTool({ name: "show_grid" }, solar));
+    const { params } = navigation(executeTool({ name: "show_grid" }, solar, REPLAY_DAYS));
     expect(parseAppParams(params, NOW).technology).toBe("SOLAR");
   });
 
@@ -735,7 +740,11 @@ describe("the demo script (plan §6), as gherkin", () => {
     [
       /^the model calls (\w+) with (.+)$/,
       (world, name, args) => {
-        world.intent = executeTool({ name, arguments: JSON.parse(args) }, world.params);
+        world.intent = executeTool(
+          { name, arguments: JSON.parse(args) },
+          world.params,
+          REPLAY_DAYS,
+        );
       },
     ],
     [
@@ -917,7 +926,12 @@ describe("the demo script (plan §6), driven as one conversation", () => {
 
     /** Apply an intent the way the provider does, and record what happened. */
     const turn = (step: number, name: string, args: Record<string, unknown>) => {
-      const intent = executeTool({ name, arguments: args } as ToolCall, params, scenario);
+      const intent = executeTool(
+        { name, arguments: args } as ToolCall,
+        params,
+        REPLAY_DAYS,
+        scenario,
+      );
       if (intent.kind === "navigate" || intent.kind === "params") {
         params = parseAppParams({ ...writeParams(params), ...intent.params }, NOW);
         const blob = intent.params[SCENARIO_PARAM];
