@@ -1,0 +1,205 @@
+# Estado do ciclo do pitch (lido pelo loop de 3 min)
+
+Tópico Pitch: https://discord.com/channels/1548101882457620480/1549422376335319091
+Ler com: `python3 tools/skill/discord-chrome/scripts/discord.py read <url> --after <último id>`
+Antes de ler: `curl -s -m 3 127.0.0.1:9333/list` precisa responder; se não, `nohup node tools/cdpd.mjs &` e reler. Leitura vazia com daemon fora NÃO é "sem novidades".
+
+último id lido: 1553716511083077694 (meu post das sugestões da banca, 10:34). Meus posts ficam em docs/pitch/meus_posts.txt (o script registra com DISCORD_POST_LOG); mensagens da conta WTH fora dessa lista são do Guilherme e merecem resposta
+meus posts (ignorar): 1553520363382509748 1553520423084367983 1553520508769935461 (v16) · 1553557843872059515 (resposta ao Machado) · 1553557919466000507 (resposta ao João Vitor) · 1553563527640260619 1553565783647461457 1553566456166228090 (respostas nativas ao João Vitor) · 1553566596469891096 (v17 .pptx+.pdf) · 1553566662714724556 (v17 vídeo) · 1553566709552652358 (v17 roteiro) · 1553566884975087626 (fala v1) · 1553567990430302299 (resposta benefícios) · respostas a 1553567524086349935 e 1553567998390829118
+
+EM ABERTO PARA A VERSÃO DE ENTREGA: revisar as animações (ANIM em scratchpad/deck/layers.py) slide a slide no .pptx e no .mp4, porque quebraram depois das mudanças de layout (Guilherme, 22:26).
+
+versão no ar: **v37** (postada 10:20; slide 6 novo com o vídeo do time e slide 11 com o que devolvemos ao ecossistema + pedido de uma geradora e de um laboratório da COPPE; .pptx com o reel embutido postado à parte, falta o time testar). Antes: **v36** (postada 00:37; devolução sumindo no slide 3, onda que vem no slide 10, barreira com modelo e acervo no slide 6). Antes: **v35** (postada 00:27; manutenção à mão no slide 8, prova com a métrica longa na manchete, placar de erros, barreira do histórico). Antes: **v34** (postada 00:20; faixa com largura, consequência do erro, card do slide 3, capa ligando os bilhões, conta 565 mil, steer no time e no fecho). Antes: **v33** (postada 00:11; slide 6 com tudo que foi construído e o gancho do parceiro). Antes: **v32** (postada 00:08 de 27/09; contradição preço x retorno resolvida, marcos de 90 dias/12 meses/3 anos no slide 10). Antes: **v31** (postada 23:58; mecânica da CCEE, 6% do consumo do país, mercado com solar, base do 15%, auditabilidade; banca rodando). Antes: **v30** (postada 23:48; motion automático, argumento da lei só no slide 3, sem "100%", rodapés curtos). Antes: **v29** (postada 23:33; sem "cobra a lei" nem "compra de outra usina", slide 5 com NE 18/09, faixa definida, preço proposto, Rio no slide 10; banca de 6 rodando). Antes: **v28** (postada 23:25; custo do erro, faixa definida, consumidor paga, código aberto, rótulo dos alvos; banca de 6 rodando). Antes: **v27** (postada 23:18; teto 60 palavras +10%, frases de 16, logotipos, correções da banca v25; banca de 6 rodando). Antes: **v25** (postada 23:03; casas, registro, região, wattsteer.com; banca de 5 rodando). Antes: **v24** (postada 22:56; correções de texto do teste da v23; banca de 5 rodando na v24, resultado a publicar). Antes: **v23** (postada 22:50 com a simulação da banca de 5: média 6,7, NÃO PASSA por pouco; v24 com as correções de texto em construção). v22 =  slide 6 com benefício por cartão, slide 3 como exemplo, slide 10 com parceiro estratégico e alvos, 1.132 no slide 8, bio do Vitor). Antes: **v20** (postada 22:15: 1553575673736601731 pptx+pdf, 1553575740728152146 vídeo, 1553575787859284009 roteiro; teste de leitores passou por margem estreita; duas decisões pedidas ao time: por usina x por região; 8x inclui manutenção). Antes: **v19** (postada 22:07: 1553573720210153565 pptx+pdf, 1553573788405469334 vídeo, 1553573835234873354 roteiro; rodapé de fontes em todos os slides; teste de leitores passou com ressalvas: slide 4 item 1 sem mecanismo, slide 5 com siglas do print, capa sem definir corte). v18 postada 21:55 (1553570779566973008). Antes: **v17** (postada 21:39; slide que funciona sozinho; passou clareza, legibilidade, 2:58 e teste de leitores só com PNGs, por margem estreita). Fala independente em docs/pitch/narrativa-apresentacao-v1.md. Em aberto com o time: Auren é só exemplo; frase de cada fundador; QR Railway ou AWS; contato no último slide.
+
+## Registro
+- ~21:00 daemon estava fora desde 18:47; subi de novo; 3 mensagens novas; respondi citando Machado e João Vitor
+- 21:07 sem mensagens novas de outras pessoas após 1553534326145290363 (daemon ok); cron antigo 3b73fb1e (5 min, sobreviveu ao /clear) removido, fica só o b5042f06 (3 min)
+- 21:09 sem novidades; discord.py ganhou --reply (Responder nativo), testado sem enviar; cron recriado com esse modo
+- 21:27 João Vitor: "Está bom" (resposta nativa enviada). v17 em fechamento: teste de leitores apontou 5 pontos (quem paga, ONS/corte, print do app, cadeia de números, cliente-alvo x cliente); corrigidos; regerando
+- 21:30 sem mensagens novas de outras pessoas após 1553563211217895546 (daemon ok); reteste de leitores da v17 em andamento
+- 21:39 v17 postada (.pptx+.pdf, vídeo 3,1 MB, roteiro); respondi ao João Vitor (ROI/margem, cadeia de impacto, posicionamento; pergunta sobre ressarcimento com dados)
+- 21:41 sem mensagens novas de outras pessoas após 1553566197297971353 (daemon ok); v17 no ar
+- 21:43 Machado mandou dois blocos de benefício financeiro (estimativas); respondi: entram no slide 8 como valor por usina (R$ 0,5-0,6 mi/ano contra R$ 60 mil cobrados), marcados como estimativa; totais nacionais ficam fora. v18 em construção; postar quando o tópico ficar ~10 min quieto
+- 21:45 Machado: conta de luz explícita (slide 2) e capa com uma receita só; respondido; v18 em construção com: valor por usina no slide 8, frase literal no slide 2, comissão fora da capa
+- 21:50 Machado: dados da Auren são verdadeiros? (sim, release 4T25; R$ 2,1 bi grau B) e marcar como possível cliente; respostas nativas via menu de contexto (hover não funciona em mensagem alta; pointerCover engolia o clique)
+- 21:58 v18 postada (1553570... pptx+pdf; vídeo a conferir; roteiro 1553570891768799293). 7 msgs novas (21:48-21:55) respondidas: slide 4 'e mais barato', bateria para o futuro (JV+Machado), slide 6 'pronto hoje', slide 7 verdadeiro (Máquina do Tempo), fonte no rodapé (Machado + Guilherme Chaves: todos os dados). v19 em construção
+- 22:03 sem mensagens novas de outras pessoas após 1553570737300709500 (daemon ok); v19 pronta, aguardando teste de leitores para postar
+- 22:07 v19 postada; teste de leitores PASSOU (ressalvas viram sugestões para v20 na mensagem); 2 msgs novas do Machado (22:04, 22:06) a ler
+- 22:09 Machado (22:04, 22:06): comparação injusta no slide 3 (2 parques x frota) e 'na véspera' no slide 4; respondidos; v20 em construção com isso + capa definindo corte + mecanismo do item 1
+- 22:12 sem mensagens novas de outras pessoas após 1553573478110855220 (daemon ok); v20 pronta, aguardando teste de leitores para postar
+- 22:15 v20 postada; sem mensagens novas de outras pessoas após 1553573478110855220
+- 22:16 sem mensagens novas de outras pessoas após 1553573478110855220 (daemon ok); v20 no ar, aguardando decisões do time (usina x região; 8x)
+- 22:18 sem mensagens novas de outras pessoas após 1553573478110855220 (daemon ok)
+- 22:22 sem mensagens novas após 1553573478110855220; Guilherme pediu slide 6 com modelo próprio, RAG próprio e só open source; v21 em construção
+- 22:22 Guilherme: slide 6 com modelo próprio, RAG próprio e só open source; bio do Vitor sem 'construiu o WattSteer'; v21 em construção
+- 22:27 João Vitor: 'ficou top' (print), Auren é parceiro? (respondido: só exemplo), slide de projeções com parceiros (respondido: linha no slide 10, como alvos). Guilherme: slide 8 com 1.132 em destaque ligado à assinatura; revisar animações na versão de entrega; parar de chamar de 'final' (arquivos passam a WattSteer-Pitch-vN). v21 em construção
+- 22:29 Guilherme (no Discord): de onde surgiu a Auren; respondido (pedido do Machado 19:07 + única geradora com release público de perda). v21 gerada (slide 6 open source, bio do Vitor, 1.132 no slide 8, nomes sem 'final'); teste de leitores rodando
+- 22:32 Guilherme no Discord: do slide 6 em diante ficou top, dúvida nos primeiros (respondi com as 3 ressalvas do teste); aprovou linha de parceiros/alvos casada com o pedido (v22). JV: 'Sucesso'
+- 22:33 Guilherme: slide 3 com tom de exemplo, não de alvo; respondido; entra na v22 (com parceiros no slide 10). v21 não será postada: a v22 a substitui
+- 22:36 v22 gerada; post bloqueado por rascunho no composer (provavelmente o Guilherme digitando); Guilherme: ninguém tem contato com os alvos (fica como alvos), 'top!'
+- 22:38 v23 gerada (legendas no slide 5); rascunho do Guilherme ainda no composer; postar v23 (não v22) quando liberar
+- 22:39 sem mensagens novas; rascunho do Guilherme continua no composer; v23 pronta aguardando para postar
+- 22:41 Guilherme (Discord): slide 5 sem siglas, simular 5 jurados (elétrica, tecnologia, construção civil, político, anjo do agro) e trocar as personas do teste por esses 5; respondido; v23 sendo refeita com cartões em português no lugar do print
+- 22:45 v23 regerada (slide 5 com cinco cartões em português); simulação dos 5 jurados postada; teste com a banca de 5 rodando; v23 posta quando passar
+- 22:45 sem mensagens novas de outras pessoas após 1553581937371779103 (daemon ok); teste da banca de 5 na v23 em andamento
+- 22:50 v23 postada + simulação completa (2 msgs); v24: slide 4 item 1, unidades em kWh, Norte x Nordeste, slide 6 'fórmula nossa', traduções no slide 10; perguntas ao time: capital no pedido? tirar GNA?
+- 22:53 anúncio da v23 (pptx+pdf) reenviado em 2 partes (a 1ª tinha passado de 2000 chars e não saiu); JV 22:47/22:48: maioria é ENE / 'custo de custo' (a ler e responder)
+- 22:55 v23 anunciada (2 partes, pptx+pdf); respondi ao JV sobre ENE; v24 em construção (pontos 1 a 4 do teste)
+- 22:56 v24 postada (pptx+pdf, vídeo, roteiro); banca de 5 rodando na v24; pendências do time: capital no pedido? GNA?
+- 22:57 Guilherme: não pedir capital; pedido = parceria estratégica para validar; banca simulada é ferramenta nossa, não suporte de entrega. Respondido. Para a v25: rodapé do slide 10 'alvos mapeados' no lugar de 'nenhuma conversa iniciada'
+- 22:56 resposta ao Guilherme (r_gc6.txt, reply 1553585763277344790) PENDENTE: rascunho dele no composer; reenviar no próximo tique
+- 23:00 banca v24 publicada (6,3, não passa); respondi: JV (parceiros ficam), Guilherme (kWh em casas, não em R$), Vitor (site perto do QR); v25 em construção: pontos 2,3,4 + casas + wattsteer.com; ponto 1 (o que está pronto; compra antecipada mensal) espera o Machado
+- 23:03 v25 postada; JV pediu logotipos dos parceiros (v26, agente buscando); banca de 5 rodando na v25
+- 23:03 sem mensagens novas após 1553587123045539873 (daemon ok); banca v25 e logotipos em andamento
+- 23:07 banca v25 publicada (6,8, não passa por pouco); v26 = reescritas 1-3 + documentada + endereço único + logotipos
+- 23:09 JV: menos texto; respondi (proposta: teto 60 palavras na v27, time decide). v26 em fechamento (logotipos, slides 4/5/8, documentada, QR wattsteer.com/app)
+- 23:13 time quer menos texto e frases curtas (Guilherme confirmou); v26 não será postada; v27 = v26 + teto 60 palavras/16 por frase + logo Axia com cartão. Persona da jurada Luana Helsinger em pesquisa (agente sonnet)
+- 23:18 v27 postada; banca de 6 (com persona Luana Helsinger) rodando; tolerância de 10% no teto (Guilherme)
+- 23:18 sem mensagens novas após 1553589676345008160 (daemon ok); banca de 6 na v27 em andamento
+- 23:20 banca de 6 na v27 publicada (6,75, não passa); v28 com pontos 2 e 3 + menores; ponto 1 espera o Machado
+- 23:25 v28 postada; banca de 6 rodando; trava 1 (compra antecipada) espera o Machado
+- 23:24 sem mensagens novas após 1553589676345008160 (daemon ok); banca de 6 na v28 em andamento
+- 23:28 banca de 6 na v28 publicada (6,4); v29 em construção com 5 mudanças; conferir no app: NE 18/09 (P10/P90, motivo, pico) e se os 328 dias são fora do treino
+- 23:33 v29 postada; banca de 6 rodando na v29
+- 23:33 sem mensagens novas após 1553589676345008160 (daemon ok); banca de 6 na v29 em andamento; pendência v30: encurtar rodapé do slide 5
+- 23:36 banca v29 publicada (6,7); v30 em construção: capa/slide 3 com os R$ 217 mi, chance >95%, região x usina em destaque, rodapés curtos, benefício público no slide 4
+- 23:48 v30 postada; motion refeito (layers.py marca todo bloco visível; mp4 com fade de saída); Guilherme pediu diagnóstico de como subir a nota da banca de 6,7 para ~9
+- 23:49 correção da mecânica da recompra publicada (pesquisa própria); pedido de erro médio e baseline ao Vitor; v31: slide 4 item pronto reescrito, slide 3 com 'geração potencial'
+- 23:51 rubrica de 10 critérios publicada (docs/pitch/rubrica-nota-10.md); pedidos: Vitor (erro médio, baseline, corte por usina), Machado (mecânica), JV (contato); eu: F, G, H na v31
+- 23:53 sem mensagens novas (daemon ok); v31 base pronta e validada, aguardando pesquisa (mercado com solar; benefício público) para F e G
+- 23:58 v31 postada (F, G, H da rubrica fechados com fonte); banca de 6 rodando; Guilherme liberou assumir produto no estado desejado para o deck (avaliar caso a caso o risco na demo)
+- 23:58 sem mensagens novas (daemon ok); v31 no ar, banca de 6 rodando
+- 00:08 banca v31 (6,75) publicada; v32 postada com as correções e o futuro em marcos; arquivos de trabalho passam a ser wattsteer-pitch-2026-vN (v32-v48 colidiam com o deck do Ideathon)
+- 00:11 v33 postada (slide 6 justo: o que existe + 'imagine com um parceiro'); banca de 6 rodando
+- 00:12 sem mensagens novas (daemon ok); v33 no ar, banca de 6 rodando
+- 00:18 sem mensagens novas (daemon ok); v34 gerada (faixa com largura, 565 mil corrigido, card do slide 3, consequência do erro, steer no time e no fecho); aguardando definição do Guilherme sobre 'mistura das duas opções' antes de postar
+- 00:20 banca v33 (6,3) publicada; v34 postada; banca de 6 rodando na v34
+- 00:27 banca v34 (6,33) publicada; v35 postada (pptx+pdf+roteiro). PENDENTE: vídeo não anexa desde a v34 (4 tentativas, inclusive com 1,9 MB); 3 mensagens minhas sem anexo ficaram no tópico e o delete pelo menu falhou
+- 00:29 sem mensagens novas; nova tentativa do vídeo (v35)
+- 00:30 vídeo continua sem anexar (6 tentativas, 1,9 e 3,4 MB, esperas longas, anexo confirmado no composer antes de enviar). Registrado na memória; tentar depois de um intervalo longo
+- 00:37 v36 postada; banca de 6 rodando.
+**REGRA NOVA (Guilherme, 27/09 00:34): parar de me autocorrigir.** Daqui em diante só fazer o que o TIME pedir no tópico, mais publicar a avaliação da banca (com sugestões sobre o que acabou de mudar). Nada de abrir nova rodada de melhoria por conta própria.
+- 00:38 sem mensagens novas de outras pessoas (daemon ok); banca de 6 na v36 rodando; modo: só pedidos do time + publicar avaliação
+- 00:40 sem mensagens novas (daemon ok); aguardando banca da v36
+- 00:44 banca v36 publicada: **6,9**, melhor até agora (Luana 7,5). Não passou por uma contradição no slide 3 (a frase da devolução precisa da cláusula "a lei só cobre cortes até nov/2025"); sugestões das 3 mudanças publicadas. **Não vou aplicar nada sem pedido do time.**
+PENDENTE se pedirem: (1) cláusula da janela da lei no slide 3 + fonte do 96% no rodapé + alinhar a capa; (2) "quase triplicou" no lugar de "triplicou"; (3) rodapés dos slides 3, 7, 8 e 10 cortando na margem direita; (4) vídeo que não anexa no Discord.
+- 00:43 sem mensagens novas (daemon ok); modo de espera: só pedidos do time
+- 00:46 sem mensagens novas (daemon ok)
+- 00:49 sem mensagens novas (daemon ok)
+- 00:52 sem mensagens novas (daemon ok)
+- 00:55 sem mensagens novas (daemon ok)
+- 00:58 sem mensagens novas (daemon ok)
+- 01:01 sem mensagens novas (daemon ok)
+- 01:04 sem mensagens novas (daemon ok)
+- 01:07 sem mensagens novas (daemon ok)
+- 01:10 sem mensagens novas (daemon ok)
+- 01:13 sem mensagens novas (daemon ok)
+- 01:16 sem mensagens novas (daemon ok)
+- 02:35 **pitch ALTERNATIVO de 7 slides publicado** (build_alt7_v1.py, WattSteer-Pitch-alternativo-7slides.*): ordem problema → impacto → como ajudamos → como ganhamos (com caso real e alvos) → onde estamos → quem somos (steer) → para onde vamos. 304 palavras, 2:01 de fala, texto curto e peso na ilustração. **A versão oficial continua a v36.**
+- 02:35 sem mensagens novas (daemon ok); alternativo de 7 slides publicado
+- 02:37 sem mensagens novas (daemon ok)
+- 02:40 sem mensagens novas (daemon ok)
+- 02:43 sem mensagens novas (daemon ok)
+- 02:46 sem mensagens novas (daemon ok)
+- 02:49 sem mensagens novas (daemon ok)
+- 02:52 sem mensagens novas (daemon ok)
+- 02:55 sem mensagens novas (daemon ok)
+- 02:58 sem mensagens novas (daemon ok)
+- 03:01 sem mensagens novas (daemon ok)
+- 03:04 sem mensagens novas (daemon ok)
+- 03:07 sem mensagens novas (daemon ok)
+- 03:10 sem mensagens novas (daemon ok)
+- 03:13 sem mensagens novas (daemon ok)
+- 03:16 sem mensagens novas (daemon ok)
+- 03:19 sem mensagens novas (daemon ok)
+- 03:22 sem mensagens novas (daemon ok)
+- 03:25 sem mensagens novas (daemon ok)
+- 03:28 sem mensagens novas (daemon ok)
+- 03:31 sem mensagens novas (daemon ok)
+- 03:34 sem mensagens novas (daemon ok)
+- 03:37 sem mensagens novas (daemon ok)
+- 03:40 sem mensagens novas (daemon ok)
+- 03:43 sem mensagens novas (daemon ok)
+- 03:46 sem mensagens novas (daemon ok)
+- 03:49 sem mensagens novas (daemon ok)
+- 03:52 sem mensagens novas (daemon ok)
+- 03:55 sem mensagens novas (daemon ok)
+- 03:58 sem mensagens novas (daemon ok)
+- 04:01 sem mensagens novas (daemon ok)
+- 04:04 sem mensagens novas (daemon ok)
+- 04:07 sem mensagens novas (daemon ok)
+- 04:10 sem mensagens novas (daemon ok)
+- 04:13 sem mensagens novas (daemon ok)
+- 04:16 sem mensagens novas (daemon ok)
+- 04:19 sem mensagens novas (daemon ok)
+- 04:22 sem mensagens novas (daemon ok)
+- 04:25 sem mensagens novas (daemon ok)
+- 04:28 sem mensagens novas (daemon ok)
+- 04:31 sem mensagens novas (daemon ok)
+- 04:34 sem mensagens novas (daemon ok)
+- 04:37 sem mensagens novas (daemon ok)
+- 04:40 sem mensagens novas (daemon ok)
+- 04:43 sem mensagens novas (daemon ok)
+- 04:46 sem mensagens novas (daemon ok)
+- 04:49 sem mensagens novas (daemon ok)
+- 04:52 sem mensagens novas (daemon ok)
+- 04:55 sem mensagens novas (daemon ok)
+- 04:58 sem mensagens novas (daemon ok)
+- 05:01 sem mensagens novas (daemon ok)
+- 05:07 sem mensagens novas de outras pessoas (daemon ok; último id 1553641062990618634)
+- 05:07 sem mensagens novas (daemon ok)
+- 05:10 sem mensagens novas (daemon ok)
+- 05:13 sem mensagens novas (daemon ok)
+- 05:16 sem mensagens novas (daemon ok)
+- 05:19 sem mensagens novas (daemon ok)
+- 05:22 sem mensagens novas (daemon ok)
+- 05:25 sem mensagens novas (daemon ok)
+- 05:28 sem mensagens novas (daemon ok)
+- 05:31 sem mensagens novas (daemon ok)
+- 05:34 sem mensagens novas (daemon ok)
+- 05:37 sem mensagens novas (daemon ok)
+- 05:40 sem mensagens novas (daemon ok)
+- 05:43 sem mensagens novas (daemon ok)
+- 05:46 sem mensagens novas (daemon ok)
+- 05:49 sem mensagens novas (daemon ok)
+- 05:52 sem mensagens novas (daemon ok)
+- 05:55 sem mensagens novas (daemon ok)
+- 05:58 sem mensagens novas (daemon ok)
+- 06:01 sem mensagens novas (daemon ok)
+- 06:04 sem mensagens novas (daemon ok)
+- 06:07 sem mensagens novas (daemon ok)
+- 06:10 sem mensagens novas (daemon ok)
+- 06:13 sem mensagens novas (daemon ok)
+- 06:16 sem mensagens novas (daemon ok)
+- 06:19 sem mensagens novas (daemon ok)
+- 06:22 sem mensagens novas (daemon ok)
+- 06:25 sem mensagens novas (daemon ok)
+- 06:28 sem mensagens novas (daemon ok)
+- 06:31 sem mensagens novas (daemon ok)
+- 06:34 sem mensagens novas (daemon ok)
+- 06:37 sem mensagens novas (daemon ok)
+- 06:40 sem mensagens novas (daemon ok)
+- 06:43 sem mensagens novas (daemon ok)
+- 06:46 sem mensagens novas (daemon ok)
+- 06:49 sem mensagens novas (daemon ok)
+- 06:52 sem mensagens novas (daemon ok)
+- 06:55 sem mensagens novas (daemon ok)
+- 06:58 sem mensagens novas (daemon ok)
+- 07:01 sem mensagens novas (daemon ok)
+- 07:12 v37 em construção (slide do vídeo + ecossistema); sem mensagens novas
+- 07:15 sem mensagens novas (daemon ok); v37 renderizando
+
+- 10:20 v37 postada (.pptx e .pdf). Slide 6 "Demonstração" com o reel do canal #video (poster + o que se vê em 50 s); slide 11 com "Devolvemos": acervo do ONS aberto, placar de acerto público, grátis para pesquisa; pedido em dois: geradora e laboratório da COPPE. Fala 2:56 + vídeo 0:50. Clareza e legibilidade ok
+- 10:22 WattSteer-Pitch-v37-com-video.pptx postado (16 MB, reel embutido no slide 6 por pptx_com_video.py); PRECISA de teste no PowerPoint, não consigo abrir aqui
+- 10:26 mp4 com o reel dentro (build: mp4_com_reel.py) NÃO anexa no Discord nem com 6 MB: mensagem saiu vazia. Guilherme mandou parar de tentar. Arquivos ficam em docs/pitch/WattSteer-Pitch-v37-com-video.mp4 (3840x1080) e -leve.mp4
+- 10:16 skill discord-chrome publicada em #desenvolvimento (zip com SKILL.md e os dois scripts), a pedido do Guilherme
+- 07:27 sem mensagens novas (daemon ok); v37 no ar
+- 07:28 sem mensagens novas (daemon ok)
+- 07:30 personas publicadas em #desenvolvimento (banca-simulada.md + luana-helsinger.md); banca de 6 rodando na v37
+- 07:31 sem mensagens novas (daemon ok); aguardando a banca da v37
+- 10:33 banca de 6 na v37 publicada: média 6,5, NÃO PASSA (eletricista 6; tecnologia 6; civil 6,5; político 7,5; investidor 4,5, a menor até agora; Luana 8,5, a maior que ela já deu). Relatório em docs/pitch/banca-v37.md
+- 10:34 publicadas as sugestões sobre as duas mudanças novas. PENDENTE, só se o time pedir: (1) reconciliar a devolução no slide 3 (68% x 33% x 59%); (2) erro médio dos 328 dias no lugar do "abaixo de 4%"; (3) slide 9 com R$ 235 mil marcado como hipótese e assinantes derivados de base declarada; (4) traduzir MW, GW, COPPE; (5) unidade kWh/MWh errada na tela do produto, visível no frame do slide 6
+- 07:35 sem mensagens novas (daemon ok); banca da v37 publicada, aguardando decisão do time
+- 07:37 sem mensagens novas (daemon ok)
+- 07:40 sem mensagens novas (daemon ok)
+- 09:15 skills preparadas para outra pessoa continuar: shots_wide.py, layers.py e render.py movidos do scratchpad para docs/pitch (eram a peça que faltava no repositório); os três passaram a avisar em uma linha quando o daemon está fora; skill nova tools/skill/wattsteer-pitch com o processo do deck; discord-chrome ganhou a seção do ciclo; docs/pitch/README.md com a sequência de comandos
