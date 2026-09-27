@@ -61,10 +61,17 @@ ARG EXPO_PUBLIC_CESIUM_ION_TOKEN=""
 # event's AWS instance proxies each port under `/app/<port>/`; see
 # `app.config.ts`.
 ARG EXPO_PUBLIC_BASE_PATH=""
+# A civil date `/app` opens on instead of tomorrow. Empty by default and that
+# is the normal state — it exists for a deployment whose publication has been
+# interrupted, where tomorrow is four stated absences and a demonstration needs
+# a day that was actually published. It moves the opening day and nothing else;
+# see `apps/web/src/lib/config.ts`.
+ARG EXPO_PUBLIC_DEMO_DATE=""
 ENV EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL \
     EXPO_PUBLIC_SITE_URL=$EXPO_PUBLIC_SITE_URL \
     EXPO_PUBLIC_CESIUM_ION_TOKEN=$EXPO_PUBLIC_CESIUM_ION_TOKEN \
-    EXPO_PUBLIC_BASE_PATH=$EXPO_PUBLIC_BASE_PATH
+    EXPO_PUBLIC_BASE_PATH=$EXPO_PUBLIC_BASE_PATH \
+    EXPO_PUBLIC_DEMO_DATE=$EXPO_PUBLIC_DEMO_DATE
 
 WORKDIR /app/apps/web
 # `vendor-cesium.ts` first, and it is not optional tooling: CesiumJS resolves

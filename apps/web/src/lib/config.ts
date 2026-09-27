@@ -52,4 +52,9 @@ export const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL ?? "https://wattsteer.c
  * then the build-time variable.
  */
 export const DEMO_DATE: string | null =
-  globalThis.__WATTSTEER_DEMO_DATE__ ?? process.env.EXPO_PUBLIC_DEMO_DATE ?? null;
+  // `|| null`, not `?? null`: the Dockerfile declares the build arg with an
+  // empty default, so an unpinned build inlines `""` here rather than leaving
+  // the variable undefined. `openingDate` would fall back correctly either way
+  // — `""` fails the shape test — but a constant typed `string | null` that is
+  // `""` on every ordinary deployment describes itself wrongly.
+  globalThis.__WATTSTEER_DEMO_DATE__ || process.env.EXPO_PUBLIC_DEMO_DATE || null;
