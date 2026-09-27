@@ -35,3 +35,9 @@ apps/rag/eval/rerank-measurement.json
 
 # The packed corpus is built where it is installed, not carried in git.
 apps/rag/seed/*.jsonl.gz
+
+# Pitch: os arquivos de entrega são gerados por docs/pitch/gerar.sh, não carregados no git.
+docs/pitch/WattSteer-Pitch-*.pptx
+docs/pitch/WattSteer-Pitch-*.mp4
+docs/pitch/WattSteer-Pitch-*.pdf
+docs/pitch/__pycache__/
