@@ -1,5 +1,10 @@
 # A banca simulada do WattSteer
 
+> **Atualização de 27/09/2026:** a organização divulgou os cinco jurados reais. As personas deles estão em
+> [`banca-real-2026.md`](banca-real-2026.md), com um arquivo por pessoa. Use aquelas para ensaiar o pitch e
+> as perguntas. As personas genéricas abaixo continuam servindo para testar o deck, porque cobrem perfis
+> que a banca real não tem (o leigo completo e o investidor duro).
+
 Seis jurados que lemos **antes** de mostrar qualquer versão do pitch ao time. Cinco são arquétipos da banca
 que o hackathon costuma montar; a sexta é uma jurada confirmada, com persona construída só de informação
 pública e profissional (`luana-helsinger.md`).
