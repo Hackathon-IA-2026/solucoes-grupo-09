@@ -300,7 +300,13 @@ function render(t) {
       if (t >= n0) {
         T.num.style.display = "block";
         const k = E.outExpo(seg(t, n0, n0 + 0.9)), out = E.inExpo(seg(t, b - 0.25, b));
-        T.num.textContent = `${(271.7 * k).toFixed(1).replace(".", ",")}k`;
+        // The four subsystems the capture prints, added: N 1.883 + NE 166,1k
+        // + SE/CO 41,5k + S 7.547 = 217.030 MWh. Expectations add exactly —
+        // `honesty.md` — so this sum is a real figure and not an assembled
+        // one; a band in its place would not be. It was 271,7k, from a capture
+        // two days older than the screens beside it, which made the only
+        // number the reel states the one thing on it nobody could check.
+        T.num.textContent = `${Math.round(217 * k)}k`;
         T.num.style.opacity = 1 - out;
         T.num.style.transform = `translateY(${(1 - E.outExpo(seg(t, n0, n0 + 0.4))) * 60}px) scale(${1 + out * 0.4})`;
         T.num.style.filter = `blur(${out * 14}px)`;
